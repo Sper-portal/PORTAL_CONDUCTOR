@@ -4,4 +4,5 @@
     <string name="title_activity_main">Super Portal</string>
     <string name="package_name">com.portal.conductor</string>
     <string name="custom_url_scheme">com.portal.conductor</string>
+    <string name="screen_reader_desc">Lee el importe del viaje que aparece en Bolt, Uber o Cabify para pasarlo a la calculadora del Portal. No guarda ni envía nada.</string>
 </resources>
