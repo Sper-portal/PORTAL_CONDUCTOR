@@ -177,7 +177,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:8px 4px;b
 <button class="navbtn" data-view="settings" onclick="show('settings')"><span>⚙</span>Ajustes</button>
 </nav>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase.js"></script>
 <script>
 const PDC_SUPABASE_URL='https://odpyjdyspvrhlqbkmlmn.supabase.co';
 const PDC_SUPABASE_PUBLISHABLE_KEY='sb_publishable_JoiGj48gGKw70v6uWj4K9g_ucMz-Fnr';
@@ -205,19 +205,17 @@ async function cloudGetData(){
 }
 async function cloudPushData(){
   if(!hasRealCloud()||pdcCloudSyncBusy)return;
-  const {data:{user}}=await pdcSupabase.auth.getUser(); if(!user)return;
+  const {data:{session}}=await pdcSupabase.auth.getSession(); const user=session&&session.user; if(!user)return;
   pdcCloudSyncBusy=true;
   try{
-    const payload={user_id:user.id,data:currentDbSnapshot(),updated_at:new Date().toISOString()};
-    const r=await pdcSupabase.from('driver_data').upsert(payload,{onConflict:'user_id'});
-    if(r.error) throw r.error;
+    const snap=currentDbSnapshot();const sig=JSON.stringify(snap);if(sig===window.__pdcLastSig){return;}const payload={user_id:user.id,data:snap,updated_at:new Date().toISOString()};const r=await pdcSupabase.from('driver_data').upsert(payload,{onConflict:'user_id'});if(r.error) throw r.error;window.__pdcLastSig=sig;
   }catch(e){console.warn('Sincronización nube:',e)}finally{pdcCloudSyncBusy=false}
 }
 function scheduleCloudPush(){
   if(!hasRealCloud())return;
   clearTimeout(pdcCloudSyncTimer);
-  pdcCloudSyncTimer=setTimeout(()=>cloudPushData(),600);
-}
+  pdcCloudSyncTimer=setTimeout(()=>cloudPushData(),20000);
+} document.addEventListener('visibilitychange',()=>{if(document.hidden&&hasRealCloud()){clearTimeout(pdcCloudSyncTimer);cloudPushData();}});
 async function cloudProfileSave(user,email,phone){
   const r=await pdcSupabase.from('driver_profiles').upsert({user_id:user.id,email:email||user.email||'',phone:phone||null},{onConflict:'user_id'});
   if(r.error) throw r.error;
@@ -780,7 +778,7 @@ function dailyTripsList(k){
   const t=ts.find(x=>String(x.id)===String(editingBillingTripId))||db.trips.find(x=>String(x.id)===String(editingBillingTripId));
   if(t&&t.date===k){
    const plats=['Bolt','Uber','Cabify','Privados'];
-   edit=`<section class="panel"><div class="section-title">✏️ Editar viaje</div><div class="note">La fecha y la hora originales se mantienen sin cambios.</div><label>Plataforma</label><select id="billTripPlatform" class="input">${plats.map(p=>`<option value="${p}" ${t.platform===p?'selected':''}>${p}</option>`).join('')}</select><label style="display:block;margin-top:10px">Importe del viaje (€)</label><input id="billTripAmount" class="input" type="number" min="0.01" step=".01" value="${Number(t.orig)||0}"><label style="display:block;margin-top:10px">Forma de pago</label><select id="billTripPayment" class="input"><option value="cash" ${t.payment==='cash'?'selected':''}>💵 Efectivo</option><option value="card" ${t.payment==='card'?'selected':''}>💳 Tarjeta</option></select><div class="row" style="margin-top:12px;gap:8px"><button class="action" style="flex:1" onclick="saveBillingTripEdit('${t.id}')">Guardar cambios</button><button class="back" style="flex:1" onclick="cancelBillingTripEdit()">Cancelar</button></div></section>`;
+   edit=`<section class="panel"><div class="section-title">✏️ Editar viaje</div><div class="note">La fecha y la hora originales se mantienen sin cambios.</div><label>Plataforma</label><select id="billTripPlatform" class="input">${[['Bolt','Bolt'],['BoltAirport','Bolt · Aeropuerto ✈'],['Uber','Uber'],['Cabify','Cabify'],['Privados','Privados']].map(([v,l])=>`<option value="${v}" ${((t.platform==='Bolt'&&t.airport?'BoltAirport':t.platform)===v)?'selected':''}>${l}</option>`).join('')}</select><label style="display:block;margin-top:10px">Importe del viaje (€)</label><input id="billTripAmount" class="input" type="number" min="0.01" step=".01" value="${Number(t.orig)||0}"><label style="display:block;margin-top:10px">Forma de pago</label><select id="billTripPayment" class="input"><option value="cash" ${t.payment==='cash'?'selected':''}>💵 Efectivo</option><option value="card" ${t.payment==='card'?'selected':''}>💳 Tarjeta</option></select><div class="row" style="margin-top:12px;gap:8px"><button class="action" style="flex:1" onclick="saveBillingTripEdit('${t.id}')">Guardar cambios</button><button class="back" style="flex:1" onclick="cancelBillingTripEdit()">Cancelar</button></div></section>`;
   }
  }
  return `<section class="panel billing-trips-panel"><div class="section-title">🚘 Viajes del día · ${ts.length}</div><div class="note">Puedes corregir la forma de pago o el importe, o eliminar un viaje. La hora registrada se conserva.</div><div class="billing-triplist">${ts.length?ts.map(t=>{const c=t.platform==='Bolt'?'bolt':t.platform==='Uber'?'uber':t.platform==='Cabify'?'cabify':'private';return `<div class="trip"><i class="dot ${c}"></i><span class="platform-name ${c}">${t.platform}${t.airport?' ✈':''}</span><span>${t.time||'Hora no guardada'}</span><span class="orig">${euro(t.orig)} → ${euro(t.net)} ${t.payment==='cash'?'💵 Efectivo':t.payment==='card'?'💳 Tarjeta':'Pago sin indicar'}${Number(t.tip)>0?`<small style="display:block;color:#18c987">🎁 Propina: ${euro(t.tip)}</small>`:''}</span><button class="action" title="Añadir o editar propina" onclick="addTripTip('${t.id}','billing')">🎁 ${Number(t.tip)>0?'Editar':'+'}</button><button class="action" onclick="editBillingTrip('${t.id}')">✏️</button><button class="trash" onclick="deleteBillingTrip('${t.id}')">🗑</button></div>`}).join(''):`<div class="empty">No hay viajes registrados para este día.</div>`}</div></section>${edit}`;
@@ -790,12 +788,12 @@ function cancelBillingTripEdit(){editingBillingTripId=null;renderBilling()}
 function saveBillingTripEdit(id){
  const t=db.trips.find(x=>String(x.id)===String(id));if(!t)return;
  const amount=Number(String(document.querySelector('#billTripAmount')?.value||'').replace(',','.'));
- const platform=document.querySelector('#billTripPlatform')?.value;
+ let platform=document.querySelector('#billTripPlatform')?.value;let airport=false;if(platform==='BoltAirport'){platform='Bolt';airport=true;}
  const payment=document.querySelector('#billTripPayment')?.value;
  if(!Number.isFinite(amount)||amount<=0){alert('Introduce un importe válido mayor que cero.');return;}
  if(!['Bolt','Uber','Cabify','Privados'].includes(platform)||!['cash','card'].includes(payment)){alert('Revisa la plataforma y la forma de pago.');return;}
  if(!confirm('¿Guardar los cambios del viaje? La fecha y la hora originales no cambiarán.'))return;
- t.platform=platform;t.orig=Number(amount.toFixed(2));t.net=net(platform,t.orig,!!t.airport);t.payment=payment;
+ t.platform=platform;t.airport=airport;t.orig=Number(amount.toFixed(2));t.net=net(platform,t.orig,airport);t.payment=payment;
  editingBillingTripId=null;save();renderBilling();alert('Viaje actualizado. Se ha conservado la hora original.');
 }
 function deleteBillingTrip(id){const t=db.trips.find(x=>String(x.id)===String(id));if(!t)return;if(!confirm(`¿Eliminar el viaje de ${t.platform} de las ${t.time||'hora no guardada'}? Esta acción no se puede deshacer.`))return;db.trips=db.trips.filter(x=>String(x.id)!==String(id));if(String(editingBillingTripId)===String(id))editingBillingTripId=null;save();renderBilling()}
@@ -1355,7 +1353,7 @@ window.fareReadScreen=async function(){
 })();
 </script>
 
-<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">v2.3 lector</div>
+<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">v2.4 lector</div>
 <script id="screenReaderPatch2">
 /* v2.3 Burbuja flotante (movil): recibe el precio leido y lo pone en la calculadora */
 (function(){
