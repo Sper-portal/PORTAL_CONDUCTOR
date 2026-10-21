@@ -1,6 +1,14 @@
 apply plugin: 'com.android.application'
 
 android {
+    signingConfigs {
+        debug {
+            storeFile file('portal-debug.keystore')
+            storePassword 'portal2026'
+            keyAlias 'portal'
+            keyPassword 'portal2026'
+        }
+    }
     namespace = "com.portal.conductor"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {

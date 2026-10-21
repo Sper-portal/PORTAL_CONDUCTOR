@@ -563,8 +563,8 @@ function dailyMotivationHtml(){
 }
 
 function dayOdometer(k){db.odometer=db.odometer||{};return db.odometer[k]||{start:'',end:''}}
-function saveOdometer(k){const startRaw=document.querySelector('#odoStart')?.value??'',endRaw=document.querySelector('#odoEnd')?.value??'';const start=startRaw===''?'':Number(startRaw),end=endRaw===''?'':Number(endRaw);if(start!==''&&end!==''&&end<start){alert('El odómetro final no puede ser inferior al inicial.');return}db.odometer=db.odometer||{};db.odometer[k]={start,end,updatedAt:new Date().toISOString()};save();renderControl()}
-function kilometersForDay(k){const o=dayOdometer(k);return o.start!==''&&o.end!==''&&Number.isFinite(Number(o.start))&&Number.isFinite(Number(o.end))&&Number(o.end)>=Number(o.start)?Number(o.end)-Number(o.start):null}
+function saveOdometer(k){const startRaw=document.querySelector('#odoStart')?.value??'',endRaw=document.querySelector('#odoEnd')?.value??'';const start=startRaw===''?'':Number(startRaw),end=endRaw===''?'':Number(endRaw);if(start!==''&&end!==''&&end<start){alert('El odómetro final no puede ser inferior al inicial.');return}db.odometer=db.odometer||{};db.odometer[k]=Object.assign({},db.odometer[k]||{},{start,end,updatedAt:new Date().toISOString()});save();renderControl()}
+function kilometersForDay(k){const o=dayOdometer(k);return o.start!==''&&o.end!==''&&Number.isFinite(Number(o.start))&&Number.isFinite(Number(o.end))&&Number(o.end)>=Number(o.start)?Number(o.end)-Number(o.start):(Number.isFinite(Number(o.gpsKm))&&Number(o.gpsKm)>0?Number(o.gpsKm):null)}
 function jornadaElapsedMinutes(k){return totalMinutesForDay(k)}
 function performanceForDay(k){const ts=dayTrips(k);const total=fact(k);const mins=jornadaElapsedMinutes(k);const km=kilometersForDay(k);return {trips:ts.length,eurTrip:ts.length?total/ts.length:null,eurHour:mins>0?total/(mins/60):null,km,eurKm:km>0?total/km:null,minutes:mins,total}}
 function performanceStripHtml(k){const x=performanceForDay(k);return `<div class="efficiency-strip" aria-label="Rendimiento de la jornada"><div class="efficiency-card"><small>€ / HORA</small><b>${x.eurHour===null?'—':euro(x.eurHour)+'/h'}</b><span class="sub">${hoursText(x.minutes)}</span></div><div class="efficiency-card"><small>€ / VIAJE</small><b>${x.eurTrip===null?'—':euro(x.eurTrip)}</b><span class="sub">${x.trips} viajes</span></div><div class="efficiency-card"><small>€ / KM</small><b>${x.eurKm===null?'—':euro(x.eurKm)+'/km'}</b><span class="sub">${x.km===null?'Al cerrar km':x.km+' km'}</span></div></div>`}
@@ -1353,7 +1353,7 @@ window.fareReadScreen=async function(){
 })();
 </script>
 
-<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">v2.4 lector</div>
+<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">v3.0 lector</div>
 <script id="screenReaderPatch2">
 /* v2.3 Burbuja flotante (movil): recibe el precio leido y lo pone en la calculadora */
 (function(){
@@ -1390,6 +1390,94 @@ function injectCard(){
   chk.onchange=()=>{SR.setBubble({enabled:chk.checked}).catch(()=>{});};
 }
 if(content){new MutationObserver(injectCard).observe(content,{childList:true,subtree:true});injectCard();}
+})();
+</script>
+
+<script id="gpsPatch">
+/* v3.0 Odometro automatico por GPS */
+(function(){
+let G=null;
+try{if(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform())G=(Capacitor.Plugins&&Capacitor.Plugins.GpsOdometer)||Capacitor.registerPlugin('GpsOdometer');}catch(e){}
+if(!G)return;
+const AUTO_KEY='pdc_gps_auto';
+const auto=()=>localStorage.getItem(AUTO_KEY)!=='0';
+const nf=n=>Number(n).toLocaleString('es-ES',{minimumFractionDigits:1,maximumFractionDigits:1});
+function toast(msg){let t=document.getElementById('srToast3');if(!t){t=document.createElement('div');t.id='srToast3';t.style.cssText='position:fixed;left:50%;bottom:90px;transform:translateX(-50%);max-width:90%;background:#0b1a33;color:#fff;border:1px solid #3b82f6;border-radius:14px;padding:12px 16px;z-index:99999;font:600 15px system-ui;text-align:center';document.body.appendChild(t);}t.textContent=msg;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>{t.style.display='none'},4000);}
+const orig=window.toggleSession;
+window.toggleSession=async function(){
+  const starting=!db.activeSession;
+  const k0=db.activeSession?dateKey(db.activeSession.start):null;
+  orig();
+  try{
+    if(starting){
+      if(!auto())return;
+      const sess=db.activeSession?db.activeSession.start:'';
+      const r=await G.start({reset:true,session:sess});
+      if(!r||!r.ok)toast('GPS sin permiso: usa el odómetro manual');
+    }else{
+      const r=await G.stop();
+      const km=Math.round((Number(r&&r.meters)||0)/100)/10;
+      if(km>0&&k0){
+        db.odometer=db.odometer||{};
+        db.odometer[k0]=Object.assign({start:'',end:''},db.odometer[k0]||{},{gpsKm:km,updatedAt:new Date().toISOString()});
+        save();renderControl();
+        toast('📍 '+nf(km)+' km de jornada');
+      }
+    }
+  }catch(e){}
+};
+(async function resume(){
+  try{
+    if(auto()&&db.activeSession){
+      const s=await G.status();
+      if(!s.active)await G.start({reset:false,session:db.activeSession.start});
+    }
+  }catch(e){}
+})();
+const content=document.querySelector('#content');
+function inject(){
+  if(!content)return;
+  const run=content.querySelector('.toggle.running');
+  if(run&&!document.getElementById('gpsLive')&&auto()){
+    const d=document.createElement('div');d.id='gpsLive';
+    d.style.cssText='margin:8px 0;text-align:center;font:700 14px system-ui;color:#7aa2ff';
+    d.textContent='📍 GPS activo · calculando…';
+    run.insertAdjacentElement('afterend',d);refreshLive();
+  }
+  const box=content.querySelector('.odometer-box');
+  if(box&&!document.getElementById('gpsOdoLine')&&typeof fuelSelected!=='undefined'){
+    const o=dayOdometer(fuelSelected);const g=Number(o.gpsKm);
+    if(Number.isFinite(g)&&g>0){
+      const line=document.createElement('div');line.id='gpsOdoLine';
+      line.style.cssText='margin-top:8px;font:700 14px system-ui;color:#7aa2ff';
+      line.innerHTML='📍 Kilómetros por GPS: <b>'+nf(g)+' km</b>';
+      if(o.start!==''&&Number.isFinite(Number(o.start))){
+        const b=document.createElement('button');b.type='button';b.className='action';b.style.cssText='display:block;width:100%;margin-top:8px';
+        b.textContent='Rellenar el final con el GPS';
+        b.onclick=()=>{const e=document.querySelector('#odoEnd');if(e){e.value=String(Math.round(Number(o.start)+g));saveOdometer(fuelSelected);}};
+        line.appendChild(b);
+      }
+      box.appendChild(line);
+    }
+  }
+  const t=content.querySelector('.section-title');
+  if(t&&/Ajustes/.test(t.textContent)&&!document.getElementById('gpsAutoCard')){
+    const card=document.createElement('div');card.id='gpsAutoCard';card.className='note';
+    card.style.cssText='margin:12px 0;display:flex;align-items:center;justify-content:space-between;gap:12px';
+    card.innerHTML='<div><b>Odómetro automático (GPS)</b><br><small>Cuenta los km desde «Iniciar jornada» hasta «Finalizar jornada». Si lo apagas, sigues con el odómetro manual.</small></div><input type="checkbox" id="gpsAutoChk" style="width:26px;height:26px;flex:none">';
+    t.insertAdjacentElement('afterend',card);
+    const chk=document.getElementById('gpsAutoChk');chk.checked=auto();
+    chk.onchange=()=>{localStorage.setItem(AUTO_KEY,chk.checked?'1':'0');};
+  }
+}
+async function refreshLive(){
+  const d=document.getElementById('gpsLive');if(!d)return;
+  try{const s=await G.status();
+    d.textContent=s.active?('📍 '+nf((Number(s.meters)||0)/1000)+' km · GPS activo'):'📍 GPS parado';
+  }catch(e){}
+}
+setInterval(refreshLive,5000);
+if(content){new MutationObserver(inject).observe(content,{childList:true,subtree:true});inject();}
 })();
 </script>
 
