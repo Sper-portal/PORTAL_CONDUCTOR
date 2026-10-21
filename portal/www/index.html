@@ -1355,7 +1355,46 @@ window.fareReadScreen=async function(){
 })();
 </script>
 
-<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">v2.2 lector</div>
+<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">v2.3 lector</div>
+<script id="screenReaderPatch2">
+/* v2.3 Burbuja flotante (movil): recibe el precio leido y lo pone en la calculadora */
+(function(){
+let SR=null;
+try{if(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform())SR=(Capacitor.Plugins&&Capacitor.Plugins.ScreenReader)||Capacitor.registerPlugin('ScreenReader');}catch(e){}
+if(!SR)return;
+const fmt=n=>new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format(n);
+function toast(msg){let t=document.getElementById('srToast2');if(!t){t=document.createElement('div');t.id='srToast2';t.style.cssText='position:fixed;left:50%;bottom:90px;transform:translateX(-50%);max-width:90%;background:#0b1a33;color:#fff;border:1px solid #3b82f6;border-radius:14px;padding:12px 16px;z-index:99999;font:600 15px system-ui;text-align:center';document.body.appendChild(t);}t.textContent=msg;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>{t.style.display='none'},3500);}
+async function takePending(){
+  if(document.hidden)return;
+  try{
+    const r=await SR.takePending();
+    if(!r||!r.has)return;
+    if(!document.querySelector('#price')){try{show('calc');}catch(e){}}
+    const inp=document.querySelector('#price');
+    if(inp){inp.value=Number(r.amount).toFixed(2).replace('.',',');inp.dispatchEvent(new Event('input',{bubbles:true}));}
+    toast((r.label||'')+': '+fmt(r.amount)+' '+(r.hint||''));
+  }catch(e){}
+}
+setInterval(takePending,1000);
+document.addEventListener('visibilitychange',takePending);
+const content=document.querySelector('#content');
+function injectCard(){
+  if(!content||document.getElementById('srBubbleCard'))return;
+  const t=content.querySelector('.section-title');
+  if(!t||!/Ajustes/.test(t.textContent))return;
+  const card=document.createElement('div');
+  card.id='srBubbleCard';card.className='note';
+  card.style.cssText='margin:12px 0;display:flex;align-items:center;justify-content:space-between;gap:12px';
+  card.innerHTML='<div><b>Burbuja flotante</b><br><small>Para el móvil: aparece sobre Bolt/Uber/Cabify y al tocarla lee el precio y abre el Portal.</small></div><input type="checkbox" id="srBubbleChk" style="width:26px;height:26px;flex:none">';
+  t.insertAdjacentElement('afterend',card);
+  const chk=document.getElementById('srBubbleChk');
+  SR.getBubble().then(r=>{chk.checked=!!r.enabled;}).catch(()=>{});
+  chk.onchange=()=>{SR.setBubble({enabled:chk.checked}).catch(()=>{});};
+}
+if(content){new MutationObserver(injectCard).observe(content,{childList:true,subtree:true});injectCard();}
+})();
+</script>
+
 </body></html><style>
 /* V25 visual refinement: futuristic premium skin only. Functional JS untouched. */
 body{background:radial-gradient(circle at 50% -10%,#18364d 0,#07121c 34%,#040b12 100%);}
