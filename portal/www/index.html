@@ -576,7 +576,7 @@ let k=calcAnchor,ts=dayTrips(k),tot=fact(k)+calcDayComp(k),comm=commission(k);
 const hidden=dailyBillingHidden; const money=v=>moneyDisplay(v,hidden);
 document.querySelector('#content').innerHTML=`<section class="panel">
 ${dailyMotivationHtml()}
-<label>Precio del viaje (€)</label><div class="price-row"><div class="price"><input id="price" inputmode="decimal" placeholder="20,00"><button class="clear" type="button" aria-label="Borrar importe" onclick="document.querySelector('#price').value='';document.querySelector('#price').focus()">×</button></div><button class="camera-capture" type="button" aria-label="Capturar precio con cámara" onclick="fareReadScreen()"><span>📷</span></button></div>
+<label>Precio del viaje (€)</label><div class="price-row"><div class="price"><input id="price" inputmode="decimal" placeholder="20,00"><button class="clear" type="button" aria-label="Borrar importe" onclick="document.querySelector('#price').value='';document.querySelector('#price').focus()">×</button></div><button class="camera-capture" type="button" aria-label="Leer el precio de la pantalla" onclick="fareReadScreen()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3"/><path d="M16 4h3a1 1 0 0 1 1 1v3"/><path d="M20 16v3a1 1 0 0 1-1 1h-3"/><path d="M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M4 12h16"/></svg><span>Leer precio</span></button></div>
 <div class="platforms platform-capsules">
 <button class="platform bolt" onclick="tripAdd('Bolt')" aria-label="Añadir viaje Bolt"><span class="platform-icon" aria-hidden="true">ϟ</span><span class="platform-name">Bolt</span><span class="platform-car" aria-hidden="true">🚘</span><span class="platform-arrow" aria-hidden="true">›</span></button>
 <button class="platform uber" onclick="tripAdd('Uber')" aria-label="Añadir viaje Uber"><span class="platform-icon uber-mark" aria-hidden="true">U</span><span class="platform-name">Uber</span><span class="platform-car" aria-hidden="true">🚘</span><span class="platform-arrow" aria-hidden="true">›</span></button>
@@ -1353,7 +1353,7 @@ window.fareReadScreen=async function(){
 })();
 </script>
 
-<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">v3.2 lector</div>
+<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">v3.3 lector</div>
 <script id="screenReaderPatch2">
 /* v2.3 Burbuja flotante (movil): recibe el precio leido y lo pone en la calculadora */
 (function(){
@@ -1717,4 +1717,12 @@ body{background:radial-gradient(ellipse at 50% -10%,#17364b 0%,#081522 48%,#0308
 </style>
 <style id="v32-style-2">
 .results .metric b{margin-top:auto!important}.billing-eye svg{width:19px;height:19px}
+</style>
+<style id="v33-style">
+.price-row{gap:10px!important;margin:6px 0 10px!important}
+.price-row .price input{height:44px!important;padding-top:0!important;padding-bottom:0!important;font-size:18px!important}
+.camera-capture{flex:0 0 auto!important;width:auto!important;height:44px!important;border-radius:14px!important;padding:0 14px!important;gap:7px;font-size:14px!important;font-weight:800;letter-spacing:.2px;white-space:nowrap;border:1.5px solid #35c9ff!important;box-shadow:0 0 12px #168bff66!important}
+.camera-capture svg{width:20px;height:20px;flex:none}
+.camera-capture span{font-size:14px;line-height:1}
+@media(max-width:360px){.camera-capture{padding:0 10px!important}.camera-capture span{font-size:13px}}
 </style>
