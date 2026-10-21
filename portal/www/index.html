@@ -449,7 +449,7 @@ function dayTrips(k){return db.trips.filter(t=>t.date===k)}
 function hasManualPlatformAmounts(m){return !!(m&&m.platforms&&Object.values(m.platforms).some(v=>Number(v)>0))}
 function baseFact(k){const auto=dayTrips(k).reduce((a,t)=>a+(Number(t.net)||0),0);const m=db.manual[k];if(hasManualPlatformAmounts(m))return ['Bolt','Uber','Cabify','Privados'].reduce((a,p)=>a+(Number(m.platforms[p])||0),0);if(m&&(!m.platforms)&&Number(m.total)>0)return Number(m.total);return auto}
 function tipsForDay(k){return dayTrips(k).reduce((a,t)=>a+Math.max(0,Number(t.tip)||0),0)}
-function fact(k){return baseFact(k)+tipsForDay(k)}
+function calcDayComp(k){try{const c=billingCompensationForDate(k);return (Number(c.cancellations)||0)+(Number(c.adjustable)||0)}catch(e){return 0}} function fact(k){return baseFact(k)+tipsForDay(k)}
 function cash(k){return Number(db.manual[k]?.cash||0)}
 function commissionAmount(total){total=Number(total)||0;const pct=Math.max(0,Number(db.settings.commission)||0)/100;const mode=db.settings.commissionMode==='minimum'?'minimum':'firstEuro';const minimum=Math.max(0,Number(db.settings.commissionMinimum)||0);return mode==='minimum'?Math.max(0,total-minimum)*pct:total*pct}
 function commission(k){return commissionAmount(baseFact(k))}
@@ -564,15 +564,15 @@ function dailyMotivationHtml(){
 
 function dayOdometer(k){db.odometer=db.odometer||{};return db.odometer[k]||{start:'',end:''}}
 function saveOdometer(k){const startRaw=document.querySelector('#odoStart')?.value??'',endRaw=document.querySelector('#odoEnd')?.value??'';const start=startRaw===''?'':Number(startRaw),end=endRaw===''?'':Number(endRaw);if(start!==''&&end!==''&&end<start){alert('El odómetro final no puede ser inferior al inicial.');return}db.odometer=db.odometer||{};db.odometer[k]=Object.assign({},db.odometer[k]||{},{start,end,updatedAt:new Date().toISOString()});save();renderControl()}
-function kilometersForDay(k){const o=dayOdometer(k);return o.start!==''&&o.end!==''&&Number.isFinite(Number(o.start))&&Number.isFinite(Number(o.end))&&Number(o.end)>=Number(o.start)?Number(o.end)-Number(o.start):(Number.isFinite(Number(o.gpsKm))&&Number(o.gpsKm)>0?Number(o.gpsKm):null)}
+function kilometersForDay(k){const o=dayOdometer(k);return o.start!==''&&o.end!==''&&Number.isFinite(Number(o.start))&&Number.isFinite(Number(o.end))&&Number(o.end)>=Number(o.start)?Number(o.end)-Number(o.start):(Number.isFinite(Number(o.gpsKm))&&Number(o.gpsKm)>0?Number(o.gpsKm):(window.__gpsLiveKm>=1&&k===today()&&db.activeSession?window.__gpsLiveKm:null))}
 function jornadaElapsedMinutes(k){return totalMinutesForDay(k)}
-function performanceForDay(k){const ts=dayTrips(k);const total=fact(k);const mins=jornadaElapsedMinutes(k);const km=kilometersForDay(k);return {trips:ts.length,eurTrip:ts.length?total/ts.length:null,eurHour:mins>0?total/(mins/60):null,km,eurKm:km>0?total/km:null,minutes:mins,total}}
+function performanceForDay(k){const ts=dayTrips(k);const total=fact(k);const totalC=total+calcDayComp(k);const mins=jornadaElapsedMinutes(k);const km=kilometersForDay(k);return {trips:ts.length,eurTrip:ts.length?total/ts.length:null,eurHour:mins>0?totalC/(mins/60):null,km,eurKm:km>0?totalC/km:null,minutes:mins,total:totalC}}
 function performanceStripHtml(k){const x=performanceForDay(k);return `<div class="efficiency-strip" aria-label="Rendimiento de la jornada"><div class="efficiency-card"><small>€ / HORA</small><b>${x.eurHour===null?'—':euro(x.eurHour)+'/h'}</b><span class="sub">${hoursText(x.minutes)}</span></div><div class="efficiency-card"><small>€ / VIAJE</small><b>${x.eurTrip===null?'—':euro(x.eurTrip)}</b><span class="sub">${x.trips} viajes</span></div><div class="efficiency-card"><small>€ / KM</small><b>${x.eurKm===null?'—':euro(x.eurKm)+'/km'}</b><span class="sub">${x.km===null?'Al cerrar km':x.km+' km'}</span></div></div>`}
 function exportReportPdf(){const out=document.querySelector('#reportOut');if(!out||!out.dataset.ready){alert('Primero genera el informe.');return}window.print()}
 function shareReport(){const out=document.querySelector('#reportOut');if(!out||!out.dataset.ready){alert('Primero genera el informe.');return}const textReport=out.innerText;if(navigator.share){navigator.share({title:'Informe Super Portal del Conductor',text:textReport}).catch(()=>{})}else if(navigator.clipboard){navigator.clipboard.writeText(textReport).then(()=>alert('Informe copiado. Puedes pegarlo en el mensaje que quieras enviar.')).catch(()=>window.print())}else window.print()}
 function renderCalc(){
 if(!calcAnchor)calcAnchor=today();if(calcAnchor>today())calcAnchor=today();
-let k=calcAnchor,ts=dayTrips(k),tot=fact(k),comm=commission(k);
+let k=calcAnchor,ts=dayTrips(k),tot=fact(k)+calcDayComp(k),comm=commission(k);
 const hidden=dailyBillingHidden; const money=v=>moneyDisplay(v,hidden);
 document.querySelector('#content').innerHTML=`<section class="panel">
 ${dailyMotivationHtml()}
@@ -585,8 +585,8 @@ ${dailyMotivationHtml()}
 </div>
 <button class="airport airport-premium" onclick="tripAdd('Bolt',true)" aria-label="Añadir viaje de aeropuerto"><span class="airport-plane" aria-hidden="true">✈</span><span class="airport-copy"><strong>Añadir viaje aeropuerto</strong><small>Descuento comisión Bolt (${Number(db.settings.boltCommission??25).toLocaleString('es-ES')}%) + ${euro(Number(db.settings.airportFee??2.57))}</small></span><span class="airport-add"><span>Añadir</span><b aria-hidden="true">➜</b></span><span class="airport-luggage" aria-hidden="true">▣</span></button>
 <div class="navrow calc-day-nav"><button class="back" onclick="changeCalcDay(-1)" aria-label="Día anterior">‹</button><b>${fmtDate(k)}</b><button class="back" onclick="changeCalcDay(1)" aria-label="Día siguiente" ${k===today()?'disabled':''}>›</button></div>
-<div class="results"><div class="metric totalMetric"><div class="metricLabelRow"><small>Total facturación diaria</small><button class="billing-eye" type="button" aria-label="${hidden?'Mostrar':'Ocultar'} facturación diaria" onclick="toggleDailyBillingVisibility()">${hidden?'🙈':'👁️'}</button></div><b>${money(tot)}</b></div><div class="metric"><div class="metricLabelRow"><small>Mi comisión diaria (${db.settings.commission}%)</small></div><b>${money(comm)}</b></div></div>
-<div class="platform-summary">${['Bolt','Uber','Cabify','Privados'].map(p=>{let s=ts.filter(t=>t.platform===p).reduce((a,t)=>a+(Number(t.net)||0)+(Number(t.tip)||0),0);let c=p==='Bolt'?'bolt':p==='Uber'?'uber':p==='Cabify'?'cabify':'private';return `<div class="ps ${c}">${p}<b>${money(s)}</b></div>`}).join('')}</div><div class="note" style="color:#18c987">🎁 Propinas del día: <b>${money(ts.reduce((a,t)=>a+(Number(t.tip)||0),0))}</b></div>
+<div class="results"><div class="metric totalMetric"><div class="metricLabelRow"><small>Total facturación diaria</small><button class="billing-eye" type="button" aria-label="${hidden?'Mostrar':'Ocultar'} facturación diaria" onclick="toggleDailyBillingVisibility()">${hidden?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M6.6 7.6C4.6 8.9 3.2 10.7 2.5 12c1 1.8 4.5 6 9.5 6 1.5 0 2.8-.3 3.9-.8"/><path d="M10.7 6.1c.4-.1.8-.1 1.3-.1 5 0 8.5 4.2 9.5 6-.4.8-1.3 2-2.6 3.1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="3"/></svg>'}</button></div><b>${money(tot)}</b></div><div class="metric"><div class="metricLabelRow"><small>Mi comisión diaria (${db.settings.commission}%)</small></div><b>${money(comm)}</b></div></div>
+<div class="platform-summary">${['Bolt','Uber','Cabify','Privados'].map(p=>{let s=ts.filter(t=>t.platform===p).reduce((a,t)=>a+(Number(t.net)||0)+(Number(t.tip)||0),0);if(p==='Bolt')s+=calcDayComp(k);let c=p==='Bolt'?'bolt':p==='Uber'?'uber':p==='Cabify'?'cabify':'private';return `<div class="ps ${c}">${p}<b>${money(s)}</b></div>`}).join('')}</div><div class="note" style="color:#18c987">🎁 Propinas del día: <b>${money(ts.reduce((a,t)=>a+(Number(t.tip)||0),0))}</b></div>
 ${performanceStripHtml(k)}<div class="triplist"><div class="triplist-head"><b>Últimos viajes · ${ts.length}</b></div>${ts.length?ts.slice().reverse().map(t=>{let c=t.platform==='Bolt'?'bolt':t.platform==='Uber'?'uber':t.platform==='Cabify'?'cabify':'private';return `<div class="trip"><i class="dot ${c}"></i><span class="platform-name ${c}">${t.platform}${t.airport?' ✈':''}</span><span>${t.time}</span><span class="orig">${money(t.orig)} → ${money(t.net)} ${t.payment==='cash'?'💵':t.payment==='card'?'💳':''}${Number(t.tip)>0?`<small style="display:block;color:#18c987">🎁 Propina: ${money(t.tip)}</small>`:''}</span><button class="action" title="Añadir o editar propina" onclick="addTripTip('${t.id}','calc')">🎁 ${Number(t.tip)>0?'Editar':'+'}</button><button class="trash" onclick="delTrip(${t.id})">🗑</button></div>`}).join(''):`<div class="empty">No hay viajes registrados el ${fmtDate(k)}.</div>`}</div>
 </section>
 `}
@@ -979,7 +979,7 @@ function deleteAccountV33(){
  setAuthStatus('Cuenta eliminada. Se creó una copia local de seguridad antes de eliminarla.');
 }
 function show(v){document.querySelectorAll('.navbtn').forEach(b=>b.classList.toggle('active',b.dataset.view===v));({calc:renderCalc,control:renderControl,billing:renderBilling,report:renderReport,settings:renderSettings}[v]||renderCalc)()}
-setInterval(()=>{const active=document.querySelector('.navbtn.active')?.dataset?.view;if(active==='calc'&&calcAnchor===today()){const strip=document.querySelector('.efficiency-strip');if(strip)strip.outerHTML=performanceStripHtml(calcAnchor)}},60000);
+setInterval(()=>{if(document.hidden)return;const active=document.querySelector('.navbtn.active')?.dataset?.view;if(active==='calc'&&calcAnchor===today()){const strip=document.querySelector('.efficiency-strip');if(strip)strip.outerHTML=performanceStripHtml(calcAnchor)}},60000);
 let pdcObservedLocalDay=today();
 setInterval(()=>{
   const nowDay=today();
@@ -1327,8 +1327,8 @@ let _SR=null;function plugin(){try{if(_SR)return _SR;if(window.Capacitor&&Capaci
 function toast(msg){let t=document.getElementById('srToast');if(!t){t=document.createElement('div');t.id='srToast';t.style.cssText='position:fixed;left:50%;bottom:90px;transform:translateX(-50%);max-width:90%;background:#0b1a33;color:#fff;border:1px solid #3b82f6;border-radius:14px;padding:12px 16px;z-index:99999;font:600 15px system-ui;text-align:center';document.body.appendChild(t);}t.textContent=msg;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>{t.style.display='none'},3500);}
 function amountsIn(text){const out=[];const re=/(\d{1,3}(?:\.\d{3})+,\d{2}|\d{1,4}[.,]\d{2})(?!\d)\s*(€|eur\b)?/gi;let m;while((m=re.exec(text))){let v=m[1];v=v.includes(',')&&v.includes('.')?v.replace(/\./g,'').replace(',','.'):v.replace(',','.');const n=Number(v);const pre=text.slice(Math.max(0,m.index-2),m.index);if(Number.isFinite(n)&&n>0&&n<10000)out.push({amount:n,euro:!!m[2]||pre.includes('€')});}return out;}
 function analyze(wins){const map={};for(const w of wins){const all=norm((w.texts||[]).join(' | '));const bonus=(/confirmar precio|confirm price/.test(all)?6:0)+(/\btotal\b/.test(all)?2:0)+(PKGS[w.pkg]?3:0);const label=PKGS[w.pkg]||String(w.pkg).split('.').pop();for(const t of (w.texts||[])){for(const a of amountsIn(t)){const score=bonus+(a.euro?4:0)+(String(t).length<14?2:0);const k=a.amount.toFixed(2);if(!map[k]||map[k].score<score)map[k]={amount:a.amount,score,label,win:all};}}}return Object.values(map).sort((a,b)=>b.score-a.score);}
-function payHint(win){if(/no cobrar|pago a traves de la app|pagado con tarjeta/.test(win))return'Parece TARJETA.';if(/recoge el dinero|cobrar al pasajero|en efectivo/.test(win))return'Parece EFECTIVO.';return'';}
-function fill(c){const inp=document.querySelector('#price');if(inp){inp.value=c.amount.toFixed(2).replace('.',',');inp.dispatchEvent(new Event('input',{bubbles:true}));}toast(c.label+': '+fmt(c.amount)+' '+payHint(c.win));}
+function payHint(win){if(/no cobrar al pasajero|no cobres|pago a traves de la app|app o tarjeta|pagado con tarjeta|pago con tarjeta/.test(win))return'Parece TARJETA.';if(/cobrar al pasajero|cobrar al cliente|recoge el dinero|efectivo/.test(win))return'Parece EFECTIVO.';return'';}
+function fill(c){const inp=document.querySelector('#price');if(inp){inp.value=c.amount.toFixed(2).replace('.',',');inp.dispatchEvent(new Event('input',{bubbles:true}));}const ph=payHint(c.win);window.__payHint=/TARJETA/.test(ph)?{type:'card',amount:c.amount,ts:Date.now()}:/EFECTIVO/.test(ph)?{type:'cash',amount:c.amount,ts:Date.now()}:null;toast(c.label+': '+fmt(c.amount)+' '+ph+(window.__payHint?' Se guardará solo al elegir la plataforma.':''));}
 function choose(list){const o=document.createElement('div');o.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99998;display:flex;align-items:center;justify-content:center';const b=document.createElement('div');b.style.cssText='background:#0b1a33;border:1px solid #3b82f6;border-radius:18px;padding:16px;width:min(88%,340px);text-align:center;color:#fff;font:600 16px system-ui';b.innerHTML='<div style="margin-bottom:10px">¿Cuál es el precio del viaje?</div>';list.slice(0,4).forEach(c=>{const x=document.createElement('button');x.type='button';x.textContent=fmt(c.amount)+' · '+c.label;x.style.cssText='display:block;width:100%;margin:6px 0;padding:12px;border-radius:12px;border:0;background:#2563eb;color:#fff;font:700 17px system-ui';x.onclick=()=>{o.remove();fill(c);};b.appendChild(x);});const k=document.createElement('button');k.type='button';k.textContent='Cancelar';k.style.cssText='margin-top:6px;padding:8px;border:0;background:none;color:#9db4d8;font:600 14px system-ui';k.onclick=()=>o.remove();b.appendChild(k);o.appendChild(b);document.body.appendChild(o);}
 window.fareReadScreen=async function(){
   const SR=plugin();
@@ -1353,7 +1353,7 @@ window.fareReadScreen=async function(){
 })();
 </script>
 
-<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">v3.1 lector</div>
+<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">v3.2 lector</div>
 <script id="screenReaderPatch2">
 /* v2.3 Burbuja flotante (movil): recibe el precio leido y lo pone en la calculadora */
 (function(){
@@ -1370,10 +1370,10 @@ async function takePending(){
     if(!document.querySelector('#price')){try{show('calc');}catch(e){}}
     const inp=document.querySelector('#price');
     if(inp){inp.value=Number(r.amount).toFixed(2).replace('.',',');inp.dispatchEvent(new Event('input',{bubbles:true}));}
-    toast((r.label||'')+': '+fmt(r.amount)+' '+(r.hint||''));
+    window.__payHint=/TARJETA/i.test(r.hint||'')?{type:'card',amount:Number(r.amount),ts:Date.now()}:/EFECTIVO/i.test(r.hint||'')?{type:'cash',amount:Number(r.amount),ts:Date.now()}:null;toast((r.label||'')+': '+fmt(r.amount)+' '+(r.hint||'')+(window.__payHint?' Se guardará solo al elegir la plataforma.':''));
   }catch(e){}
 }
-setInterval(takePending,1000);
+setInterval(takePending,1500);
 document.addEventListener('visibilitychange',takePending);
 const content=document.querySelector('#content');
 function injectCard(){
@@ -1421,7 +1421,7 @@ async function heal(){
   if(Date.now()-lastTry<60000)return;
   try{const s=await G.status();if(s.active)return;lastTry=Date.now();await startNow(false);}catch(e){}
 }
-setInterval(heal,15000);heal();
+setInterval(heal,30000);heal();async function liveKm(){try{if(document.hidden||!auto()||!db.activeSession){if(!db.activeSession)window.__gpsLiveKm=0;return;}const s=await G.status();if(s&&s.active)window.__gpsLiveKm=Math.round((Number(s.meters)||0)/100)/10;}catch(e){}}setInterval(liveKm,30000);liveKm();
 const orig=window.toggleSession;
 window.toggleSession=async function(){
   const starting=!db.activeSession;
@@ -1504,11 +1504,36 @@ function inject(){
     chk.onchange=()=>{localStorage.setItem(AUTO_KEY,chk.checked?'1':'0');};
   }
 }
-setInterval(refreshLive,5000);
+setInterval(refreshLive,10000);
 if(content){new MutationObserver(inject).observe(content,{childList:true,subtree:true});inject();}
 })();
 </script>
 
+<script id="v32Patch">
+/* v3.2 Pago detectado: al elegir plataforma se guarda como tarjeta, o pide el efectivo real */
+(function(){
+const orig=window.tripAdd;
+if(typeof orig!=='function')return;
+window.tripAdd=function(platform,airport){
+  orig.apply(this,arguments);
+  const h=window.__payHint;
+  try{
+    if(h&&(h.type==='card'||h.type==='cash')&&Date.now()-h.ts<300000&&typeof pendingTrip!=='undefined'&&pendingTrip&&Math.abs(Number(pendingTrip.amount)-Number(h.amount))<0.005){
+      window.__payHint=null;
+      confirmPayment(h.type);
+    }
+  }catch(e){}
+};
+})();
+</script>
+<style id="v32-style">
+.results{align-items:stretch}
+.results .metric{display:flex!important;flex-direction:column;justify-content:space-between}
+.results .metric b{margin-top:auto!important;align-self:flex-start}
+.billing-eye,.results .totalMetric .billing-eye{width:34px!important;height:34px!important;flex:0 0 34px!important;border-radius:11px!important;background:rgba(120,165,255,.10)!important;border:1px solid rgba(120,165,255,.35)!important;color:#9fc4ff!important;display:grid!important;place-items:center!important;padding:0!important;font-size:0!important;box-shadow:none!important}
+.billing-eye:active{background:rgba(120,165,255,.22)!important;color:#fff!important}
+.billing-eye svg{width:19px;height:19px;display:block}
+</style>
 </body></html><style>
 /* V25 visual refinement: futuristic premium skin only. Functional JS untouched. */
 body{background:radial-gradient(circle at 50% -10%,#18364d 0,#07121c 34%,#040b12 100%);}
@@ -1689,4 +1714,7 @@ body{background:radial-gradient(ellipse at 50% -10%,#17364b 0%,#081522 48%,#0308
 .report-actions button{min-width:0;white-space:normal;}
 @media(max-width:360px){.efficiency-strip{gap:5px}.efficiency-card{padding:8px 4px}.odometer-box{padding:8px}.report-actions{grid-template-columns:1fr}}
 @media print{body{background:#fff!important;color:#111!important}.header,.nav,.bottom-nav,.navbtn,.report-actions,.menu-btn{display:none!important}.app,.panel,#reportOut{box-shadow:none!important;background:#fff!important;color:#111!important;border-color:#ddd!important}.metric,table,.platform-summary{break-inside:avoid}.panel{break-inside:avoid}button{display:none!important}}
+</style>
+<style id="v32-style-2">
+.results .metric b{margin-top:auto!important}.billing-eye svg{width:19px;height:19px}
 </style>

@@ -44,7 +44,7 @@ public class GpsService extends Service implements LocationListener {
         if (!running) {
             try {
                 lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2000L, 0f, this, Looper.getMainLooper());
+                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 3000L, 5f, this, Looper.getMainLooper());
                 running = true;
             } catch (SecurityException e) {
                 stopSelf();

@@ -178,8 +178,8 @@ public class ScreenReaderService extends AccessibilityService {
                 else if (low.contains("uber")) label = "Uber";
                 else if (low.contains("cabify")) label = "Cabify";
                 String hint = "";
-                if (all.contains("no cobrar") || all.contains("pago a traves de la app") || all.contains("pagado con tarjeta")) hint = "Parece TARJETA.";
-                else if (all.contains("recoge el dinero") || all.contains("cobrar al pasajero") || all.contains("en efectivo")) hint = "Parece EFECTIVO.";
+                if (all.contains("no cobrar al pasajero") || all.contains("no cobres") || all.contains("pago a traves de la app") || all.contains("app o tarjeta") || all.contains("pagado con tarjeta") || all.contains("pago con tarjeta")) hint = "Parece TARJETA.";
+                else if (all.contains("cobrar al pasajero") || all.contains("cobrar al cliente") || all.contains("recoge el dinero") || all.contains("efectivo")) hint = "Parece EFECTIVO.";
                 for (int i = 0; i < texts.length(); i++) {
                     String t = texts.getString(i);
                     Matcher m = AMT.matcher(t);
