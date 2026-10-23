@@ -1,6 +1,11 @@
 package com.portal.conductor;
 
+import android.content.ContentValues;
 import android.content.Intent;
+import android.os.Environment;
+import android.provider.MediaStore;
+import com.getcapacitor.JSObject;
+import java.io.OutputStream;
 import android.net.Uri;
 import android.util.Base64;
 import androidx.core.content.FileProvider;
@@ -40,6 +45,32 @@ public class ShareFilePlugin extends Plugin {
             call.resolve();
         } catch (Exception e) {
             call.reject("No se pudo compartir: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void saveFile(PluginCall call) {
+        try {
+            String b64 = call.getString("base64");
+            String name = call.getString("filename", "archivo");
+            String mime = call.getString("mime", "application/octet-stream");
+            if (b64 == null) { call.reject("Sin datos"); return; }
+            if (android.os.Build.VERSION.SDK_INT < 29) { call.reject("Android antiguo"); return; }
+            name = name.replaceAll("[^A-Za-z0-9._-]", "_");
+            ContentValues v = new ContentValues();
+            v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+            v.put(MediaStore.MediaColumns.MIME_TYPE, mime);
+            v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Portal del Conductor");
+            Uri uri = getContext().getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+            if (uri == null) { call.reject("No se pudo crear el archivo"); return; }
+            OutputStream o = getContext().getContentResolver().openOutputStream(uri);
+            o.write(Base64.decode(b64, Base64.DEFAULT));
+            o.close();
+            JSObject r = new JSObject();
+            r.put("path", "Descargas/Portal del Conductor/" + name);
+            call.resolve(r);
+        } catch (Exception e) {
+            call.reject("No se pudo guardar: " + e.getMessage());
         }
     }
 
