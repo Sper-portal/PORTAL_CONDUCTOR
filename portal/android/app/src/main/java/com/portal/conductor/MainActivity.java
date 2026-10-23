@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(ScreenReaderPlugin.class);
         registerPlugin(GpsOdometerPlugin.class);
+        registerPlugin(ShareFilePlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

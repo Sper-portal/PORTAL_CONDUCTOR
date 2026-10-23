@@ -17,6 +17,11 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 import android.widget.TextView;
+import android.widget.ImageView;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.Drawable;
+import android.view.ViewOutlineProvider;
 import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -34,7 +39,7 @@ public class ScreenReaderService extends AccessibilityService {
     private static final Pattern TOTAL = Pattern.compile("\\btotal\\b");
 
     private WindowManager wm;
-    private TextView bubble;
+    private ImageView bubble;
     private WindowManager.LayoutParams lp;
     private boolean shown = false;
     private String fgPkg = "";
@@ -99,16 +104,26 @@ public class ScreenReaderService extends AccessibilityService {
     private void buildBubble() {
         final float d = getResources().getDisplayMetrics().density;
         int size = (int) (58 * d);
-        bubble = new TextView(this);
-        bubble.setText("\u20AC");
-        bubble.setTextColor(Color.WHITE);
-        bubble.setTextSize(24);
-        bubble.setGravity(Gravity.CENTER);
+        bubble = new ImageView(this);
+        try {
+            Drawable ic = getPackageManager().getApplicationIcon(getPackageName());
+            int big = (int) (size * 1.5f);
+            Bitmap bm = Bitmap.createBitmap(big, big, Bitmap.Config.ARGB_8888);
+            Canvas cv = new Canvas(bm);
+            ic.setBounds(0, 0, big, big);
+            ic.draw(cv);
+            int off = (big - size) / 2;
+            bubble.setImageBitmap(Bitmap.createBitmap(bm, off, off, size, size));
+        } catch (Throwable e) { }
+        bubble.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        bubble.setPadding((int) (2 * d), (int) (2 * d), (int) (2 * d), (int) (2 * d));
         GradientDrawable g = new GradientDrawable();
         g.setShape(GradientDrawable.OVAL);
         g.setColor(Color.parseColor("#2563EB"));
         g.setStroke((int) (2 * d), Color.WHITE);
         bubble.setBackground(g);
+        bubble.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
+        bubble.setClipToOutline(true);
         bubble.setElevation(8 * d);
         lp = new WindowManager.LayoutParams(size, size,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
