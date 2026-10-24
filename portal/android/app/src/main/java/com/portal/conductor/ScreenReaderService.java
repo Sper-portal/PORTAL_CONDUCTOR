@@ -4,6 +4,10 @@ import android.accessibilityservice.AccessibilityService;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import java.util.ArrayList;
+import android.widget.LinearLayout;
+import android.graphics.Typeface;
+import android.accessibilityservice.AccessibilityServiceInfo;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.GradientDrawable;
@@ -59,16 +63,40 @@ public class ScreenReaderService extends AccessibilityService {
             if (r != null && r.getPackageName() != null) fgPkg = r.getPackageName().toString();
         } catch (Exception e) { }
         refreshBubble();
+        applyRentConfig();
     }
 
     @Override public boolean onUnbind(Intent i) {
         hideBubble();
+        hideAlert();
         instance = null;
         return super.onUnbind(i);
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent e) {
-        if (e.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
+        int et = e.getEventType();
+        if (et == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+            if (trackOn(this)) {
+                CharSequence cp = e.getPackageName();
+                if (cp != null && DRIVER.matcher(cp).find() && !cp.toString().equals(getPackageName())) scheduleEval();
+            }
+            return;
+        }
+        if (et == AccessibilityEvent.TYPE_WINDOWS_CHANGED) {
+            try {
+                AccessibilityNodeInfo ar = getRootInActiveWindow();
+                if (ar != null && ar.getPackageName() != null) {
+                    String ap = ar.getPackageName().toString(), al = ap.toLowerCase();
+                    if (!ap.equals("com.android.systemui") && !al.contains("inputmethod") && !al.contains("keyboard")) {
+                        fgPkg = ap;
+                        refreshBubble();
+                        if (trackOn(this) && DRIVER.matcher(ap).find()) scheduleEval();
+                    }
+                }
+            } catch (Exception ex) { }
+            return;
+        }
+        if (et != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
         CharSequence p = e.getPackageName();
         if (p == null) return;
         String pkg = p.toString();
@@ -76,6 +104,7 @@ public class ScreenReaderService extends AccessibilityService {
         if (pkg.equals("com.android.systemui") || low.contains("inputmethod") || low.contains("keyboard")) return;
         fgPkg = pkg;
         refreshBubble();
+        if (trackOn(this) && DRIVER.matcher(pkg).find()) scheduleEval();
     }
 
     @Override public void onInterrupt() { }
@@ -87,7 +116,8 @@ public class ScreenReaderService extends AccessibilityService {
     }
 
     private void refreshBubble() {
-        boolean want = bubbleOn(this) && !fgPkg.equals(getPackageName()) && DRIVER.matcher(fgPkg).find();
+        applyRentConfig();
+        boolean want = forced || (bubbleOn(this) && !fgPkg.equals(getPackageName()) && DRIVER.matcher(fgPkg).find());
         if (want && !shown) showBubble();
         else if (!want && shown) hideBubble();
     }
@@ -221,7 +251,7 @@ public class ScreenReaderService extends AccessibilityService {
     }
 
     private void onBubbleTap() {
-        Cand best = pickBest(readAll(getPackageName()));
+        Cand best = pickBest(readWithCache(getPackageName(), null));
         if (best == null) {
             Toast.makeText(this, "No veo ning\u00fan importe en esta pantalla", Toast.LENGTH_SHORT).show();
             return;
@@ -266,6 +296,251 @@ public class ScreenReaderService extends AccessibilityService {
         o.put("pkg", pkg);
         o.put("texts", texts);
         out.put(o);
+    }
+
+    // ===== Rentabilidad de viajes + diagnostico de la burbuja (v3.9) =====
+    private final Handler rh = new Handler(Looper.getMainLooper());
+    private boolean evalPending = false;
+    private long lastOfferSeen = 0;
+    private LinearLayout alertView;
+    private TextView aChip, aMain, aDetail;
+    private boolean alertShown = false;
+    private boolean forced = false;
+    private WindowManager.LayoutParams alp;
+    private final Runnable evalRun = new Runnable() { @Override public void run() { evalPending = false; evaluateOffer(); } };
+    private final Runnable hideRun = new Runnable() { @Override public void run() { hideAlert(); } };
+    private final Runnable unforceRun = new Runnable() { @Override public void run() { forced = false; refreshBubble(); } };
+
+    public static boolean rentOn(Context c) {
+        return c.getSharedPreferences("portal", Context.MODE_PRIVATE).getInt("rent_on", 0) == 1;
+    }
+
+    /** true si hay que vigilar los cambios de las apps de conductor (burbuja o rentabilidad activadas) */
+    public static boolean trackOn(Context c) {
+        return rentOn(c) || bubbleOn(c);
+    }
+
+    // memoria: lo ultimo que se vio en Bolt/Uber/Cabify, para poder usarlo cuando el Portal esta delante (movil)
+    private String cacheJson = null;
+    private long cacheTime = 0;
+
+    private void updateCache(JSONArray wins) {
+        try {
+            JSONArray keep = new JSONArray();
+            for (int i = 0; i < wins.length(); i++) {
+                JSONObject w = wins.getJSONObject(i);
+                if (DRIVER.matcher(w.optString("pkg")).find()) keep.put(w);
+            }
+            if (keep.length() > 0 && pickBest(keep) != null) { cacheJson = keep.toString(); cacheTime = System.currentTimeMillis(); }
+        } catch (Exception e) { }
+    }
+
+    private boolean hasDriverWindow(JSONArray wins) {
+        try {
+            for (int i = 0; i < wins.length(); i++) if (DRIVER.matcher(wins.getJSONObject(i).optString("pkg")).find()) return true;
+        } catch (Exception e) { }
+        return false;
+    }
+
+    /** lectura en vivo; si no hay ninguna app de conductor visible, usa la memoria (hasta 150 s) */
+    public JSONArray readWithCache(String ownPkg, JSONObject meta) {
+        JSONArray wins = readAll(ownPkg);
+        try {
+            if (!hasDriverWindow(wins) && cacheJson != null) {
+                long age = System.currentTimeMillis() - cacheTime;
+                if (age <= 150000) {
+                    JSONArray c = new JSONArray(cacheJson);
+                    for (int i = 0; i < c.length(); i++) wins.put(c.getJSONObject(i));
+                    if (meta != null) { meta.put("cached", true); meta.put("cachedAgeMs", age); }
+                }
+            }
+        } catch (Exception e) { }
+        saveReadDiag(wins);
+        return wins;
+    }
+
+    private void saveReadDiag(JSONArray wins) {
+        try {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < wins.length(); i++) {
+                JSONObject w = wins.getJSONObject(i);
+                JSONArray ta = w.getJSONArray("texts");
+                sb.append("[").append(w.optString("pkg")).append("] ").append(ta.length()).append(" textos\n");
+                int used = 0;
+                for (int j = 0; j < ta.length() && used < 1800; j++) { String s = ta.getString(j); sb.append(s).append(" | "); used += s.length() + 3; }
+                sb.append("\n\n");
+            }
+            getSharedPreferences("portal", Context.MODE_PRIVATE).edit().putString("read_lastText", sb.toString()).putLong("read_lastWhen", System.currentTimeMillis()).apply();
+        } catch (Exception e) { }
+    }
+
+    public void applyRentConfig() {
+        try {
+            AccessibilityServiceInfo info = getServiceInfo();
+            if (info != null) {
+                int t = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED | AccessibilityEvent.TYPE_WINDOWS_CHANGED;
+                if (trackOn(this)) t |= AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED;
+                if (info.eventTypes != t) { info.eventTypes = t; setServiceInfo(info); }
+            }
+        } catch (Exception e) { }
+        if (!rentOn(this)) rh.post(hideRun);
+    }
+
+    private OfferAnalyzer.Params rentParams() {
+        SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);
+        OfferAnalyzer.Params p = new OfferAnalyzer.Params();
+        p.minHour = sp.getFloat("rent_minHour", 15f);
+        p.minKm = sp.getFloat("rent_minKm", 1f);
+        p.maxPickup = sp.getFloat("rent_maxPickup", 5f);
+        p.commission = sp.getFloat("rent_comm", 0f);
+        p.includePickup = sp.getInt("rent_incl", 1) == 1;
+        return p;
+    }
+
+    private void scheduleEval() {
+        if (evalPending) return;
+        evalPending = true;
+        rh.postDelayed(evalRun, 450);
+    }
+
+    private void evaluateOffer() {
+        if (!trackOn(this)) return;
+        try {
+            JSONArray wins = readAll(getPackageName());
+            updateCache(wins);
+            if (!rentOn(this)) return;
+            SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);
+            boolean diag = sp.getInt("rent_diag", 0) == 1;
+            OfferAnalyzer.Result found = null;
+            for (int i = 0; i < wins.length(); i++) {
+                JSONObject w = wins.getJSONObject(i);
+                String pkg = w.optString("pkg");
+                if (!DRIVER.matcher(pkg).find()) continue;
+                JSONArray ta = w.getJSONArray("texts");
+                List<String> nodes = new ArrayList<String>();
+                StringBuilder sb = new StringBuilder();
+                for (int j = 0; j < ta.length(); j++) { String s = ta.getString(j); nodes.add(s); if (sb.length() < 3500) sb.append(s).append(" | "); }
+                OfferAnalyzer.Result r = OfferAnalyzer.analyze(nodes, rentParams());
+                String all = sb.toString();
+                if (diag && (r.offer || (all.contains("\u20AC") && all.toLowerCase().contains("km")))) {
+                    String info = r.offer ? ("veredicto=" + r.verdict + " precio=" + r.price + " viajeKm=" + r.tripKm + " viajeMin=" + r.tripMin + " recogidaKm=" + r.pickupKm + " recogidaMin=" + r.pickupMin + (r.orderAssumed ? " (orden asumido)" : "")) : "no reconocida como oferta";
+                    sp.edit().putString("rent_lastText", pkg + "\n" + all).putString("rent_lastInfo", info).apply();
+                }
+                if (r.offer) { found = r; break; }
+            }
+            long now = System.currentTimeMillis();
+            if (found != null) {
+                lastOfferSeen = now;
+                showAlert(found);
+                rh.removeCallbacks(hideRun);
+                rh.postDelayed(hideRun, 25000);
+            } else if (alertShown && now - lastOfferSeen > 1800) {
+                hideAlert();
+            }
+        } catch (Exception e) { }
+    }
+
+    private void buildAlert() {
+        final float d = getResources().getDisplayMetrics().density;
+        alertView = new LinearLayout(this);
+        alertView.setOrientation(LinearLayout.VERTICAL);
+        alertView.setGravity(Gravity.CENTER_HORIZONTAL);
+        alertView.setPadding((int) (16 * d), (int) (10 * d), (int) (16 * d), (int) (12 * d));
+        aChip = new TextView(this);
+        aChip.setTextColor(Color.WHITE);
+        aChip.setTextSize(20);
+        aChip.setGravity(Gravity.CENTER);
+        aChip.setTypeface(Typeface.DEFAULT_BOLD);
+        aChip.setPadding((int) (16 * d), (int) (4 * d), (int) (16 * d), (int) (4 * d));
+        aMain = new TextView(this);
+        aMain.setTextColor(Color.WHITE);
+        aMain.setTextSize(22);
+        aMain.setGravity(Gravity.CENTER);
+        aMain.setTypeface(Typeface.DEFAULT_BOLD);
+        aMain.setPadding(0, (int) (8 * d), 0, 0);
+        aDetail = new TextView(this);
+        aDetail.setTextColor(Color.parseColor("#DCEBFF"));
+        aDetail.setTextSize(14);
+        aDetail.setGravity(Gravity.CENTER);
+        aDetail.setPadding(0, (int) (4 * d), 0, 0);
+        alertView.addView(aChip);
+        alertView.addView(aMain);
+        alertView.addView(aDetail);
+        int w = (int) Math.min(getResources().getDisplayMetrics().widthPixels * 0.94f, 400 * d);
+        alp = new WindowManager.LayoutParams(w, WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                PixelFormat.TRANSLUCENT);
+        alp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        alp.y = (int) (70 * d);
+    }
+
+    private static String f(double v, int dec) { return String.format(java.util.Locale.GERMANY, "%." + dec + "f", v); }
+
+    private void showAlert(OfferAnalyzer.Result r) {
+        try {
+            if (alertView == null) buildAlert();
+            final float d = getResources().getDisplayMetrics().density;
+            boolean ok = "OK".equals(r.verdict), no = "NO".equals(r.verdict);
+            int col = ok ? Color.parseColor("#22C55E") : (no ? Color.parseColor("#EF4444") : Color.parseColor("#F59E0B"));
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(Color.parseColor("#F00A2E70"));
+            bg.setCornerRadius(20 * d);
+            bg.setStroke((int) (3 * d), col);
+            alertView.setBackground(bg);
+            GradientDrawable chip = new GradientDrawable();
+            chip.setColor(col);
+            chip.setCornerRadius(14 * d);
+            aChip.setBackground(chip);
+            aChip.setText(ok ? "\u2713  ACEPTAR" : (no ? "\u2715  RECHAZAR" : "\u26A0  DATOS INSUFICIENTES"));
+            if (r.perHour > 0) aMain.setText(f(r.perHour, 1) + " \u20AC/h   |   " + f(r.perKm, 2) + " \u20AC/km");
+            else aMain.setText("Precio " + f(r.price, 2) + " \u20AC");
+            StringBuilder dt = new StringBuilder();
+            if (r.pickupKm > 0 || r.pickupMin > 0) {
+                dt.append("Recogida: ");
+                if (r.pickupMin > 0) dt.append((int) r.pickupMin).append(" min");
+                if (r.pickupKm > 0) dt.append(r.pickupMin > 0 ? " (" : "").append(f(r.pickupKm, 1)).append(" km").append(r.pickupMin > 0 ? ")" : "");
+                dt.append("\n");
+            }
+            dt.append(r.reason);
+            aDetail.setText(dt.toString());
+            if (!alertShown) { wm.addView(alertView, alp); alertShown = true; }
+        } catch (Exception e) { }
+    }
+
+    private void hideAlert() {
+        try { if (alertShown && alertView != null) wm.removeView(alertView); } catch (Exception e) { }
+        alertShown = false;
+    }
+
+    public void demoAlert(String verdict) {
+        OfferAnalyzer.Result r = new OfferAnalyzer.Result();
+        r.offer = true; r.verdict = verdict; r.price = 15.2;
+        if ("OK".equals(verdict)) { r.perHour = 31.4; r.perKm = 1.62; r.pickupKm = 1.2; r.pickupMin = 4; r.reason = "Cumple tus objetivos."; }
+        else if ("NO".equals(verdict)) { r.perHour = 9.8; r.perKm = 0.78; r.pickupKm = 6.1; r.pickupMin = 11; r.reason = "\u20AC/h por debajo de 15,00 \u00B7 \u20AC/km por debajo de 1,00"; }
+        else { r.reason = "No se pudo leer el tiempo del viaje."; }
+        showAlert(r);
+        rh.removeCallbacks(hideRun);
+        rh.postDelayed(hideRun, 6000);
+    }
+
+    public void forceBubble() {
+        forced = true;
+        refreshBubble();
+        rh.removeCallbacks(unforceRun);
+        rh.postDelayed(unforceRun, 6000);
+    }
+
+    public JSONObject bubbleDiag() {
+        JSONObject o = new JSONObject();
+        try {
+            o.put("serviceOn", true);
+            o.put("bubbleOn", bubbleOn(this));
+            o.put("fgPkg", fgPkg);
+            o.put("matchesDriver", DRIVER.matcher(fgPkg).find());
+            o.put("shown", shown);
+        } catch (Exception e) { }
+        return o;
     }
 
     private void collect(AccessibilityNodeInfo n, JSONArray out, int depth) {
