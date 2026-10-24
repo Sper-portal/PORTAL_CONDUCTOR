@@ -22,6 +22,7 @@ public class OfferAnalyzer {
         public String reason = "";
         public boolean orderAssumed;
         public String why = "";
+        public boolean acceptSeen, unreadable;
     }
 
     private static class Item { int node; char kind; double v; boolean used; }
@@ -52,12 +53,22 @@ public class OfferAnalyzer {
     private static boolean has(String s, String[] kws) { for (String k : kws) if (s.contains(k)) return true; return false; }
 
     private static String clean(String t) {
-        return t == null ? "" : t.replace('\u00A0', ' ').replace('\u202F', ' ').replace('\u2009', ' ').replace('\u200A', ' ').replace('\u2007', ' ');
+        String x = t == null ? "" : t.replace('\u00A0', ' ').replace('\u202F', ' ').replace('\u2009', ' ').replace('\u200A', ' ').replace('\u2007', ' ');
+        x = x.replaceAll("(?i)\\bkil[o\u00F3]metros?\\b", "km").replaceAll("(?i)\\bminutos?\\b", "min").replaceAll("(?i)\\bmins\\b", "min");
+        x = x.replaceAll("(?i)\\beuros?\\b", "\u20AC").replaceAll("(?i)(\\d)\\s*metros?\\b", "$1 m");
+        return x;
+    }
+
+    /** el boton de aceptar de la oferta (no vale cualquier texto que contenga la palabra) */
+    private static boolean isAcceptNode(String raw) {
+        String n = norm(raw).replaceAll("[^a-z ]", " ").replaceAll("\\s+", " ").trim();
+        if (n.length() == 0 || n.length() > 28) return false;
+        return n.startsWith("aceptar") || n.startsWith("emparejar") || n.equals("accept") || n.equals("match");
     }
 
     public static Result analyze(List<String> rawNodes, Params p) {
         List<String> nodes = new ArrayList<String>();
-        for (String x : rawNodes) nodes.add(clean(x));
+        for (String x : rawNodes) for (String line : clean(x).split("\\n")) if (line.trim().length() > 0) nodes.add(line.trim());
         Result r = new Result();
         // ---- precio: primer importe en euros razonable
         for (String t : nodes) {
@@ -78,11 +89,12 @@ public class OfferAnalyzer {
             Matcher mi = MIN.matcher(t);
             while (mi.find()) { Item it = new Item(); it.node = i; it.kind = 'm'; it.v = (mi.group(1) != null ? num(mi.group(1)) * 60 : 0) + num(mi.group(2)); items.add(it); }
         }
-        boolean accept = has(all.toString(), ACCEPT);
+        boolean accept = false;
+        for (String nd : nodes) if (isAcceptNode(nd)) { accept = true; break; }
+        r.acceptSeen = accept;
         int kmCount = 0, minCount = 0;
         for (Item it : items) { if (it.kind == 'k') kmCount++; else minCount++; }
-        r.offer = (r.price > 0 && kmCount >= 1 && minCount >= 1 && (accept || kmCount >= 2))
-                || (r.price <= 0 && kmCount >= 2 && minCount >= 2 && accept);
+        r.offer = accept && kmCount >= 1 && minCount >= 1 && (r.price > 0 || (kmCount >= 2 && minCount >= 2));
         if (!r.offer) { r.why = "precio=" + r.price + " km=" + kmCount + " min=" + minCount + " aceptar=" + accept; return r; }
         // ---- emparejar km con minutos: 1) mismo nodo, 2) nodos contiguos
         List<Seg> segs = new ArrayList<Seg>();

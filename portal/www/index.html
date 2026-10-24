@@ -1618,7 +1618,7 @@ window.fareReadScreen=async function(){
 })();
 </script>
 
-<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">v3.11 lector</div>
+<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">v3.12 lector</div>
 <script id="screenReaderPatch2">
 /* v2.3 Burbuja flotante (movil): recibe el precio leido y lo pone en la calculadora */
 (function(){
@@ -1890,7 +1890,7 @@ function renderSyncInfo(){infoPage('☁️ Datos y sincronización',['Tus datos 
 function showInfoDetail(type){const T='✈ Abrir Telegram (@'+PORTAL_TG+')',tg='<button class="action" style="width:100%" onclick="openTelegramSupport(\'\')">'+T+'</button>';
 if(type==='sincronizacion')return renderSyncInfo();
 if(type==='actualizar')return infoPage('↻ Versión y actualizaciones',['Tienes instalada la versión '+APP_VERSION+'. La puedes ver también arriba a la derecha, en la pantalla principal.','Esta app se instala desde un archivo, no desde una tienda. Cuando hay una versión nueva te llega el archivo y lo instalas encima de la actual: no hace falta desinstalar y no pierdes tus datos.','Si te falta la última versión o algo no funciona tras actualizar, escribe a soporte.'],tg);
-if(type==='privacidad')return infoPage('🔐 Privacidad y datos',['Tus datos son tuyos. Se usan solo para que la app funcione: calcular tu facturación, tus horas, tu gasolina y tus kilómetros.','El GPS solo suma los metros recorridos mientras tienes la jornada iniciada. No guarda tus rutas ni tus posiciones.','El lector de pantalla solo busca el importe del viaje y si se paga con tarjeta o efectivo. No guarda ni envía nada más de lo que ves en pantalla. Si activas Rentabilidad de viajes, también lee la distancia y el tiempo de la oferta para avisarte; no se guarda ni se envía (solo con el modo diagnóstico se guarda el último texto en tu móvil).','Tus datos no se venden ni se comparten con nadie.']);
+if(type==='privacidad')return infoPage('🔐 Privacidad y datos',['Tus datos son tuyos. Se usan solo para que la app funcione: calcular tu facturación, tus horas, tu gasolina y tus kilómetros.','El GPS solo suma los metros recorridos mientras tienes la jornada iniciada. No guarda tus rutas ni tus posiciones.','El lector de pantalla solo busca el importe del viaje y si se paga con tarjeta o efectivo. No guarda ni envía nada más de lo que ves en pantalla. Si activas Rentabilidad de viajes, también lee la distancia y el tiempo de la oferta para avisarte; no se guarda ni se envía (en tu móvil solo se guarda el último texto de oferta leído, para poder revisarlo).','Tus datos no se venden ni se comparten con nadie.']);
 if(type==='funciona')return infoPage('📖 Cómo funciona Portal del Conductor',['Calculadora: apunta tus viajes (también con Importe automático), y desde Últimos viajes puedes añadir propina, editar o borrar cada viaje.','Facturación: tus ingresos por día, semana y mes, con la facturación manual por plataforma, compensaciones y nómina.','Control: tu jornada, horas, gasolina y kilómetros (con GPS automático).','Informe: resumen por periodos que puedes guardar o compartir en PDF o imagen.','Ajustes: comisión, tasa de aeropuerto, objetivos, burbuja, GPS y Rentabilidad de viajes (te avisa si una oferta compensa).'],'<button class="action" style="width:100%" onclick="renderHelpCarga()">📥 Ver la guía completa</button>');
 if(type==='soporte')return infoPage('🛠️ Ayuda y soporte',['En Ayuda tienes una guía para cargar datos, preguntas frecuentes y a Jenny, que responde al momento a dudas sobre la app.','Si Jenny no sabe algo, te lo dice y puedes escribir a una persona por Telegram.'],'<button class="action" style="width:100%" onclick="renderHelp()">🛟 Ir a Ayuda</button><button class="secondary" style="width:100%;margin-top:10px" onclick="openTelegramSupport(\'\')">'+T+'</button>');
 if(type==='condiciones')return infoPage('📄 Condiciones de uso',['Portal del Conductor es una herramienta de organización personal para conductores. Es gratuita y se ofrece tal cual, sin garantía de disponibilidad.','Las cifras las introduces tú o las lee la app de tu pantalla: revísalas siempre. La app no es asesoría fiscal ni laboral, y no sustituye a tu gestor.','Portal del Conductor no tiene relación con Bolt, Uber ni Cabify. Sus nombres pertenecen a sus propietarios y se usan solo para identificar las plataformas.','Cuida tu cuenta y tu contraseña: eres responsable de lo que se haga con ellas.']);
@@ -1969,6 +1969,16 @@ const _rr=window.renderRent;
 window.renderRent=async function(){await _rr.apply(this,arguments);const btn=document.querySelector('button[onclick="rentSave()"]');
 if(btn&&!document.getElementById('rStatBox')){const box=document.createElement('div');box.id='rStatBox';box.className='note';box.style.cssText='margin:12px 0';box.innerHTML='<b>Estado de la lectura</b><div id="rStat" style="white-space:pre-wrap;font-size:13px;line-height:1.5;margin-top:6px;color:#cfe3f5">Cargando…</div><button class="secondary" style="width:100%;margin-top:8px" onclick="rentStatusLoad()">🔄 Actualizar estado</button>';btn.insertAdjacentElement('beforebegin',box);rentStatusLoad()}};
 try{const e=jEntry('rentabilidad');if(e)e[4]='Es un aviso que salta arriba cuando te llega una oferta de Bolt, Uber o Cabify: verde si compensa, rojo si no, y naranja si no pudo leer algún dato. Se activa en Ajustes → Rentabilidad de viajes, donde pones tus objetivos (€/hora, €/km y recogida máxima). Ojo: la oferta de Bolt no muestra el precio, así que en Bolt solo te avisa por la distancia de recogida. Solo avisa: no pulsa nada por ti.'}catch(x){}
+})();
+
+</script>
+<script id="v312-script">
+/* v3.12: enviar por Telegram lo ultimo que se leyo */
+(function(){
+const SRx=(()=>{try{if(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform())return (Capacitor.Plugins&&Capacitor.Plugins.ScreenReader)||Capacitor.registerPlugin('ScreenReader')}catch(e){}return null})();
+window.rentSendLast=async()=>{if(!SRx){alert('Solo disponible en el móvil o la tablet con la app instalada.');return}try{const r=await SRx.getRentDiag();if(!r.text){alert('Todavía no he guardado ninguna oferta. Espera a que salte una oferta de Bolt, Uber o Cabify y vuelve aquí.');return}openTelegramSupport('Última oferta leída ['+(r.info||'sin datos')+']:\n'+r.text)}catch(e){alert('No se pudo leer.')}};
+const _rr=window.renderRent;
+window.renderRent=async function(){await _rr.apply(this,arguments);const box=document.getElementById('rStatBox');if(box&&!document.getElementById('rSendLast')){const b=document.createElement('button');b.id='rSendLast';b.className='secondary';b.style.cssText='width:100%;margin-top:8px';b.textContent='📨 Enviar por Telegram lo último que leí';b.onclick=window.rentSendLast;box.appendChild(b)}};
 })();
 
 </script>
@@ -2242,4 +2252,8 @@ details.subpage-row summary::-webkit-details-marker{display:none}
 .app .header.hdr-banner::before,.app .header.hdr-banner::after{display:none!important;content:none!important}
 .app .header.hdr-banner img.hdr-banner-img{display:block!important;width:100%!important;max-width:none!important;height:auto!important;max-height:none!important;min-width:0!important;min-height:0!important;aspect-ratio:3/1!important;object-fit:fill!important;flex:none!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;transform:none!important;position:static!important;pointer-events:none;user-select:none;-webkit-user-drag:none}
 .hdr-menu-hit{position:absolute;left:2.2%;top:4%;width:10%;height:27%;background:transparent!important;border:0!important;padding:0!important;margin:0!important;z-index:5;cursor:pointer;-webkit-tap-highlight-color:transparent}
+</style>
+<style id="v312-style">
+.app .header.hdr-banner{border-radius:22px!important;overflow:hidden!important;border:2px solid #3fc8ffaa!important;box-shadow:0 0 14px #1e9bff66!important}
+.hdr-menu-hit{left:.4%!important;top:1%!important;width:9%!important;height:21%!important}
 </style>

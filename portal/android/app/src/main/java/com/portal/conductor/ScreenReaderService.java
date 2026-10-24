@@ -406,14 +406,14 @@ public class ScreenReaderService extends AccessibilityService {
                     scheduleEval();
                 }
             } catch (Exception e) { }
-            rh.postDelayed(this, 2500);
+            rh.postDelayed(this, 1500);
         }
     };
 
     private void startPoll() {
         if (polling) return;
         polling = true;
-        rh.postDelayed(pollRun, 2500);
+        rh.postDelayed(pollRun, 1500);
     }
 
     private OfferAnalyzer.Params rentParams() {
@@ -441,7 +441,7 @@ public class ScreenReaderService extends AccessibilityService {
             if (!rentOn(this)) return;
             SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);
             boolean diag = sp.getInt("rent_diag", 0) == 1;
-            OfferAnalyzer.Result found = null;
+            OfferAnalyzer.Result found = null, unreadable = null;
             for (int i = 0; i < wins.length(); i++) {
                 JSONObject w = wins.getJSONObject(i);
                 String pkg = w.optString("pkg");
@@ -457,12 +457,14 @@ public class ScreenReaderService extends AccessibilityService {
                         ? ("Oferta reconocida: " + r.verdict + " | precio " + r.price + " | viaje " + r.tripKm + " km/" + r.tripMin + " min | recogida " + r.pickupKm + " km/" + r.pickupMin + " min" + (r.orderAssumed ? " (orden estimado)" : ""))
                         : ("Texto con importes o km, pero NO reconocido como oferta: " + r.why)).apply();
                 }
-                if (diag && (r.offer || (all.contains("\u20AC") && all.toLowerCase().contains("km")))) {
+                if (r.offer || r.acceptSeen || (all.contains("\u20AC") && all.toLowerCase().contains("km"))) {
                     String info = r.offer ? ("veredicto=" + r.verdict + " precio=" + r.price + " viajeKm=" + r.tripKm + " viajeMin=" + r.tripMin + " recogidaKm=" + r.pickupKm + " recogidaMin=" + r.pickupMin + (r.orderAssumed ? " (orden asumido)" : "")) : "no reconocida como oferta";
                     sp.edit().putString("rent_lastText", pkg + "\n" + all).putString("rent_lastInfo", info).apply();
                 }
                 if (r.offer) { found = r; break; }
+                else if (r.acceptSeen && unreadable == null) { r.unreadable = true; r.verdict = "DATA"; r.reason = "No pude leer los datos de esta oferta."; unreadable = r; }
             }
+            if (found == null && unreadable != null) found = unreadable;
             long now = System.currentTimeMillis();
             if (found != null) {
                 lastOfferSeen = now;
@@ -528,7 +530,8 @@ public class ScreenReaderService extends AccessibilityService {
             chip.setCornerRadius(14 * d);
             aChip.setBackground(chip);
             aChip.setText(ok ? "\u2713  ACEPTAR" : (no ? "\u2715  RECHAZAR" : "\u26A0  DATOS INSUFICIENTES"));
-            if (r.perHour > 0) aMain.setText(f(r.perHour, 1) + " \u20AC/h   |   " + f(r.perKm, 2) + " \u20AC/km");
+            if (r.unreadable) aMain.setText("No pude leer la oferta");
+            else if (r.perHour > 0) aMain.setText(f(r.perHour, 1) + " \u20AC/h   |   " + f(r.perKm, 2) + " \u20AC/km");
             else if (r.price > 0) aMain.setText("Precio " + f(r.price, 2) + " \u20AC");
             else aMain.setText("Sin precio en la oferta");
             StringBuilder dt = new StringBuilder();
