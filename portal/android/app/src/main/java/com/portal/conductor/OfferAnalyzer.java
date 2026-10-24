@@ -21,6 +21,7 @@ public class OfferAnalyzer {
         public double price = -1, tripKm = -1, tripMin = -1, pickupKm = -1, pickupMin = -1, perHour = -1, perKm = -1;
         public String reason = "";
         public boolean orderAssumed;
+        public String why = "";
     }
 
     private static class Item { int node; char kind; double v; boolean used; }
@@ -34,7 +35,7 @@ public class OfferAnalyzer {
     private static final Pattern HOURS = Pattern.compile("(?<![\\d.,])(\\d+)\\s*h(?:ora)?s?\\b(?!\\s*\\d+\\s*min)", Pattern.CASE_INSENSITIVE);
     private static final String[] PICK = {"recog", "recoj", "pasajero", "away", "de distancia", "cliente", "pickup", "hasta el"};
     private static final String[] TRIP = {"viaje", "trayecto", "recorrido", "destino", "trip", "total", "duracion", "drop"};
-    private static final String[] ACCEPT = {"aceptar", "accept", "seleccionar", "rechazar", "reject", "declinar", "decline"};
+    private static final String[] ACCEPT = {"aceptar", "accept", "seleccionar", "rechazar", "reject", "declinar", "decline", "emparejar", "match"};
 
     public static String norm(String s) {
         String n = Normalizer.normalize(s == null ? "" : s, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
@@ -50,7 +51,13 @@ public class OfferAnalyzer {
 
     private static boolean has(String s, String[] kws) { for (String k : kws) if (s.contains(k)) return true; return false; }
 
-    public static Result analyze(List<String> nodes, Params p) {
+    private static String clean(String t) {
+        return t == null ? "" : t.replace('\u00A0', ' ').replace('\u202F', ' ').replace('\u2009', ' ').replace('\u200A', ' ').replace('\u2007', ' ');
+    }
+
+    public static Result analyze(List<String> rawNodes, Params p) {
+        List<String> nodes = new ArrayList<String>();
+        for (String x : rawNodes) nodes.add(clean(x));
         Result r = new Result();
         // ---- precio: primer importe en euros razonable
         for (String t : nodes) {
@@ -74,24 +81,29 @@ public class OfferAnalyzer {
         boolean accept = has(all.toString(), ACCEPT);
         int kmCount = 0, minCount = 0;
         for (Item it : items) { if (it.kind == 'k') kmCount++; else minCount++; }
-        r.offer = r.price > 0 && kmCount >= 1 && minCount >= 1 && (accept || kmCount >= 2);
-        if (!r.offer) return r;
+        r.offer = (r.price > 0 && kmCount >= 1 && minCount >= 1 && (accept || kmCount >= 2))
+                || (r.price <= 0 && kmCount >= 2 && minCount >= 2 && accept);
+        if (!r.offer) { r.why = "precio=" + r.price + " km=" + kmCount + " min=" + minCount + " aceptar=" + accept; return r; }
         // ---- emparejar km con minutos: 1) mismo nodo, 2) nodos contiguos
         List<Seg> segs = new ArrayList<Seg>();
         List<Item[]> pairs = new ArrayList<Item[]>();
-        for (int pass = 0; pass < 2; pass++) {
-            for (Item a : items) {
-                if (a.kind != 'k' || a.used) continue;
-                Item best = null; int bd = 99;
-                for (Item b : items) {
-                    if (b.kind != 'm' || b.used) continue;
-                    int d = Math.abs(b.node - a.node);
-                    if (pass == 0 ? d != 0 : d != 1) continue;
-                    int pen = b.node < a.node ? 0 : 1;
-                    if (pen < bd) { bd = pen; best = b; }
-                }
-                if (best != null) { a.used = true; best.used = true; pairs.add(new Item[]{a, best}); }
+        // fase A: km y minutos en el mismo nodo
+        for (Item a : items) {
+            if (a.kind != 'k' || a.used) continue;
+            for (Item b : items) {
+                if (b.kind == 'm' && !b.used && b.node == a.node) { a.used = true; b.used = true; pairs.add(new Item[]{a, b}); break; }
             }
+        }
+        // fase B: el minuto va justo antes del km (tambien con un "•" entre medias) o, si no, justo despues
+        for (Item a : items) {
+            if (a.kind != 'k' || a.used) continue;
+            Item best = null;
+            for (int d = 1; d <= 2 && best == null; d++) {
+                if (d == 2 && nodes.get(a.node - 1).trim().length() > 2) break;
+                for (Item b : items) if (b.kind == 'm' && !b.used && b.node == a.node - d) { best = b; break; }
+            }
+            if (best == null) for (Item b : items) if (b.kind == 'm' && !b.used && b.node == a.node + 1) { best = b; break; }
+            if (best != null) { a.used = true; best.used = true; pairs.add(new Item[]{a, best}); }
         }
         for (Item a : items) if (a.kind == 'k' && !a.used) { a.used = true; pairs.add(new Item[]{a, null}); }
         for (Item[] pr : pairs) {
@@ -101,7 +113,9 @@ public class OfferAnalyzer {
             if (pr[1] != null) { s.min = pr[1].v; firstNode = Math.min(firstNode, pr[1].node); s.first = firstNode; if (pr[1].node != pr[0].node) own.append(' ').append(norm(nodes.get(pr[1].node))); }
             String ownS = own.toString();
             // si el propio texto no trae pistas, se mira la l\u00EDnea anterior (etiqueta encima del valor)
-            s.ctx = (has(ownS, PICK) || has(ownS, TRIP)) ? ownS : ownS + (firstNode > 0 ? " " + norm(nodes.get(firstNode - 1)) : "");
+            String prevS = firstNode > 0 ? norm(nodes.get(firstNode - 1)).trim() : "";
+            boolean prevIsLabel = prevS.length() > 0 && prevS.length() <= 22 && !prevS.matches(".*\\d.*");
+            s.ctx = (has(ownS, PICK) || has(ownS, TRIP) || !prevIsLabel) ? ownS : ownS + " " + prevS;
             segs.add(s);
         }
         for (Item b : items) {
@@ -121,6 +135,12 @@ public class OfferAnalyzer {
         else if (pick == null && !rest.isEmpty() && trip != null) { pick = rest.get(0); r.orderAssumed = true; }
         if (trip != null) { r.tripKm = trip.km; r.tripMin = trip.min; }
         if (pick != null) { r.pickupKm = pick.km; r.pickupMin = pick.min; }
+        // ---- oferta sin precio visible (Bolt): solo se puede juzgar la distancia de recogida
+        if (r.price <= 0) {
+            if (r.pickupKm > p.maxPickup) { r.verdict = "NO"; r.reason = String.format(Locale.GERMANY, "recogida %.1f km (m\u00E1x. %.1f)", r.pickupKm, p.maxPickup); }
+            else { r.verdict = "DATA"; r.reason = "Esta oferta no muestra el precio."; }
+            return r;
+        }
         // ---- datos suficientes
         if (r.tripKm <= 0 || r.tripMin <= 0) { r.verdict = "DATA"; r.reason = r.tripMin <= 0 ? "No se pudo leer el tiempo del viaje." : "No se pudo leer la distancia del viaje."; return r; }
         double net = r.price * (1 - Math.max(0, Math.min(90, p.commission)) / 100.0);

@@ -118,6 +118,9 @@ public class ScreenReaderPlugin extends Plugin {
         JSObject r = new JSObject();
         r.put("text", sp.getString("rent_lastText", ""));
         r.put("info", sp.getString("rent_lastInfo", ""));
+        r.put("evalAgeMs", System.currentTimeMillis() - sp.getLong("rent_evalTs", 0L));
+        r.put("seenAgeMs", System.currentTimeMillis() - sp.getLong("rent_seenTs", 0L));
+        r.put("why", sp.getString("rent_why", ""));
         call.resolve(r);
     }
 

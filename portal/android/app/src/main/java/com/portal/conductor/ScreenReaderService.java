@@ -384,6 +384,36 @@ public class ScreenReaderService extends AccessibilityService {
             }
         } catch (Exception e) { }
         if (!rentOn(this)) rh.post(hideRun);
+        else startPoll();
+    }
+
+    // revision periodica (por si el movil no avisa de los cambios de pantalla)
+    private boolean polling = false;
+    private final Runnable pollRun = new Runnable() {
+        @Override public void run() {
+            if (!rentOn(ScreenReaderService.this)) { polling = false; return; }
+            try {
+                List<AccessibilityWindowInfo> ws = getWindows();
+                boolean any = false;
+                if (ws != null) for (AccessibilityWindowInfo w : ws) {
+                    AccessibilityNodeInfo rt = w.getRoot();
+                    if (rt == null) continue;
+                    CharSequence pk = rt.getPackageName();
+                    if (pk != null && DRIVER.matcher(pk).find() && !pk.toString().equals(getPackageName())) { any = true; break; }
+                }
+                if (any) {
+                    getSharedPreferences("portal", Context.MODE_PRIVATE).edit().putLong("rent_seenTs", System.currentTimeMillis()).apply();
+                    scheduleEval();
+                }
+            } catch (Exception e) { }
+            rh.postDelayed(this, 2500);
+        }
+    };
+
+    private void startPoll() {
+        if (polling) return;
+        polling = true;
+        rh.postDelayed(pollRun, 2500);
     }
 
     private OfferAnalyzer.Params rentParams() {
@@ -422,6 +452,11 @@ public class ScreenReaderService extends AccessibilityService {
                 for (int j = 0; j < ta.length(); j++) { String s = ta.getString(j); nodes.add(s); if (sb.length() < 3500) sb.append(s).append(" | "); }
                 OfferAnalyzer.Result r = OfferAnalyzer.analyze(nodes, rentParams());
                 String all = sb.toString();
+                if (all.contains("\u20AC") || all.toLowerCase().contains("km")) {
+                    sp.edit().putLong("rent_evalTs", System.currentTimeMillis()).putString("rent_why", r.offer
+                        ? ("Oferta reconocida: " + r.verdict + " | precio " + r.price + " | viaje " + r.tripKm + " km/" + r.tripMin + " min | recogida " + r.pickupKm + " km/" + r.pickupMin + " min" + (r.orderAssumed ? " (orden estimado)" : ""))
+                        : ("Texto con importes o km, pero NO reconocido como oferta: " + r.why)).apply();
+                }
                 if (diag && (r.offer || (all.contains("\u20AC") && all.toLowerCase().contains("km")))) {
                     String info = r.offer ? ("veredicto=" + r.verdict + " precio=" + r.price + " viajeKm=" + r.tripKm + " viajeMin=" + r.tripMin + " recogidaKm=" + r.pickupKm + " recogidaMin=" + r.pickupMin + (r.orderAssumed ? " (orden asumido)" : "")) : "no reconocida como oferta";
                     sp.edit().putString("rent_lastText", pkg + "\n" + all).putString("rent_lastInfo", info).apply();
@@ -494,7 +529,8 @@ public class ScreenReaderService extends AccessibilityService {
             aChip.setBackground(chip);
             aChip.setText(ok ? "\u2713  ACEPTAR" : (no ? "\u2715  RECHAZAR" : "\u26A0  DATOS INSUFICIENTES"));
             if (r.perHour > 0) aMain.setText(f(r.perHour, 1) + " \u20AC/h   |   " + f(r.perKm, 2) + " \u20AC/km");
-            else aMain.setText("Precio " + f(r.price, 2) + " \u20AC");
+            else if (r.price > 0) aMain.setText("Precio " + f(r.price, 2) + " \u20AC");
+            else aMain.setText("Sin precio en la oferta");
             StringBuilder dt = new StringBuilder();
             if (r.pickupKm > 0 || r.pickupMin > 0) {
                 dt.append("Recogida: ");
@@ -502,7 +538,15 @@ public class ScreenReaderService extends AccessibilityService {
                 if (r.pickupKm > 0) dt.append(r.pickupMin > 0 ? " (" : "").append(f(r.pickupKm, 1)).append(" km").append(r.pickupMin > 0 ? ")" : "");
                 dt.append("\n");
             }
+            if (r.perHour <= 0 && r.tripKm > 0) {
+                dt.append("Viaje: ");
+                if (r.tripMin > 0) dt.append((int) r.tripMin).append(" min (");
+                dt.append(f(r.tripKm, 1)).append(" km");
+                if (r.tripMin > 0) dt.append(")");
+                dt.append("\n");
+            }
             dt.append(r.reason);
+            if (r.orderAssumed) dt.append("\n(lectura estimada)");
             aDetail.setText(dt.toString());
             if (!alertShown) { wm.addView(alertView, alp); alertShown = true; }
         } catch (Exception e) { }

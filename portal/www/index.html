@@ -154,7 +154,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:8px 4px;b
   </div>
 </section>
 <div class="app auth-hidden">
-<header class="header hdr-jahapy"><div class="hdr-top"><button class="menu-btn" aria-label="Abrir menú" onclick="openSideMenu()">☰</button><div class="brandbox"><div class="brand">Portal del Conductor 🇵🇾</div></div></div><div class="hdr-flagline"></div><div class="hdr-img"></div><div class="jahapy-tag" aria-hidden="true"><span>Jahapy</span><i></i></div></header>
+<header class="header hdr-banner"><img class="hdr-banner-img" src="header-banner.webp" alt="Portal del Conductor · Jahapy" draggable="false"><button class="hdr-menu-hit" aria-label="Abrir menú" onclick="openSideMenu()"></button></header>
 <div id="drawerBackdrop" class="drawer-backdrop" onclick="closeSideMenu()"></div>
 <aside id="sideDrawer" class="side-drawer" aria-label="Menú principal">
   <div class="drawer-head"><button class="drawer-close" onclick="closeSideMenu()">×</button><div class="drawer-brand">Portal <span>del Conductor</span></div><div class="drawer-sub">Menú general</div></div>
@@ -1618,7 +1618,7 @@ window.fareReadScreen=async function(){
 })();
 </script>
 
-<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">v3.9 lector</div>
+<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">v3.11 lector</div>
 <script id="screenReaderPatch2">
 /* v2.3 Burbuja flotante (movil): recibe el precio leido y lo pone en la calculadora */
 (function(){
@@ -1957,6 +1957,21 @@ sx('km','Si activas el odómetro automático (GPS) en Control o en Ajustes, la a
 })();
 
 </script>
+<script id="v310-script">
+/* v3.10: estado de la lectura de ofertas */
+(function(){
+const SRx=(()=>{try{if(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform())return (Capacitor.Plugins&&Capacitor.Plugins.ScreenReader)||Capacitor.registerPlugin('ScreenReader')}catch(e){}return null})();
+const ago=ms=>ms<0||ms>2592000000?null:(ms<90000?Math.round(ms/1000)+' s':Math.round(ms/60000)+' min');
+window.rentStatusLoad=async()=>{const el=document.getElementById('rStat');if(!el)return;if(!SRx){el.textContent='Solo disponible en el móvil o la tablet con la app instalada.';return}
+try{const r=await SRx.getRentDiag(),seen=ago(r.seenAgeMs),ev=ago(r.evalAgeMs);
+el.textContent=(seen?'👀 Veo una app de conductor en pantalla: hace '+seen+'.':'👀 No he visto ninguna app de conductor (Bolt, Uber o Cabify) en pantalla.')+'\n'+(ev?'📄 Última pantalla con importes o km: hace '+ev+'.':'📄 Todavía no he leído ninguna pantalla con importes o km.')+(r.why?'\n➡ '+r.why:'')}catch(e){el.textContent='No se pudo leer el estado.'}};
+const _rr=window.renderRent;
+window.renderRent=async function(){await _rr.apply(this,arguments);const btn=document.querySelector('button[onclick="rentSave()"]');
+if(btn&&!document.getElementById('rStatBox')){const box=document.createElement('div');box.id='rStatBox';box.className='note';box.style.cssText='margin:12px 0';box.innerHTML='<b>Estado de la lectura</b><div id="rStat" style="white-space:pre-wrap;font-size:13px;line-height:1.5;margin-top:6px;color:#cfe3f5">Cargando…</div><button class="secondary" style="width:100%;margin-top:8px" onclick="rentStatusLoad()">🔄 Actualizar estado</button>';btn.insertAdjacentElement('beforebegin',box);rentStatusLoad()}};
+try{const e=jEntry('rentabilidad');if(e)e[4]='Es un aviso que salta arriba cuando te llega una oferta de Bolt, Uber o Cabify: verde si compensa, rojo si no, y naranja si no pudo leer algún dato. Se activa en Ajustes → Rentabilidad de viajes, donde pones tus objetivos (€/hora, €/km y recogida máxima). Ojo: la oferta de Bolt no muestra el precio, así que en Bolt solo te avisa por la distancia de recogida. Solo avisa: no pulsa nada por ti.'}catch(x){}
+})();
+
+</script>
 </body></html><style>
 /* V25 visual refinement: futuristic premium skin only. Functional JS untouched. */
 body{background:radial-gradient(circle at 50% -10%,#18364d 0,#07121c 34%,#040b12 100%);}
@@ -2221,4 +2236,10 @@ details.subpage-row summary::-webkit-details-marker{display:none}
 .jahapy-tag span{display:block;font-size:clamp(24px,7.4vw,32px);font-weight:900;font-style:italic;color:#fff;letter-spacing:.3px;text-shadow:0 0 3px #0a2a74,0 0 6px #0a2a74,0 2px 8px rgba(0,0,0,.85)}
 .jahapy-tag i{display:block;height:4px;margin-top:3px;border-radius:3px;background:linear-gradient(90deg,#d52b1e 0 33.3%,#fff 33.3% 66.6%,#0038a8 66.6%);box-shadow:0 0 5px rgba(0,0,0,.6)}
 
+</style>
+<style id="v311-style">
+.app .header.hdr-banner{position:relative!important;display:block!important;height:auto!important;min-height:0!important;padding:0!important;background:none!important;border:0!important;box-shadow:none!important;overflow:visible!important;border-radius:0!important}
+.app .header.hdr-banner::before,.app .header.hdr-banner::after{display:none!important;content:none!important}
+.app .header.hdr-banner img.hdr-banner-img{display:block!important;width:100%!important;max-width:none!important;height:auto!important;max-height:none!important;min-width:0!important;min-height:0!important;aspect-ratio:3/1!important;object-fit:fill!important;flex:none!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;transform:none!important;position:static!important;pointer-events:none;user-select:none;-webkit-user-drag:none}
+.hdr-menu-hit{position:absolute;left:2.2%;top:4%;width:10%;height:27%;background:transparent!important;border:0!important;padding:0!important;margin:0!important;z-index:5;cursor:pointer;-webkit-tap-highlight-color:transparent}
 </style>
