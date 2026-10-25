@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
 public class OfferAnalyzer {
 
     public static class Params {
-        public double minHour = 15, minKm = 1.0, maxPickup = 5.0, commission = 0;
+        public double minHour = 15, minKm = 1.0, maxPickup = 5.0, commission = 0, tolPct = 15, tolPickup = 1.0;
         public boolean includePickup = true;
     }
 
@@ -23,6 +23,7 @@ public class OfferAnalyzer {
         public boolean orderAssumed;
         public String why = "";
         public boolean acceptSeen, unreadable;
+        public int stH = -1, stK = -1, stP = -1;   // 0 verde, 1 naranja, 2 rojo, -1 sin dato
     }
 
     private static class Item { int node; char kind; double v; boolean used; }
@@ -66,7 +67,16 @@ public class OfferAnalyzer {
         return n.startsWith("aceptar") || n.startsWith("emparejar") || n.equals("accept") || n.equals("match");
     }
 
-    public static Result analyze(List<String> rawNodes, Params p) {
+    private static final Pattern LONEPRICE = Pattern.compile("^\\D{0,3}(\\d{1,3}[.,]\\d{2})\\s*\\S{0,2}$");
+
+    private static int stMin(double v, double min, double tolPct) {
+        if (v >= min) return 0;
+        return v >= min * (1 - tolPct / 100.0) ? 1 : 2;
+    }
+
+    public static Result analyze(List<String> rawNodes, Params p) { return analyze(rawNodes, p, false); }
+
+    public static Result analyze(List<String> rawNodes, Params p, boolean lenient) {
         List<String> nodes = new ArrayList<String>();
         for (String x : rawNodes) for (String line : clean(x).split("\\n")) if (line.trim().length() > 0) nodes.add(line.trim());
         Result r = new Result();
@@ -75,6 +85,9 @@ public class OfferAnalyzer {
             Matcher m = EUR1.matcher(t); double v = -1;
             if (m.find()) v = num(m.group(1)); else { Matcher m2 = EUR2.matcher(t); if (m2.find()) v = num(m2.group(1)); }
             if (v >= 1.0 && v < 1000) { r.price = v; break; }
+        }
+        if (r.price <= 0 && lenient) {
+            for (String t : nodes) { Matcher m = LONEPRICE.matcher(t.trim()); if (m.find()) { double v = num(m.group(1)); if (v >= 1.0 && v < 1000) { r.price = v; break; } } }
         }
         // ---- elementos km / min por nodo
         List<Item> items = new ArrayList<Item>();
@@ -149,7 +162,8 @@ public class OfferAnalyzer {
         if (pick != null) { r.pickupKm = pick.km; r.pickupMin = pick.min; }
         // ---- oferta sin precio visible (Bolt): solo se puede juzgar la distancia de recogida
         if (r.price <= 0) {
-            if (r.pickupKm > p.maxPickup) { r.verdict = "NO"; r.reason = String.format(Locale.GERMANY, "recogida %.1f km (m\u00E1x. %.1f)", r.pickupKm, p.maxPickup); }
+            r.stP = r.pickupKm > 0 ? (r.pickupKm <= p.maxPickup ? 0 : (r.pickupKm <= p.maxPickup + p.tolPickup ? 1 : 2)) : -1;
+            if (r.stP == 2) { r.verdict = "NO"; r.reason = String.format(Locale.GERMANY, "recogida %.1f km (m\u00E1x. %.1f)", r.pickupKm, p.maxPickup); }
             else { r.verdict = "DATA"; r.reason = "Esta oferta no muestra el precio."; }
             return r;
         }
@@ -160,10 +174,14 @@ public class OfferAnalyzer {
         double min = r.tripMin + (p.includePickup && r.pickupMin > 0 ? r.pickupMin : 0);
         r.perKm = net / km; r.perHour = net / (min / 60.0);
         List<String> bad = new ArrayList<String>();
-        if (r.perHour < p.minHour) bad.add(String.format(Locale.GERMANY, "\u20AC/h por debajo de %.2f", p.minHour));
-        if (r.perKm < p.minKm) bad.add(String.format(Locale.GERMANY, "\u20AC/km por debajo de %.2f", p.minKm));
-        if (r.pickupKm > 0 && r.pickupKm > p.maxPickup) bad.add(String.format(Locale.GERMANY, "recogida %.1f km (m\u00E1x. %.1f)", r.pickupKm, p.maxPickup));
-        r.verdict = bad.isEmpty() ? "OK" : "NO";
+        r.stH = stMin(r.perHour, p.minHour, p.tolPct);
+        r.stK = stMin(r.perKm, p.minKm, p.tolPct);
+        r.stP = r.pickupKm > 0 ? (r.pickupKm <= p.maxPickup ? 0 : (r.pickupKm <= p.maxPickup + p.tolPickup ? 1 : 2)) : -1;
+        if (r.stH > 0) bad.add(String.format(Locale.GERMANY, "\u20AC/h %.1f (m\u00EDn. %.2f)", r.perHour, p.minHour));
+        if (r.stK > 0) bad.add(String.format(Locale.GERMANY, "\u20AC/km %.2f (m\u00EDn. %.2f)", r.perKm, p.minKm));
+        if (r.stP > 0) bad.add(String.format(Locale.GERMANY, "recogida %.1f km (m\u00E1x. %.1f)", r.pickupKm, p.maxPickup));
+        int worst = Math.max(r.stH, Math.max(r.stK, r.stP));
+        r.verdict = worst >= 2 ? "NO" : (worst == 1 ? "WARN" : "OK");
         r.reason = bad.isEmpty() ? "Cumple tus objetivos." : join(bad);
         return r;
     }

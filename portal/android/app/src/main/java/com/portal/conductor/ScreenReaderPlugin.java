@@ -94,6 +94,8 @@ public class ScreenReaderPlugin extends Plugin {
         r.put("comm", (double) sp.getFloat("rent_comm", 0f));
         r.put("incl", sp.getInt("rent_incl", 1) == 1);
         r.put("diag", sp.getInt("rent_diag", 0) == 1);
+        r.put("tolPct", (double) sp.getFloat("rent_tolPct", 15f));
+        r.put("tolPickup", (double) sp.getFloat("rent_tolPickup", 1f));
         call.resolve(r);
     }
 
@@ -107,6 +109,8 @@ public class ScreenReaderPlugin extends Plugin {
         e.putFloat("rent_comm", call.getDouble("comm", 0.0).floatValue());
         e.putInt("rent_incl", Boolean.TRUE.equals(call.getBoolean("incl", true)) ? 1 : 0);
         e.putInt("rent_diag", Boolean.TRUE.equals(call.getBoolean("diag", false)) ? 1 : 0);
+        e.putFloat("rent_tolPct", call.getDouble("tolPct", 15.0).floatValue());
+        e.putFloat("rent_tolPickup", call.getDouble("tolPickup", 1.0).floatValue());
         e.apply();
         if (ScreenReaderService.instance != null) ScreenReaderService.instance.applyRentConfig();
         call.resolve();
@@ -121,6 +125,12 @@ public class ScreenReaderPlugin extends Plugin {
         r.put("evalAgeMs", System.currentTimeMillis() - sp.getLong("rent_evalTs", 0L));
         r.put("seenAgeMs", System.currentTimeMillis() - sp.getLong("rent_seenTs", 0L));
         r.put("why", sp.getString("rent_why", ""));
+        r.put("ocr", sp.getString("ocr_state", "todavia no se ha intentado"));
+        StringBuilder snaps = new StringBuilder();
+        for (java.util.Map.Entry<String, ?> en : sp.getAll().entrySet()) {
+            if (en.getKey().startsWith("snap_")) snaps.append(en.getKey().substring(5)).append(" -> ").append(String.valueOf(en.getValue())).append("\n");
+        }
+        r.put("snaps", snaps.toString());
         call.resolve(r);
     }
 

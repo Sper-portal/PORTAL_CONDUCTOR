@@ -4,6 +4,15 @@ import android.accessibilityservice.AccessibilityService;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
+import com.google.mlkit.vision.text.TextRecognizer;
+import com.google.mlkit.vision.text.TextRecognition;
+import com.google.mlkit.vision.text.Text;
+import com.google.mlkit.vision.common.InputImage;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.OnFailureListener;
+import android.graphics.Paint;
+import android.graphics.Rect;
 import java.util.ArrayList;
 import android.widget.LinearLayout;
 import android.graphics.Typeface;
@@ -387,24 +396,30 @@ public class ScreenReaderService extends AccessibilityService {
         else startPoll();
     }
 
-    // revision periodica (por si el movil no avisa de los cambios de pantalla)
+    // revision periodica (por si el movil no avisa de los cambios de pantalla) + lectura por imagen para Uber
+    private static final Pattern OCR_PKG = Pattern.compile("uber", Pattern.CASE_INSENSITIVE);
     private boolean polling = false;
+    private long treeFoundTs = 0, lastSnapTs = 0;
     private final Runnable pollRun = new Runnable() {
         @Override public void run() {
             if (!rentOn(ScreenReaderService.this)) { polling = false; return; }
             try {
                 List<AccessibilityWindowInfo> ws = getWindows();
-                boolean any = false;
+                boolean any = false, uber = false;
                 if (ws != null) for (AccessibilityWindowInfo w : ws) {
                     AccessibilityNodeInfo rt = w.getRoot();
                     if (rt == null) continue;
                     CharSequence pk = rt.getPackageName();
-                    if (pk != null && DRIVER.matcher(pk).find() && !pk.toString().equals(getPackageName())) { any = true; break; }
+                    if (pk != null && DRIVER.matcher(pk).find() && !pk.toString().equals(getPackageName())) {
+                        any = true;
+                        if (OCR_PKG.matcher(pk).find()) uber = true;
+                    }
                 }
                 if (any) {
                     getSharedPreferences("portal", Context.MODE_PRIVATE).edit().putLong("rent_seenTs", System.currentTimeMillis()).apply();
                     scheduleEval();
                 }
+                if (uber && System.currentTimeMillis() - treeFoundTs > 3000) ocrTick();
             } catch (Exception e) { }
             rh.postDelayed(this, 1500);
         }
@@ -424,7 +439,120 @@ public class ScreenReaderService extends AccessibilityService {
         p.maxPickup = sp.getFloat("rent_maxPickup", 5f);
         p.commission = sp.getFloat("rent_comm", 0f);
         p.includePickup = sp.getInt("rent_incl", 1) == 1;
+        p.tolPct = sp.getFloat("rent_tolPct", 15f);
+        p.tolPickup = sp.getFloat("rent_tolPickup", 1f);
         return p;
+    }
+
+    // ---- lectura por imagen (OCR): para apps que esconden la oferta al lector de accesibilidad (Uber) ----
+    private boolean ocrBusy = false;
+    private long ocrNextAt = 0, ocrFoundTs = 0;
+    private OfferAnalyzer.Result ocrFound = null;
+    private TextRecognizer recognizer;
+
+    private void setOcrState(String s) {
+        getSharedPreferences("portal", Context.MODE_PRIVATE).edit().putString("ocr_state", s).putLong("ocr_ts", System.currentTimeMillis()).apply();
+    }
+
+    /** zona de pantalla que ocupa la app de Uber (en tablet con pantalla dividida, solo su mitad) */
+    private Rect uberBounds() {
+        try {
+            List<AccessibilityWindowInfo> ws = getWindows();
+            if (ws == null) return null;
+            for (AccessibilityWindowInfo w : ws) {
+                AccessibilityNodeInfo rt = w.getRoot();
+                if (rt == null) continue;
+                CharSequence pk = rt.getPackageName();
+                if (pk != null && OCR_PKG.matcher(pk).find() && !pk.toString().equals(getPackageName())) {
+                    Rect r = new Rect();
+                    w.getBoundsInScreen(r);
+                    return r;
+                }
+            }
+        } catch (Exception e) { }
+        return null;
+    }
+
+    private void ocrTick() {
+        if (android.os.Build.VERSION.SDK_INT < 30) { setOcrState("No disponible: hace falta Android 11 o superior."); return; }
+        long now = System.currentTimeMillis();
+        if (ocrBusy || now < ocrNextAt) return;
+        final Rect area = uberBounds();
+        if (area == null) return;
+        ocrBusy = true;
+        ocrNextAt = now + 2000;
+        try {
+            takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(), new TakeScreenshotCallback() {
+                @Override public void onSuccess(ScreenshotResult sr) {
+                    try {
+                        Bitmap hw = Bitmap.wrapHardwareBuffer(sr.getHardwareBuffer(), sr.getColorSpace());
+                        if (hw == null) { ocrBusy = false; setOcrState("La captura llego vacia."); return; }
+                        Bitmap bmp = hw.copy(Bitmap.Config.ARGB_8888, true);
+                        hw.recycle();
+                        sr.getHardwareBuffer().close();
+                        runOcr(bmp, area);
+                    } catch (Throwable t) { ocrBusy = false; setOcrState("Error al procesar la captura: " + t); }
+                }
+                @Override public void onFailure(int code) {
+                    ocrBusy = false;
+                    ocrNextAt = System.currentTimeMillis() + (code == 3 ? 1200 : 8000);
+                    setOcrState("La captura de pantalla no esta permitida (codigo " + code + "). Apaga y vuelve a encender el lector en Accesibilidad.");
+                }
+            });
+        } catch (Throwable t) {
+            ocrBusy = false;
+            ocrNextAt = System.currentTimeMillis() + 10000;
+            setOcrState("Captura no disponible: " + t);
+        }
+    }
+
+    private void runOcr(Bitmap full, Rect area) {
+        try {
+            // se tapa nuestro propio aviso para no leernos a nosotros mismos
+            if (alertShown && alertView != null) {
+                int[] loc = new int[2];
+                alertView.getLocationOnScreen(loc);
+                Paint pt = new Paint();
+                pt.setColor(Color.BLACK);
+                new Canvas(full).drawRect(loc[0], loc[1], loc[0] + alertView.getWidth(), loc[1] + alertView.getHeight(), pt);
+            }
+            int x = Math.max(0, area.left), y = Math.max(0, area.top);
+            int w = Math.min(full.getWidth() - x, area.width()), h = Math.min(full.getHeight() - y, area.height());
+            if (w < 80 || h < 80) { ocrBusy = false; return; }
+            Bitmap crop = Bitmap.createBitmap(full, x, y, w, h);
+            if (recognizer == null) recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+            recognizer.process(InputImage.fromBitmap(crop, 0))
+                .addOnSuccessListener(new OnSuccessListener<Text>() {
+                    @Override public void onSuccess(Text text) { ocrBusy = false; onOcrText(text); }
+                })
+                .addOnFailureListener(new OnFailureListener() {
+                    @Override public void onFailure(Exception e) { ocrBusy = false; setOcrState("Fallo del reconocimiento: " + e); }
+                });
+        } catch (Throwable t) { ocrBusy = false; setOcrState("Fallo en la lectura por imagen: " + t); }
+    }
+
+    private void onOcrText(Text text) {
+        List<String> lines = new ArrayList<String>();
+        StringBuilder sb = new StringBuilder();
+        for (Text.TextBlock b : text.getTextBlocks()) {
+            for (Text.Line l : b.getLines()) {
+                String s = l.getText();
+                lines.add(s);
+                if (sb.length() < 3500) sb.append(s).append(" | ");
+            }
+        }
+        OfferAnalyzer.Result r = OfferAnalyzer.analyze(lines, rentParams(), true);
+        long now = System.currentTimeMillis();
+        setOcrState(lines.size() + " lineas leidas por imagen" + (r.offer ? " - oferta reconocida" : (r.acceptSeen ? " - veo el boton Aceptar pero no entendi la oferta" : "")));
+        if (r.offer || r.acceptSeen) {
+            getSharedPreferences("portal", Context.MODE_PRIVATE).edit()
+                .putString("rent_lastText", "[lectura por imagen de Uber]\n" + sb)
+                .putString("rent_lastInfo", r.offer ? ("veredicto=" + r.verdict + " precio=" + r.price + " viaje=" + r.tripKm + "km/" + r.tripMin + "min recogida=" + r.pickupKm + "km/" + r.pickupMin + "min") : r.why).apply();
+        }
+        if (r.offer) { ocrFound = r; ocrFoundTs = now; }
+        else if (r.acceptSeen) { r.unreadable = true; r.verdict = "DATA"; r.reason = "No pude leer los datos de esta oferta."; ocrFound = r; ocrFoundTs = now; }
+        else ocrFound = null;
+        scheduleEval();
     }
 
     private void scheduleEval() {
@@ -440,7 +568,7 @@ public class ScreenReaderService extends AccessibilityService {
             updateCache(wins);
             if (!rentOn(this)) return;
             SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);
-            boolean diag = sp.getInt("rent_diag", 0) == 1;
+            long now = System.currentTimeMillis();
             OfferAnalyzer.Result found = null, unreadable = null;
             for (int i = 0; i < wins.length(); i++) {
                 JSONObject w = wins.getJSONObject(i);
@@ -450,10 +578,13 @@ public class ScreenReaderService extends AccessibilityService {
                 List<String> nodes = new ArrayList<String>();
                 StringBuilder sb = new StringBuilder();
                 for (int j = 0; j < ta.length(); j++) { String s = ta.getString(j); nodes.add(s); if (sb.length() < 3500) sb.append(s).append(" | "); }
-                OfferAnalyzer.Result r = OfferAnalyzer.analyze(nodes, rentParams());
                 String all = sb.toString();
+                if (now - lastSnapTs > 3000) {
+                    sp.edit().putString("snap_" + pkg, ta.length() + " textos visibles: " + (all.length() > 600 ? all.substring(0, 600) : all)).apply();
+                }
+                OfferAnalyzer.Result r = OfferAnalyzer.analyze(nodes, rentParams());
                 if (all.contains("\u20AC") || all.toLowerCase().contains("km")) {
-                    sp.edit().putLong("rent_evalTs", System.currentTimeMillis()).putString("rent_why", r.offer
+                    sp.edit().putLong("rent_evalTs", now).putString("rent_why", r.offer
                         ? ("Oferta reconocida: " + r.verdict + " | precio " + r.price + " | viaje " + r.tripKm + " km/" + r.tripMin + " min | recogida " + r.pickupKm + " km/" + r.pickupMin + " min" + (r.orderAssumed ? " (orden estimado)" : ""))
                         : ("Texto con importes o km, pero NO reconocido como oferta: " + r.why)).apply();
                 }
@@ -464,8 +595,11 @@ public class ScreenReaderService extends AccessibilityService {
                 if (r.offer) { found = r; break; }
                 else if (r.acceptSeen && unreadable == null) { r.unreadable = true; r.verdict = "DATA"; r.reason = "No pude leer los datos de esta oferta."; unreadable = r; }
             }
+            if (now - lastSnapTs > 3000) lastSnapTs = now;
+            if (found != null) treeFoundTs = now;
+            if (found == null && ocrFound != null && now - ocrFoundTs < 4500 && !ocrFound.unreadable) found = ocrFound;
             if (found == null && unreadable != null) found = unreadable;
-            long now = System.currentTimeMillis();
+            if (found == null && ocrFound != null && now - ocrFoundTs < 4500) found = ocrFound;
             if (found != null) {
                 lastOfferSeen = now;
                 showAlert(found);
@@ -477,21 +611,57 @@ public class ScreenReaderService extends AccessibilityService {
         } catch (Exception e) { }
     }
 
+    private LinearLayout aRow;
+    private TextView aP1, aP2, aP3;
+
+    private TextView pill() {
+        final float d = getResources().getDisplayMetrics().density;
+        TextView t = new TextView(this);
+        t.setTextColor(Color.WHITE);
+        t.setTextSize(14);
+        t.setGravity(Gravity.CENTER);
+        t.setTypeface(Typeface.DEFAULT_BOLD);
+        t.setPadding((int) (9 * d), (int) (5 * d), (int) (9 * d), (int) (5 * d));
+        return t;
+    }
+
+    private void paintPill(TextView t, int st, String text) {
+        if (st < 0) { t.setVisibility(View.GONE); return; }
+        final float d = getResources().getDisplayMetrics().density;
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(st == 0 ? Color.parseColor("#16A34A") : (st == 1 ? Color.parseColor("#F59E0B") : Color.parseColor("#DC2626")));
+        g.setCornerRadius(12 * d);
+        t.setBackground(g);
+        t.setTextColor(st == 1 ? Color.BLACK : Color.WHITE);
+        t.setText(text);
+        t.setVisibility(View.VISIBLE);
+    }
+
     private void buildAlert() {
         final float d = getResources().getDisplayMetrics().density;
         alertView = new LinearLayout(this);
         alertView.setOrientation(LinearLayout.VERTICAL);
         alertView.setGravity(Gravity.CENTER_HORIZONTAL);
-        alertView.setPadding((int) (16 * d), (int) (10 * d), (int) (16 * d), (int) (12 * d));
+        alertView.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (12 * d));
         aChip = new TextView(this);
         aChip.setTextColor(Color.WHITE);
         aChip.setTextSize(20);
         aChip.setGravity(Gravity.CENTER);
         aChip.setTypeface(Typeface.DEFAULT_BOLD);
         aChip.setPadding((int) (16 * d), (int) (4 * d), (int) (16 * d), (int) (4 * d));
+        aRow = new LinearLayout(this);
+        aRow.setOrientation(LinearLayout.HORIZONTAL);
+        aRow.setGravity(Gravity.CENTER);
+        aRow.setPadding(0, (int) (8 * d), 0, 0);
+        aP1 = pill(); aP2 = pill(); aP3 = pill();
+        LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        plp.setMargins((int) (3 * d), 0, (int) (3 * d), 0);
+        aRow.addView(aP1, plp);
+        aRow.addView(aP2, plp);
+        aRow.addView(aP3, plp);
         aMain = new TextView(this);
         aMain.setTextColor(Color.WHITE);
-        aMain.setTextSize(22);
+        aMain.setTextSize(18);
         aMain.setGravity(Gravity.CENTER);
         aMain.setTypeface(Typeface.DEFAULT_BOLD);
         aMain.setPadding(0, (int) (8 * d), 0, 0);
@@ -501,6 +671,7 @@ public class ScreenReaderService extends AccessibilityService {
         aDetail.setGravity(Gravity.CENTER);
         aDetail.setPadding(0, (int) (4 * d), 0, 0);
         alertView.addView(aChip);
+        alertView.addView(aRow);
         alertView.addView(aMain);
         alertView.addView(aDetail);
         int w = (int) Math.min(getResources().getDisplayMetrics().widthPixels * 0.94f, 400 * d);
@@ -518,7 +689,8 @@ public class ScreenReaderService extends AccessibilityService {
         try {
             if (alertView == null) buildAlert();
             final float d = getResources().getDisplayMetrics().density;
-            boolean ok = "OK".equals(r.verdict), no = "NO".equals(r.verdict);
+            String v = r.verdict;
+            boolean ok = "OK".equals(v), no = "NO".equals(v);
             int col = ok ? Color.parseColor("#22C55E") : (no ? Color.parseColor("#EF4444") : Color.parseColor("#F59E0B"));
             GradientDrawable bg = new GradientDrawable();
             bg.setColor(Color.parseColor("#F00A2E70"));
@@ -529,9 +701,12 @@ public class ScreenReaderService extends AccessibilityService {
             chip.setColor(col);
             chip.setCornerRadius(14 * d);
             aChip.setBackground(chip);
-            aChip.setText(ok ? "\u2713  ACEPTAR" : (no ? "\u2715  RECHAZAR" : "\u26A0  DATOS INSUFICIENTES"));
+            aChip.setTextColor(ok || no ? Color.WHITE : Color.BLACK);
+            aChip.setText(ok ? "\u2713  ACEPTAR" : (no ? "\u2715  RECHAZAR" : ("WARN".equals(v) ? "\u26A0  A VALORAR" : "\u26A0  DATOS INSUFICIENTES")));
+            paintPill(aP1, r.perHour > 0 ? r.stH : -1, f(r.perHour, 1) + " \u20AC/h");
+            paintPill(aP2, r.perKm > 0 ? r.stK : -1, f(r.perKm, 2) + " \u20AC/km");
+            paintPill(aP3, r.pickupKm > 0 ? r.stP : -1, "Recog. " + f(r.pickupKm, 1) + " km");
             if (r.unreadable) aMain.setText("No pude leer la oferta");
-            else if (r.perHour > 0) aMain.setText(f(r.perHour, 1) + " \u20AC/h   |   " + f(r.perKm, 2) + " \u20AC/km");
             else if (r.price > 0) aMain.setText("Precio " + f(r.price, 2) + " \u20AC");
             else aMain.setText("Sin precio en la oferta");
             StringBuilder dt = new StringBuilder();
@@ -541,7 +716,7 @@ public class ScreenReaderService extends AccessibilityService {
                 if (r.pickupKm > 0) dt.append(r.pickupMin > 0 ? " (" : "").append(f(r.pickupKm, 1)).append(" km").append(r.pickupMin > 0 ? ")" : "");
                 dt.append("\n");
             }
-            if (r.perHour <= 0 && r.tripKm > 0) {
+            if (r.tripKm > 0) {
                 dt.append("Viaje: ");
                 if (r.tripMin > 0) dt.append((int) r.tripMin).append(" min (");
                 dt.append(f(r.tripKm, 1)).append(" km");
@@ -563,8 +738,9 @@ public class ScreenReaderService extends AccessibilityService {
     public void demoAlert(String verdict) {
         OfferAnalyzer.Result r = new OfferAnalyzer.Result();
         r.offer = true; r.verdict = verdict; r.price = 15.2;
-        if ("OK".equals(verdict)) { r.perHour = 31.4; r.perKm = 1.62; r.pickupKm = 1.2; r.pickupMin = 4; r.reason = "Cumple tus objetivos."; }
-        else if ("NO".equals(verdict)) { r.perHour = 9.8; r.perKm = 0.78; r.pickupKm = 6.1; r.pickupMin = 11; r.reason = "\u20AC/h por debajo de 15,00 \u00B7 \u20AC/km por debajo de 1,00"; }
+        if ("OK".equals(verdict)) { r.perHour = 31.4; r.perKm = 1.62; r.pickupKm = 1.2; r.pickupMin = 4; r.tripKm = 9.0; r.tripMin = 16; r.stH = 0; r.stK = 0; r.stP = 0; r.reason = "Cumple tus objetivos."; }
+        else if ("NO".equals(verdict)) { r.perHour = 9.8; r.perKm = 0.78; r.pickupKm = 6.1; r.pickupMin = 11; r.tripKm = 9.0; r.tripMin = 16; r.stH = 2; r.stK = 2; r.stP = 2; r.reason = "\u20AC/h 9,8 (m\u00EDn. 15,00) \u00B7 \u20AC/km 0,78 (m\u00EDn. 1,00) \u00B7 recogida 6,1 km (m\u00E1x. 5,0)"; }
+        else if ("WARN".equals(verdict)) { r.perHour = 31.0; r.perKm = 0.93; r.pickupKm = 5.8; r.pickupMin = 9; r.tripKm = 9.0; r.tripMin = 16; r.stH = 0; r.stK = 1; r.stP = 1; r.reason = "\u20AC/km 0,93 (m\u00EDn. 1,00) \u00B7 recogida 5,8 km (m\u00E1x. 5,0)"; }
         else { r.reason = "No se pudo leer el tiempo del viaje."; }
         showAlert(r);
         rh.removeCallbacks(hideRun);
