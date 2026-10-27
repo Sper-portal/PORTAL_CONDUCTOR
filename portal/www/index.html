@@ -2546,6 +2546,27 @@ function watchBtnRow(){
     rowRO=new ResizeObserver(()=>syncBtnRow());rowRO.observe(pl);
   }catch(e){}
 }
+// Etiqueta «Comisión 25 % · 2,57 €» del botón de aeropuerto: se busca por su TEXTO (no por su clase) y se le pone una marca para
+// reducirla un 30 % y fijarla en la esquina de abajo a la derecha, sin tapar la palabra «Aeropuerto».
+function fixFeeChip(ap){
+  try{
+    if(!ap)return;
+    const norm=s=>String(s||'').replace(/\s+/g,' ').trim();
+    const isChip=el=>{const x=norm(el.textContent);return x.length>0&&x.length<=40&&/^comisi[oó]n/i.test(x)&&x.indexOf('%')>=0&&x.indexOf('€')>=0&&!/aeropuerto|ida y/i.test(x)};
+    let top=null;
+    for(const el of ap.querySelectorAll('*')){
+      if(top&&top.contains(el))continue;
+      if(el.classList.contains('airport-copy')||el.classList.contains('airport-plane'))continue;
+      if(isChip(el)){top=el;if(!el.classList.contains('pdc-fee-chip'))el.classList.add('pdc-fee-chip')}
+    }
+    if(top&&!ap.classList.contains('pdc-has-chip'))ap.classList.add('pdc-has-chip');
+    if(!ap.__pdcChipMO&&typeof MutationObserver!=='undefined'){
+      ap.__pdcChipMO=new MutationObserver(()=>fixFeeChip(ap));
+      ap.__pdcChipMO.observe(ap,{childList:true,subtree:true,characterData:true});
+    }
+  }catch(e){}
+}
+P.fixFeeChip=fixFeeChip;
 window.addEventListener('resize',syncBtnRow);
 window.addEventListener('orientationchange',()=>setTimeout(syncBtnRow,200));
 function decorateCalc(){
@@ -2553,6 +2574,7 @@ function decorateCalc(){
   const k=(typeof calcAnchor!=='undefined'&&calcAnchor)?calcAnchor:today();
   // 1) botón junto a Aeropuerto
   const ap=root.querySelector('.airport-premium');
+  if(ap)fixFeeChip(ap);
   if(ap&&!root.querySelector('.airport-row')){
     const row=document.createElement('div');row.className='airport-row';
     ap.parentNode.insertBefore(row,ap);row.appendChild(ap);
@@ -4321,6 +4343,8 @@ html body .airport-row>.airport-premium .airport-copy{flex:1 1 auto!important;mi
 html body .airport-row>.airport-premium .airport-copy strong{font-size:clamp(11.5px,3.3vw,15px)!important;white-space:normal!important;line-height:1.1!important;overflow-wrap:break-word;color:#fff!important;text-shadow:0 1px 3px #00101c99!important}
 html body .airport-row>.airport-premium .airport-copy small{font-size:clamp(8.5px,2.4vw,11px)!important;white-space:normal!important;line-height:1.15!important;overflow-wrap:break-word;color:#fff!important;font-weight:800!important;text-shadow:0 1px 3px #00101c99!important;display:-webkit-box!important;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 html body .airport-row>.airport-premium .airport-add,html body .airport-row>.airport-premium .airport-luggage{display:none!important}
+html body .airport-row>.airport-premium.pdc-has-chip .airport-copy{align-self:flex-start!important;padding-top:5px!important}
+html body .airport-row>.airport-premium .pdc-fee-chip{position:absolute!important;right:5px!important;bottom:3px!important;top:auto!important;left:auto!important;margin:0!important;transform:scale(.7)!important;transform-origin:100% 100%!important;z-index:2!important;width:auto!important;max-width:none!important;flex:none!important}
 html body .airport-row>.cancel-btn{justify-content:center!important;border:1px solid #ff9f73cc;background:linear-gradient(160deg,#3a120e 0%,#a3341d 55%,#34100c 100%);color:#fff;font-weight:900;font-size:clamp(11.5px,3.4vw,15px);line-height:1.1;letter-spacing:-.1px;text-align:center;box-shadow:0 0 14px #ff6a3d55,inset 0 1px 3px #ffffff44;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .cancel-btn:active{transform:scale(.97)}
 .cancel-ico{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;border:1px solid #ffb89a;background:radial-gradient(circle at 30% 20%,#ff7a4d,#7a1d0e 80%);font-size:16px;box-shadow:0 0 10px #ff6a3d77}
