@@ -2569,6 +2569,12 @@ function fixFeeChip(ap){
 P.fixFeeChip=fixFeeChip;
 window.addEventListener('resize',syncBtnRow);
 window.addEventListener('orientationchange',()=>setTimeout(syncBtnRow,200));
+// Los cuatro cuadros por plataforma de la CALCULADORA son los totales del día. Los del Informe general (#reportOut) llevan la SUMA DEL PERIODO que
+// pide el usuario (semana, mes o fechas) y no se tocan: antes se pisaban con los importes de hoy y se colaba un «Resumen del día».
+function calcPS(root){
+  try{for(const ps of root.querySelectorAll('.platform-summary')){if(!ps.closest('#reportOut'))return ps}}catch(e){}
+  return null;
+}
 function decorateCalc(){
   const root=document.getElementById('content');if(!root)return;
   const k=(typeof calcAnchor!=='undefined'&&calcAnchor)?calcAnchor:today();
@@ -2585,7 +2591,7 @@ function decorateCalc(){
   }
   watchBtnRow();
   // 2) totales por plataforma (con las compensaciones de cada una)
-  const ps=root.querySelector('.platform-summary');
+  const ps=calcPS(root);
   if(ps){
     for(const p of ['Bolt','Uber','Cabify','Privados']){
       const el=ps.querySelector('.ps.'+cls(p)+' b');
@@ -2625,7 +2631,7 @@ window.renderCalc=function(){const r=_rc.apply(this,arguments);try{decorateCalc(
 function calcNeeds(root){
   if(!root)return false;
   if(root.querySelector('.airport-premium')&&!root.querySelector('.airport-row'))return true;
-  if(root.querySelector('.platform-summary')&&!root.querySelector('.canc-sum'))return true;
+  if(calcPS(root)&&!root.querySelector('.canc-sum'))return true;
   return false;
 }
 try{if(calcNeeds(document.getElementById('content')))decorateCalc()}catch(e){console.warn('v3.15 calc inicial',e)}
