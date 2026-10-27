@@ -905,12 +905,16 @@ public class ScreenReaderService extends AccessibilityService {
             aNetVal.setText(OfferAnalyzer.money(r.estNet) + " \u20ac");
             aNetBox.setVisibility(View.VISIBLE);
             aMain.setTextSize(15);
-            aMain.setText("Bruto est. " + OfferAnalyzer.money(r.estGross) + " \u20ac  \u00b7  Comisi\u00f3n est. " + OfferAnalyzer.money(r.estComm) + " \u20ac (" + num1(r.estCommPct) + " %)");
+            if (r.estFee > 0) aMain.setText("Bruto est. " + OfferAnalyzer.money(r.estGross) + " \u20ac  \u2212  tasa aeropuerto " + OfferAnalyzer.money(r.estFee) + " \u20ac  =  " + OfferAnalyzer.money(Math.max(0, r.estGross - r.estFee)) + " \u20ac"
+                + "\nComisi\u00f3n est. " + OfferAnalyzer.money(r.estComm) + " \u20ac (" + num1(r.estCommPct) + " %)");
+            else aMain.setText("Bruto est. " + OfferAnalyzer.money(r.estGross) + " \u20ac  \u00b7  Comisi\u00f3n est. " + OfferAnalyzer.money(r.estComm) + " \u20ac (" + num1(r.estCommPct) + " %)");
             StringBuilder dt = new StringBuilder();
             dt.append("Viaje con pasajero: ").append((int) Math.round(r.tripMin)).append(" min (").append(num1(r.tripKm)).append(" km)\n");
             String rango = r.estHi < 0 ? ("m\u00e1s de " + num1(r.estLo) + " km") : (r.estLo <= 0 ? ("hasta " + num1(r.estHi) + " km") : (num1(r.estLo) + "\u2013" + num1(r.estHi) + " km"));
-            dt.append("Tramo ").append(r.estTier).append(" (").append(rango).append(") \u00b7 ").append(r.estWeekend ? "fin de semana / festivo" : "lunes a viernes").append("\n");
-            dt.append("Demanda \u00d7").append(multTxt(r.estMult)).append(r.estOfferMult > 0 ? " (de la oferta)" : "").append(" \u00b7 modo ").append(r.estMode).append("\n");
+            String dia = r.estWeekend ? "fin de semana / festivo" : "lunes a viernes";
+            if ("pickup".equals(r.estAirport)) dt.append("Recogida en el aeropuerto: tarifa proporcional a los km (referencia ").append(num1(r.estHi)).append(" km; los minutos no cuentan) \u00b7 ").append(dia).append("\n");
+            else dt.append("dest".equals(r.estAirport) ? "Viaje hacia el aeropuerto \u00b7 " : "").append("Tramo ").append(r.estTier).append(" (").append(rango).append(") \u00b7 ").append(dia).append("\n");
+            dt.append("Demanda \u00d7").append(multTxt(r.estMult)).append(r.estOfferMult > 0 ? " (de la oferta)" : "").append(r.estMode.length() > 0 ? " \u00b7 modo " + r.estMode : "").append("\n");
             if (r.estMinApplied) dt.append("Se aplic\u00f3 la tarifa m\u00ednima estimada\n");
             if (r.pickupKm > 0 || r.pickupMin > 0) {
                 dt.append("Recogida (no cuenta en el precio): ");

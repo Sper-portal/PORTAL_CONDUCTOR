@@ -32,6 +32,8 @@ public class OfferAnalyzer {
         public int estTier = -1;
         public double estCommPct = -1;
         public String estMode = "";
+        public String estAirport = "";              // "" | "pickup" (recogida en el aeropuerto) | "dest" (viaje hacia el aeropuerto)
+        public double estFee = 0;                   // tasa del aeropuerto restada antes de la comision
     }
 
     // =====================================================================
@@ -48,16 +50,42 @@ public class OfferAnalyzer {
         public Tier copy() { Tier t = new Tier(base, perKm, perMin); t.mult = mult; t.mode = mode; return t; }
     }
 
-    /** Perfil de tarifas con 4 tramos continuos: bp[0], bp[1] y bp[2] son el fin de los tramos 1, 2 y 3. */
+    /**
+     * Tarifa especial de las RECOGIDAS en el aeropuerto y tasa que se resta en TODOS los viajes del aeropuerto.
+     * Formula provisional (editable): bruto = base * (km del viaje / ref) * demanda; despues se resta la tasa y sobre el resto se calcula la comision.
+     */
+    public static class Air {
+        public boolean on = true;
+        public double base = 15.90;          // tarifa de referencia: lo que cuestan "ref" kilometros
+        public double ref = 11;              // km a los que corresponde esa tarifa
+        public boolean min = true;           // true: nunca menos que la tarifa de referencia (viajes de menos de "ref" km)
+        public double fee = 2.57;            // tasa del aeropuerto (se resta del bruto ANTES de la comision)
+        public double mult = 1.0;            // demanda si la oferta no muestra ninguna (multiplica el importe completo)
+        public Air copy() { Air a = new Air(); a.on = on; a.base = base; a.ref = ref; a.min = min; a.fee = fee; a.mult = mult; return a; }
+    }
+
+    public static final int MAX_TIERS = 8;
+
+    /** Fin de cada tramo cuando no hay limites validos: 5, 10, 15, 20, 25... (n tramos = n-1 limites). */
+    public static double[] defaultBp(int n) {
+        double[] b = new double[Math.max(0, n - 1)];
+        for (int i = 0; i < b.length; i++) b[i] = 5 * (i + 1);
+        return b;
+    }
+
+    /** Perfil de tarifas con n tramos continuos (1..MAX_TIERS): bp[i] es el fin del tramo i+1; el ultimo tramo no tiene limite. */
     public static class Profile {
         public double[] bp = {5, 10, 15};
         public Tier[] t = new Tier[4];
+        public Air air = new Air();
         public double minFare = 0;           // 0 = sin tarifa minima
         public boolean offerMult = true;     // usar el xN que muestre la oferta, si aparece
         public Profile copy() {
             Profile p = new Profile();
-            p.bp = new double[]{bp[0], bp[1], bp[2]};
-            for (int i = 0; i < 4; i++) p.t[i] = t[i].copy();
+            p.bp = bp.clone();
+            p.t = new Tier[t.length];
+            for (int i = 0; i < t.length; i++) p.t[i] = t[i].copy();
+            p.air = air.copy();
             p.minFare = minFare; p.offerMult = offerMult;
             return p;
         }
@@ -96,12 +124,10 @@ public class OfferAnalyzer {
         return l;
     }
 
-    /** Tramo (0..3) segun los km del viaje con pasajero. El limite superior pertenece al tramo de abajo: sin huecos ni solapes. */
+    /** Tramo (0..n-1) segun los km del viaje con pasajero. El limite superior pertenece al tramo de abajo: sin huecos ni solapes. */
     public static int tierIndex(Profile p, double km) {
-        if (km <= p.bp[0]) return 0;
-        if (km <= p.bp[1]) return 1;
-        if (km <= p.bp[2]) return 2;
-        return 3;
+        for (int i = 0; i < p.bp.length; i++) if (km <= p.bp[i]) return i;
+        return p.t.length - 1;
     }
 
     /** true si hoy se aplica el perfil de fin de semana / festivo. */
@@ -117,28 +143,67 @@ public class OfferAnalyzer {
     }
 
     public static class Est {
-        public double gross, comm, net, mult, lo, hi;
-        public int tier;                     // 1..4
+        public double gross, comm, net, mult, lo, hi, fee;
+        public int tier;                     // 1..n (0 = tarifa de aeropuerto)
         public String mode = "A";
+        public String airport = "";          // "" | "pickup" | "dest"
         public boolean minApplied, weekend, fromOffer;
     }
 
-    /** Bruto = base + km*precioKm*mult + min*precioMin (modo A) o (base + km*precioKm + min*precioMin)*mult (modo B). Sin redondeos intermedios. */
-    public static Est estimate(BoltCfg c, boolean weekend, double km, double min, double offerMult) {
+    // ---- aeropuerto: se detecta por el texto de la oferta ----
+    // recogida: "parking P1 de la T1", "parking express T2", "parking modulo D planta 4 de la T4"
+    private static final Pattern AIR_PICK_HINT = Pattern.compile("\\b(t\\s?[1-4]|p\\s?1|express|modulo\\s?d|terminal|aeropuerto|barajas)\\b");
+    // destino: "Terminal 1..4", "Aeropuerto ...", "Avenida de la Hispanidad"
+    private static final Pattern AIR_DEST = Pattern.compile("terminal\\s?[1-4]|aeropuerto|barajas|hispanidad");
+
+    /** "pickup" si se recoge en el aeropuerto, "dest" si el viaje va al aeropuerto, "" si no tiene que ver con el aeropuerto. */
+    public static String detectAirport(List<String> nodes) {
+        boolean pick = false, dest = false;
+        if (nodes == null) return "";
+        for (String raw : nodes) {
+            if (raw == null || raw.length() > 120) continue;          // los textos largos (avisos, condiciones) no son direcciones
+            String n = norm(raw);
+            if (n.contains("parking") && AIR_PICK_HINT.matcher(n).find()) pick = true;
+            else if (AIR_DEST.matcher(n).find()) dest = true;
+        }
+        return pick ? "pickup" : (dest ? "dest" : "");
+    }
+
+    public static Est estimate(BoltCfg c, boolean weekend, double km, double min, double offerMult) { return estimate(c, weekend, km, min, offerMult, ""); }
+
+    /**
+     * Bruto = base + km*precioKm*mult + min*precioMin (modo A) o (base + km*precioKm + min*precioMin)*mult (modo B). Sin redondeos intermedios.
+     * Aeropuerto (airKind): en una RECOGIDA el bruto es proporcional a los km: base * (km / ref) * demanda (sin minutos; con "min" nunca menos que la base);
+     * en cualquier viaje del aeropuerto se resta la tasa del bruto ANTES de calcular la comision.
+     */
+    public static Est estimate(BoltCfg c, boolean weekend, double km, double min, double offerMult, String airKind) {
         Profile pr = weekend ? c.we : c.wd;
-        int ti = tierIndex(pr, km);
-        Tier t = pr.t[ti];
+        Air a = pr.air;
+        String ak = (a != null && a.on && ("pickup".equals(airKind) || "dest".equals(airKind))) ? airKind : "";
         boolean fromOffer = pr.offerMult && offerMult > 0;
-        double mult = fromOffer ? offerMult : t.mult;
-        mult = Math.max(0.1, Math.min(10.0, mult));
-        double gross = "B".equals(t.mode) ? (t.base + km * t.perKm + min * t.perMin) * mult : t.base + km * t.perKm * mult + min * t.perMin;
-        boolean ma = false;
-        if (pr.minFare > 0 && gross < pr.minFare) { gross = pr.minFare; ma = true; }
-        double pct = Math.max(0, Math.min(90, c.comm));
         Est e = new Est();
-        e.gross = gross; e.comm = gross * pct / 100.0; e.net = gross - e.comm;
-        e.mult = mult; e.tier = ti + 1; e.mode = "B".equals(t.mode) ? "B" : "A";
-        e.lo = ti == 0 ? 0 : pr.bp[ti - 1]; e.hi = ti == 3 ? -1 : pr.bp[ti];
+        double gross, mult;
+        boolean ma = false;
+        if ("pickup".equals(ak)) {
+            mult = Math.max(0.1, Math.min(10.0, fromOffer ? offerMult : a.mult));
+            double factor = km / a.ref;
+            if (a.min && factor < 1.0) { factor = 1.0; ma = true; }
+            gross = a.base * factor * mult;
+            e.tier = 0; e.lo = 0; e.hi = a.ref; e.mode = "";
+        } else {
+            int ti = tierIndex(pr, km);
+            Tier t = pr.t[ti];
+            mult = Math.max(0.1, Math.min(10.0, fromOffer ? offerMult : t.mult));
+            gross = "B".equals(t.mode) ? (t.base + km * t.perKm + min * t.perMin) * mult : t.base + km * t.perKm * mult + min * t.perMin;
+            if (pr.minFare > 0 && gross < pr.minFare) { gross = pr.minFare; ma = true; }
+            e.tier = ti + 1; e.mode = "B".equals(t.mode) ? "B" : "A";
+            e.lo = ti == 0 ? 0 : pr.bp[ti - 1]; e.hi = ti == pr.t.length - 1 ? -1 : pr.bp[ti];
+        }
+        double pct = Math.max(0, Math.min(90, c.comm));
+        double fee = ak.length() > 0 ? a.fee : 0;
+        double after = fee > 0 ? Math.max(0, gross - fee) : gross;
+        e.gross = gross; e.fee = fee; e.comm = after * pct / 100.0; e.net = after - e.comm;
+        e.mult = mult; e.airport = ak;
         e.minApplied = ma; e.weekend = weekend; e.fromOffer = fromOffer;
         return e;
     }
@@ -176,9 +241,14 @@ public class OfferAnalyzer {
         if (r.estimated) {
             long min = Math.round(r.tripMin);
             String km = spokenNum(r.tripKm, 1);
-            StringBuilder b = new StringBuilder("Bolt. Viaje de ").append(km).append("1".equals(km) ? " kil\u00F3metro y " : " kil\u00F3metros y ").append(min).append(min == 1 ? " minuto" : " minutos");
+            StringBuilder b = new StringBuilder("Bolt. ");
+            if ("pickup".equals(r.estAirport)) b.append("Recogida en el aeropuerto. ");
+            else if ("dest".equals(r.estAirport)) b.append("Hacia el aeropuerto. ");
+            b.append("Viaje de ").append(km).append("1".equals(km) ? " kil\u00F3metro y " : " kil\u00F3metros y ").append(min).append(min == 1 ? " minuto" : " minutos");
             if (Math.abs(r.estMult - 1.0) > 1e-9) b.append(", demanda por ").append(spokenNum(r.estMult, 2));
-            b.append(". Bruto estimado: ").append(money(r.estGross)).append(" euros. Comisi\u00f3n estimada: ").append(money(r.estComm)).append(" euros. Neto estimado: ").append(money(r.estNet)).append(" euros.");
+            b.append(". Bruto estimado: ").append(money(r.estGross)).append(" euros. ");
+            if (r.estFee > 0) b.append("Tasa del aeropuerto: ").append(money(r.estFee)).append(" euros. ");
+            b.append("Comisi\u00f3n estimada: ").append(money(r.estComm)).append(" euros. Neto estimado: ").append(money(r.estNet)).append(" euros.");
             return b.toString();
         }
         if (r.price > 0) return "Bolt. Precio de la oferta: " + money(r.price) + " euros.";
@@ -227,6 +297,47 @@ public class OfferAnalyzer {
         return n.startsWith("aceptar") || n.startsWith("emparejar") || n.equals("accept") || n.equals("match");
     }
 
+    // ---- peajes: un importe junto a la palabra \u00abpeaje\u00bb NO es el precio del viaje (se ignora al buscar el precio) ----
+    private static final String AMT_RE = "(?:\\d{1,3}(?:\\.\\d{3})+,\\d{2}|\\d{1,4}(?:[.,]\\d{1,2})?)";
+    private static final String TOLL_W = "(?<![\\p{L}])(?:peajes?|tolls?)(?![\\p{L}])";
+    /** \u00abPeaje incluido 2,50 \u20ac\u00bb, \u00abPeajes: \u20ac2,50\u00bb, \u00abToll 2.50 EUR\u00bb (la palabra primero y el importe detras, con la moneda a un lado) */
+    private static final Pattern TOLL_AFTER = Pattern.compile("(?i)" + TOLL_W + "[^\\d\u20AC]{0,25}?(?:\u20AC\\s*" + AMT_RE + "|" + AMT_RE + "\\s*(?:\u20AC|eur\\b))");
+    /** \u00abIncluye 2,50 \u20ac de peajes\u00bb, \u00ab+2,50 \u20ac peaje\u00bb, \u00ab2,50 \u20ac de peaje\u00bb (importe con un nexo claro de peaje; \u00ab12,50 \u20ac Peaje incluido\u00bb NO se toca: ahi el importe es el precio) */
+    private static final Pattern TOLL_BEFORE = Pattern.compile("(?i)(?:(?:incluy\\w*|incluid\\w*|incl\\.?|con|m[a\u00E1]s|\\+)\\s*" + AMT_RE + "\\s*(?:\u20AC|eur\\b)\\s*(?:(?:de|en|por)\\s+)?"
+            + "|" + AMT_RE + "\\s*(?:\u20AC|eur\\b)\\s*(?:de|en|por)\\s+)" + TOLL_W);
+    private static final Pattern TOLL_WORD = Pattern.compile("(?i)" + TOLL_W);
+    private static final Pattern TOLL_LONE = Pattern.compile("^[+\\-]?\\s*(?:\u20AC\\s*)?" + AMT_RE + "\\s*(?:\u20AC|eur)?$", Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Copia de los nodos SIN los importes de peaje, solo para buscar el precio. Los km, los minutos, el aviso del aeropuerto y todo lo demas
+     * siguen leyendo los nodos originales. Si ninguno nombra el peaje, devuelve la misma lista (Uber y Cabify no cambian).
+     */
+    static List<String> withoutTolls(List<String> nodes) {
+        boolean any = false;
+        for (String s : nodes) if (TOLL_WORD.matcher(s).find()) { any = true; break; }
+        if (!any) return nodes;
+        List<String> out = new ArrayList<String>();
+        boolean priceBefore = false;               // ya se vio un importe en euros antes (el precio suele ir arriba)
+        for (int i = 0; i < nodes.size(); i++) {
+            String s = nodes.get(i);
+            if (TOLL_WORD.matcher(s).find()) {
+                String c = TOLL_AFTER.matcher(s).replaceAll(" ");
+                c = TOLL_BEFORE.matcher(c).replaceAll(" ");
+                boolean hadAmount = !c.equals(s);
+                boolean stillEur = EUR1.matcher(c).find() || EUR2.matcher(c).find();
+                out.add(c.trim());
+                // \u00abPeajes:\u00bb / \u00abPeaje incluido\u00bb en un nodo y el importe en el siguiente
+                if (!hadAmount && !stillEur && i + 1 < nodes.size() && TOLL_LONE.matcher(nodes.get(i + 1).trim()).find()
+                        && (s.trim().endsWith(":") || priceBefore)) { out.add(""); i++; }
+                if (stillEur) priceBefore = true;
+            } else {
+                out.add(s);
+                if (EUR1.matcher(s).find() || EUR2.matcher(s).find()) priceBefore = true;
+            }
+        }
+        return out;
+    }
+
     private static final Pattern LONEPRICE = Pattern.compile("^\\D{0,3}(\\d{1,3}[.,]\\d{2})\\s*\\S{0,2}$");
 
     private static int stMin(double v, double min, double tolPct) {
@@ -243,14 +354,15 @@ public class OfferAnalyzer {
         List<String> nodes = new ArrayList<String>();
         for (String x : rawNodes) for (String line : clean(x).split("\\n")) if (line.trim().length() > 0) nodes.add(line.trim());
         Result r = new Result();
-        // ---- precio: primer importe en euros razonable
-        for (String t : nodes) {
+        // ---- precio: primer importe en euros razonable (sin contar los importes de peaje)
+        List<String> priceNodes = withoutTolls(nodes);
+        for (String t : priceNodes) {
             Matcher m = EUR1.matcher(t); double v = -1;
             if (m.find()) v = num(m.group(1)); else { Matcher m2 = EUR2.matcher(t); if (m2.find()) v = num(m2.group(1)); }
             if (v >= 1.0 && v < 1000) { r.price = v; break; }
         }
         if (r.price <= 0 && lenient) {
-            for (String t : nodes) { Matcher m = LONEPRICE.matcher(t.trim()); if (m.find()) { double v = num(m.group(1)); if (v >= 1.0 && v < 1000) { r.price = v; break; } } }
+            for (String t : priceNodes) { Matcher m = LONEPRICE.matcher(t.trim()); if (m.find()) { double v = num(m.group(1)); if (v >= 1.0 && v < 1000) { r.price = v; break; } } }
         }
         // ---- elementos km / min por nodo
         List<Item> items = new ArrayList<Item>();
@@ -331,9 +443,10 @@ public class OfferAnalyzer {
             boolean tripSure = !(r.orderAssumed && pick == null);   // un unico bloque sin etiqueta no se da por viaje
             if (tripSure && r.tripKm > 0 && r.tripMin > 0) {
                 double om = detectDemand(nodes);
-                Est e = estimate(p.bolt, p.weekendNow, r.tripKm, r.tripMin, om);
+                Est e = estimate(p.bolt, p.weekendNow, r.tripKm, r.tripMin, om, detectAirport(nodes));
                 r.estimated = true; r.estGross = e.gross; r.estComm = e.comm; r.estNet = e.net; r.estMult = e.mult;
                 r.estOfferMult = om; r.estMode = e.mode; r.estTier = e.tier; r.estLo = e.lo; r.estHi = e.hi;
+                r.estAirport = e.airport; r.estFee = e.fee;
                 r.estMinApplied = e.minApplied; r.estWeekend = e.weekend; r.estCommPct = Math.max(0, Math.min(90, p.bolt.comm));
                 r.price = e.net;          // el semaforo se juzga sobre el NETO estimado; no se vuelve a descontar comision
                 useEstimate = true;

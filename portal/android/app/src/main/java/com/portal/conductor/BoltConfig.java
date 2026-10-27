@@ -111,23 +111,57 @@ public class BoltConfig {
         return t;
     }
 
+    private static OfferAnalyzer.Air air(Object o, OfferAnalyzer.Air def) {
+        Map<String, Object> m = map(o);
+        OfferAnalyzer.Air a = def.copy();
+        if (m == null) return a;
+        a.on = bool(m.get("on"), def.on);
+        a.base = dbl(m.get("base"), def.base, 0, 200);
+        a.ref = dbl(m.get("ref"), def.ref, 1, 200);
+        a.min = bool(m.get("min"), def.min);
+        a.fee = dbl(m.get("fee"), def.fee, 0, 50);
+        a.mult = dbl(m.get("mult"), def.mult, 0.1, 10);
+        return a;
+    }
+
+    /** Los limites validos: n-1 numeros positivos y estrictamente crecientes. Si no, null. */
+    private static double[] limits(Object bp, int n) {
+        if (!(bp instanceof List) || ((List<?>) bp).size() != n - 1) return null;
+        List<?> l = (List<?>) bp;
+        double[] r = new double[n - 1];
+        double prev = 0;
+        for (int i = 0; i < r.length; i++) {
+            double v = dbl(l.get(i), -1, 0.01, 1000);
+            if (!(v > prev)) return null;
+            r[i] = v; prev = v;
+        }
+        return r;
+    }
+
     private static OfferAnalyzer.Profile profile(Object o, OfferAnalyzer.Profile def) {
         Map<String, Object> m = map(o);
         OfferAnalyzer.Profile p = def.copy();
         if (m == null) return p;
         p.minFare = dbl(m.get("minFare"), def.minFare, 0, 200);
         p.offerMult = bool(m.get("offerMult"), def.offerMult);
-        Object bp = m.get("bp");
-        if (bp instanceof List && ((List<?>) bp).size() == 3) {
-            List<?> l = (List<?>) bp;
-            double a = dbl(l.get(0), -1, 0.01, 1000), b = dbl(l.get(1), -1, 0.01, 1000), c = dbl(l.get(2), -1, 0.01, 1000);
-            if (a > 0 && b > a && c > b) p.bp = new double[]{a, b, c};   // si no son crecientes se conservan los de antes
-        }
+        p.air = air(m.get("air"), def.air);
+        // numero de tramos: 1..MAX_TIERS. Solo se acepta un numero distinto del inicial si la lista de tramos y la de limites
+        // son coherentes (n tramos y n-1 limites); los ajustes antiguos traen siempre 4 tramos y 3 limites.
         Object ts = m.get("t");
-        if (ts instanceof List) {
-            List<?> l = (List<?>) ts;
-            for (int i = 0; i < 4 && i < l.size(); i++) p.t[i] = tier(l.get(i), def.t[i]);
+        int n = def.t.length;
+        if (ts instanceof List && m.get("bp") instanceof List) {
+            int tn = ((List<?>) ts).size(), bn = ((List<?>) m.get("bp")).size();
+            if (tn >= 1 && tn <= OfferAnalyzer.MAX_TIERS && bn == tn - 1) n = tn;
         }
+        OfferAnalyzer.Tier[] t = new OfferAnalyzer.Tier[n];
+        for (int i = 0; i < n; i++) {
+            OfferAnalyzer.Tier d = i < def.t.length ? def.t[i] : (i > 0 ? t[i - 1] : def.t[def.t.length - 1]);
+            t[i] = ts instanceof List && i < ((List<?>) ts).size() ? tier(((List<?>) ts).get(i), d) : d.copy();
+        }
+        p.t = t;
+        double[] bp = limits(m.get("bp"), n);
+        if (bp != null) p.bp = bp;                                   // si no son validos se conservan los de antes (o 5, 10, 15, 20...)
+        else p.bp = n == def.t.length ? def.bp.clone() : OfferAnalyzer.defaultBp(n);
         return p;
     }
 
@@ -166,14 +200,19 @@ public class BoltConfig {
     private static String prof(OfferAnalyzer.Profile p) {
         StringBuilder b = new StringBuilder("{");
         b.append("\"minFare\":").append(n(p.minFare)).append(",\"offerMult\":").append(p.offerMult);
-        b.append(",\"bp\":[").append(n(p.bp[0])).append(',').append(n(p.bp[1])).append(',').append(n(p.bp[2])).append("],\"t\":[");
-        for (int i = 0; i < 4; i++) {
+        b.append(",\"bp\":[");
+        for (int i = 0; i < p.bp.length; i++) { if (i > 0) b.append(','); b.append(n(p.bp[i])); }
+        b.append("],\"t\":[");
+        for (int i = 0; i < p.t.length; i++) {
             OfferAnalyzer.Tier t = p.t[i];
             if (i > 0) b.append(',');
             b.append("{\"base\":").append(n(t.base)).append(",\"km\":").append(n(t.perKm)).append(",\"min\":").append(n(t.perMin))
              .append(",\"mult\":").append(n(t.mult)).append(",\"mode\":\"").append("B".equals(t.mode) ? "B" : "A").append("\"}");
         }
-        return b.append("]}").toString();
+        OfferAnalyzer.Air a = p.air;
+        b.append("],\"air\":{\"on\":").append(a.on).append(",\"base\":").append(n(a.base)).append(",\"ref\":").append(n(a.ref))
+         .append(",\"min\":").append(a.min).append(",\"fee\":").append(n(a.fee)).append(",\"mult\":").append(n(a.mult)).append("}");
+        return b.append('}').toString();
     }
 
     public static String toJson(OfferAnalyzer.BoltCfg c) {
