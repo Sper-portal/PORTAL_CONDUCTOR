@@ -165,6 +165,50 @@ public class BoltConfig {
         return p;
     }
 
+    /** Nombre de zona: sin caracteres de control, recortado y de hasta 40 caracteres. */
+    private static String areaName(Object o) {
+        if (!(o instanceof String)) return "";
+        String s = ((String) o).replaceAll("[\\u0000-\\u001F\\u007F]", " ").trim();
+        return s.length() > 40 ? s.substring(0, 40).trim() : s;
+    }
+
+    /** Tarifa por zona (v3.15f). Cualquier dato ausente o no valido vuelve a su valor inicial. */
+    private static OfferAnalyzer.Zone zone(Object o, OfferAnalyzer.Zone def) {
+        Map<String, Object> m = map(o);
+        OfferAnalyzer.Zone z = def.copy();
+        if (m == null) return z;
+        z.on = bool(m.get("on"), def.on);
+        z.base = dbl(m.get("base"), def.base, 0, 50);
+        z.perKm = dbl(m.get("km"), def.perKm, 0, 20);
+        z.perMin = dbl(m.get("min"), def.perMin, 0, 10);
+        z.minFare = dbl(m.get("minFare"), def.minFare, 0, 200);
+        z.adj = dbl(m.get("adj"), def.adj, -90, 300);
+        z.adjGood = dbl(m.get("adjGood"), def.adjGood, -90, 300);
+        z.mult = dbl(m.get("mult"), def.mult, 0.1, 10);
+        double rf = dbl(m.get("realFrom"), def.realFrom, 1, 10), df = dbl(m.get("from"), def.dFrom, 1, 10);
+        double a1 = dbl(m.get("a1"), def.dA1, 1, 10), a2 = dbl(m.get("a2"), def.dA2, 1, 10), a3 = dbl(m.get("a3"), def.dA3, 1, 10);
+        if (rf <= df && df <= a1 && a1 <= a2 && a2 <= a3) { z.realFrom = rf; z.dFrom = df; z.dA1 = a1; z.dA2 = a2; z.dA3 = a3; }
+        else { z.realFrom = def.realFrom; z.dFrom = def.dFrom; z.dA1 = def.dA1; z.dA2 = def.dA2; z.dA3 = def.dA3; }
+        z.dP1 = dbl(m.get("p1"), def.dP1, 0, 100);
+        z.dP2 = dbl(m.get("p2"), def.dP2, 0, 100);
+        z.dP3 = dbl(m.get("p3"), def.dP3, 0, 100);
+        if (m.containsKey("good")) {
+            List<OfferAnalyzer.Area> l = new ArrayList<OfferAnalyzer.Area>();
+            Object g = m.get("good");
+            if (g instanceof List) {
+                for (Object a : (List<?>) g) {
+                    Map<String, Object> am = map(a);
+                    if (am == null || l.size() >= 40) continue;
+                    double lat = dbl(am.get("lat"), 999, -90, 90), lon = dbl(am.get("lon"), 999, -180, 180), r = dbl(am.get("r"), -1, 0.1, 100);
+                    if (lat == 999 || lon == 999 || r < 0) continue;
+                    l.add(new OfferAnalyzer.Area(areaName(am.get("n")), lat, lon, r));
+                }
+                z.good = l;
+            }
+        }
+        return z;
+    }
+
     /** Lee la configuracion. Cualquier dato ausente o no valido vuelve a su valor inicial; un JSON roto devuelve todo por defecto. */
     public static OfferAnalyzer.BoltCfg parse(String json) {
         OfferAnalyzer.BoltCfg c = new OfferAnalyzer.BoltCfg();
@@ -188,6 +232,7 @@ public class BoltConfig {
                 }
                 c.holidays = h;
             }
+            c.zone = zone(m.get("zone"), c.zone);
             return c;
         } catch (Exception e) {
             return new OfferAnalyzer.BoltCfg();
@@ -215,6 +260,34 @@ public class BoltConfig {
         return b.append('}').toString();
     }
 
+    private static String q(String s) {
+        StringBuilder b = new StringBuilder("\"");
+        for (int i = 0; i < s.length(); i++) {
+            char ch = s.charAt(i);
+            if (ch == '"' || ch == '\\') b.append('\\').append(ch);
+            else if (ch < 0x20 || ch == 0x7F) b.append(String.format("\\u%04x", (int) ch));
+            else b.append(ch);
+        }
+        return b.append('"').toString();
+    }
+
+    private static String zoneJson(OfferAnalyzer.Zone z) {
+        StringBuilder b = new StringBuilder("{");
+        b.append("\"on\":").append(z.on).append(",\"base\":").append(n(z.base)).append(",\"km\":").append(n(z.perKm)).append(",\"min\":").append(n(z.perMin))
+         .append(",\"minFare\":").append(n(z.minFare)).append(",\"adj\":").append(n(z.adj)).append(",\"adjGood\":").append(n(z.adjGood)).append(",\"mult\":").append(n(z.mult))
+         .append(",\"realFrom\":").append(n(z.realFrom)).append(",\"from\":").append(n(z.dFrom))
+         .append(",\"a1\":").append(n(z.dA1)).append(",\"p1\":").append(n(z.dP1)).append(",\"a2\":").append(n(z.dA2)).append(",\"p2\":").append(n(z.dP2))
+         .append(",\"a3\":").append(n(z.dA3)).append(",\"p3\":").append(n(z.dP3)).append(",\"good\":[");
+        boolean first = true;
+        if (z.good != null) for (OfferAnalyzer.Area a : z.good) {
+            if (a == null) continue;
+            if (!first) b.append(',');
+            b.append("{\"n\":").append(q(a.name == null ? "" : a.name)).append(",\"lat\":").append(n(a.lat)).append(",\"lon\":").append(n(a.lon)).append(",\"r\":").append(n(a.r)).append('}');
+            first = false;
+        }
+        return b.append("]}").toString();
+    }
+
     public static String toJson(OfferAnalyzer.BoltCfg c) {
         StringBuilder b = new StringBuilder("{");
         b.append("\"on\":").append(c.on).append(",\"mode\":\"").append(c.mode).append("\",\"comm\":").append(n(c.comm));
@@ -226,7 +299,7 @@ public class BoltConfig {
             b.append('"').append(h).append('"');
             first = false;
         }
-        b.append("],\"wd\":").append(prof(c.wd)).append(",\"we\":").append(prof(c.we)).append('}');
+        b.append("],\"wd\":").append(prof(c.wd)).append(",\"we\":").append(prof(c.we)).append(",\"zone\":").append(zoneJson(c.zone)).append('}');
         return b.toString();
     }
 

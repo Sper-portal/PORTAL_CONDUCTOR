@@ -768,6 +768,7 @@ public class ScreenReaderService extends AccessibilityService {
         String js = getSharedPreferences("portal", Context.MODE_PRIVATE).getString("bolt_cfg", "");
         if (js == null) js = "";
         if (boltCfgCache == null || !js.equals(boltJsonCache)) { boltCfgCache = BoltConfig.parse(js); boltJsonCache = js; }
+        try { ZoneLocator.apply(this, boltCfgCache, System.currentTimeMillis()); } catch (Exception e) { boltCfgCache.goodZone = false; boltCfgCache.goodName = ""; }   // zona buena segun el GPS (si falla: fuera de zona buena)
         return boltCfgCache;
     }
 
@@ -854,6 +855,28 @@ public class ScreenReaderService extends AccessibilityService {
         return s;
     }
 
+    private static String pct(double v) { return (v > 1e-9 ? "+" : (v < -1e-9 ? "\u2212" : "")) + num1(Math.abs(v)) + " %"; }
+
+    /** linea de la tarifa por zona del aviso: en que zona esta y que ajuste se ha aplicado */
+    static String zoneLine(OfferAnalyzer.Result r) {
+        boolean zero = Math.abs(r.estAdj) < 1e-9;
+        if (r.estZone == 2) return "Zona buena" + (r.estArea != null && r.estArea.length() > 0 ? " (" + r.estArea + ")" : "") + " \u00B7 tarifa " + (zero ? "normal" : pct(r.estAdj));
+        String w = ZoneLocator.why();
+        return "Fuera de zona buena" + (w.length() > 0 ? " (" + w + ")" : "") + " \u00B7 tarifa " + (zero ? "real" : pct(r.estAdj));
+    }
+
+    /** linea de la demanda en modo zona: cuanto marca la oferta y cuanto se aplica de verdad */
+    static String zoneDemand(OfferAnalyzer.Result r) {
+        if (r.estOfferMult <= 0) return r.estMult > 1.0 + 1e-9 ? "Demanda \u00D7" + multTxt(r.estMult) + " (a mano)" : "Sin demanda en la oferta";
+        if (!r.estFromOffer) return "Demanda \u00D7" + multTxt(r.estOfferMult) + " de la oferta: ignorada (lo tienes desactivado en Ajustes)";
+        String s = "Demanda \u00D7" + multTxt(r.estOfferMult) + " (de la oferta)";
+        if (r.estZone == 1) {
+            if (Math.abs(r.estEff - 1.0) < 1e-9) s += ": no se aplica (solo desde \u00D7" + multTxt(r.estHi) + ")";
+            else if (r.estEff > r.estOfferMult + 1e-9) s += " +" + num1(Math.round((r.estEff / r.estOfferMult - 1) * 1000) / 10.0) + " % = \u00D7" + multTxt(r.estEff);
+        }
+        return s;
+    }
+
     private void showEstimateAlert(OfferAnalyzer.Result r) {
         try {
             if (alertView == null) buildAlert();
@@ -910,11 +933,15 @@ public class ScreenReaderService extends AccessibilityService {
             else aMain.setText("Bruto est. " + OfferAnalyzer.money(r.estGross) + " \u20ac  \u00b7  Comisi\u00f3n est. " + OfferAnalyzer.money(r.estComm) + " \u20ac (" + num1(r.estCommPct) + " %)");
             StringBuilder dt = new StringBuilder();
             dt.append("Viaje con pasajero: ").append((int) Math.round(r.tripMin)).append(" min (").append(num1(r.tripKm)).append(" km)\n");
-            String rango = r.estHi < 0 ? ("m\u00e1s de " + num1(r.estLo) + " km") : (r.estLo <= 0 ? ("hasta " + num1(r.estHi) + " km") : (num1(r.estLo) + "\u2013" + num1(r.estHi) + " km"));
-            String dia = r.estWeekend ? "fin de semana / festivo" : "lunes a viernes";
-            if ("pickup".equals(r.estAirport)) dt.append("Recogida en el aeropuerto: tarifa proporcional a los km (referencia ").append(num1(r.estHi)).append(" km; los minutos no cuentan) \u00b7 ").append(dia).append("\n");
-            else dt.append("dest".equals(r.estAirport) ? "Viaje hacia el aeropuerto \u00b7 " : "").append("Tramo ").append(r.estTier).append(" (").append(rango).append(") \u00b7 ").append(dia).append("\n");
-            dt.append("Demanda \u00d7").append(multTxt(r.estMult)).append(r.estOfferMult > 0 ? " (de la oferta)" : "").append(r.estMode.length() > 0 ? " \u00b7 modo " + r.estMode : "").append("\n");
+            if (r.estZone > 0) {
+                dt.append(zoneLine(r)).append("\n").append(zoneDemand(r)).append("\n");
+            } else {
+                String rango = r.estHi < 0 ? ("m\u00e1s de " + num1(r.estLo) + " km") : (r.estLo <= 0 ? ("hasta " + num1(r.estHi) + " km") : (num1(r.estLo) + "\u2013" + num1(r.estHi) + " km"));
+                String dia = r.estWeekend ? "fin de semana / festivo" : "lunes a viernes";
+                if ("pickup".equals(r.estAirport)) dt.append("Recogida en el aeropuerto: tarifa proporcional a los km (referencia ").append(num1(r.estHi)).append(" km; los minutos no cuentan) \u00b7 ").append(dia).append("\n");
+                else dt.append("dest".equals(r.estAirport) ? "Viaje hacia el aeropuerto \u00b7 " : "").append("Tramo ").append(r.estTier).append(" (").append(rango).append(") \u00b7 ").append(dia).append("\n");
+                dt.append("Demanda \u00d7").append(multTxt(r.estMult)).append(r.estOfferMult > 0 ? " (de la oferta)" : "").append(r.estMode.length() > 0 ? " \u00b7 modo " + r.estMode : "").append("\n");
+            }
             if (r.estMinApplied) dt.append("Se aplic\u00f3 la tarifa m\u00ednima estimada\n");
             if (r.pickupKm > 0 || r.pickupMin > 0) {
                 dt.append("Recogida (no cuenta en el precio): ");

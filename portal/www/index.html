@@ -1721,7 +1721,7 @@ window.fareReadScreen=async function(){
 })();
 </script>
 
-<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">v3.15 lector</div>
+<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">v3.15f lector</div>
 <script id="screenReaderPatch2">
 /* v2.3 Burbuja flotante (movil): recibe el precio leido y lo pone en la calculadora */
 (function(){
@@ -3654,7 +3654,10 @@ if(typeof _sam==='function')window.setAuthMode=function(m){
    (de 1 a 8, se pueden añadir, dividir y quitar), con un perfil para lunes–viernes y otro para sábados, domingos y festivos. Las RECOGIDAS en el
    aeropuerto tienen su propia tarifa (sin minutos) y en los viajes del aeropuerto se resta la tasa antes de la comisión. Aquí se editan TODOS los
    valores. Son estimaciones del conductor (no tarifas oficiales de Bolt). Los valores iniciales y el cálculo son los mismos que usa el código
-   nativo (se comprueba en las pruebas contra Java). */
+   nativo (se comprueba en las pruebas contra Java).
+   v3.15f · TARIFA POR ZONA: una sola tarifa de Bolt (inicial + km + minutos, con mínimo). Fuera de zona buena (M30, sur…): sin demanda o menos de ×1,2 → −8 %;
+   de ×1,2 a ×1,4 → tarifa real; desde ×1,4 → tarifa × demanda (desde ×1,5 +5 %, ×2 +8 %, ×2,5 +10 %, cada escalón sustituye al anterior). En zona buena
+   (detectada con el GPS del móvil) → tarifa +12 % × la demanda tal como salga. Las zonas buenas son círculos que se marcan en un mapa o en una lista. */
 (function(){
 const P=window.PDC314;if(!P||P.bolt)return;P.bolt=true;
 const SR=()=>{try{if(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform())return (Capacitor.Plugins&&Capacitor.Plugins.ScreenReader)||Capacitor.registerPlugin('ScreenReader')}catch(e){}return null};
@@ -3662,10 +3665,13 @@ const LSK='pdc_bolt';
 const MAXT=8;
 const T=(b,k,m)=>({base:b,km:k,min:m,mult:1,mode:'A'});
 const AIR=()=>({on:true,base:15.9,ref:11,min:true,fee:2.57,mult:1});
+const ZAREAS=()=>[{n:'La Moraleja',lat:40.5133,lon:-3.6452,r:2.5},{n:'Alcobendas',lat:40.5475,lon:-3.642,r:3},{n:'San Sebastián de los Reyes',lat:40.5497,lon:-3.6266,r:3},{n:'Las Rozas',lat:40.4929,lon:-3.8738,r:4},{n:'Majadahonda',lat:40.4736,lon:-3.8722,r:3},{n:'Pozuelo de Alarcón',lat:40.4352,lon:-3.8135,r:3.5},{n:'Boadilla del Monte',lat:40.405,lon:-3.878,r:3.5},{n:'Aravaca',lat:40.4545,lon:-3.781,r:2}];
+const ZONE=()=>({on:true,base:2.1,km:0.77,min:0.15,minFare:6.75,adj:-8,adjGood:12,mult:1,realFrom:1.2,from:1.4,a1:1.5,p1:5,a2:2,p2:8,a3:2.5,p3:10,good:ZAREAS()});
 const defaults=()=>({on:true,mode:'auto',comm:25,
   holidays:['01-01','01-06','05-01','05-02','08-15','10-12','11-01','12-06','12-08','12-25'],
   wd:{minFare:5.95,offerMult:true,bp:[5,10,15],t:[T(3.5,0.95,0.11),T(3.5,0.8,0.11),T(1.95,0.95,0.11),T(1.95,0.8,0.11)],air:AIR()},
-  we:{minFare:9,offerMult:true,bp:[5,10,15],t:[T(5.5,1.7,0.22),T(5.5,1.7,0.22),T(5.5,1.7,0.22),T(5.5,1.7,0.22)],air:AIR()}});
+  we:{minFare:9,offerMult:true,bp:[5,10,15],t:[T(5.5,1.7,0.22),T(5.5,1.7,0.22),T(5.5,1.7,0.22),T(5.5,1.7,0.22)],air:AIR()},
+  zone:ZONE()});
 P.boltDefaults=defaults;
 const clone=o=>JSON.parse(JSON.stringify(o));
 const isN=v=>typeof v==='number'&&Number.isFinite(v);
@@ -3680,26 +3686,52 @@ function normProf(o,d){const p=clone(d);if(!o||typeof o!=='object')return p;p.mi
   let n=d.t.length;if(Array.isArray(o.t)&&Array.isArray(o.bp)){const tn=o.t.length,bn=o.bp.length;if(tn>=1&&tn<=MAXT&&bn===tn-1)n=tn}
   const t=[];for(let i=0;i<n;i++){const dd=i<d.t.length?d.t[i]:(i>0?t[i-1]:d.t[d.t.length-1]);t.push(Array.isArray(o.t)&&i<o.t.length?normTier(o.t[i],dd):clone(dd))}
   p.t=t;const bp=limits(o.bp,n);p.bp=bp||(n===d.t.length?d.bp.slice():defaultBp(n));return p}
+/* tarifa por zona: la misma validación que el código nativo */
+const areaName=v=>{if(typeof v!=='string')return '';let s=v.replace(/[\u0000-\u001F\u007F]/g,' ').replace(/^ +| +$/g,'');if(s.length>40)s=s.slice(0,40).replace(/^ +| +$/g,'');return s};
+function normZone(o,d){const z=clone(d);if(!o||typeof o!=='object'||Array.isArray(o))return z;
+  z.on=typeof o.on==='boolean'?o.on:d.on;z.base=rng(o.base,d.base,0,50);z.km=rng(o.km,d.km,0,20);z.min=rng(o.min,d.min,0,10);z.minFare=rng(o.minFare,d.minFare,0,200);
+  z.adj=rng(o.adj,d.adj,-90,300);z.adjGood=rng(o.adjGood,d.adjGood,-90,300);z.mult=rng(o.mult,d.mult,0.1,10);
+  const rf=rng(o.realFrom,d.realFrom,1,10),df=rng(o.from,d.from,1,10),a1=rng(o.a1,d.a1,1,10),a2=rng(o.a2,d.a2,1,10),a3=rng(o.a3,d.a3,1,10);
+  if(rf<=df&&df<=a1&&a1<=a2&&a2<=a3){z.realFrom=rf;z.from=df;z.a1=a1;z.a2=a2;z.a3=a3}else{z.realFrom=d.realFrom;z.from=d.from;z.a1=d.a1;z.a2=d.a2;z.a3=d.a3}
+  z.p1=rng(o.p1,d.p1,0,100);z.p2=rng(o.p2,d.p2,0,100);z.p3=rng(o.p3,d.p3,0,100);
+  if(Object.prototype.hasOwnProperty.call(o,'good')&&Array.isArray(o.good)){
+    const l=[];for(const a of o.good){if(!a||typeof a!=='object'||Array.isArray(a)||l.length>=40)continue;
+      const lat=rng(a.lat,999,-90,90),lon=rng(a.lon,999,-180,180),r=rng(a.r,-1,0.1,100);if(lat===999||lon===999||r<0)continue;
+      l.push({n:areaName(a.n),lat,lon,r})}
+    z.good=l}
+  return z}
 function norm(o){const d=defaults(),c=d;if(!o||typeof o!=='object')return c;
   if(typeof o.on==='boolean')c.on=o.on;if(['auto','week','weekend'].includes(o.mode))c.mode=o.mode;c.comm=rng(o.comm,c.comm,0,90);
   c.wd=normProf(o.wd,d.wd);c.we=normProf(o.we,d.we);
   if(Array.isArray(o.holidays)){const h=[];for(const x of o.holidays)if(typeof x==='string'){const y=x.trim();if(/^(\d{4}-\d{2}-\d{2}|\d{2}-\d{2})$/.test(y)&&!h.includes(y))h.push(y)}c.holidays=h}
+  c.zone=normZone(o.zone,d.zone);
   return c}
 P.boltNorm=norm;
 
 /* ---------- el mismo cálculo que el aviso (sin redondeos intermedios) ---------- */
 function tierIndex(p,km){for(let i=0;i<p.bp.length;i++)if(km<=p.bp[i])return i;return p.t.length-1}
-function estimate(c,weekend,km,min,offerMult,airKind){
+/* tarifa por zona: ajuste (%) y demanda realmente aplicada (igual que Zone.adjust / Zone.demand de Java) */
+const zAdjust=(z,m,good)=>good?z.adjGood:(m<z.realFrom?z.adj:0);
+const zDemand=(z,m,good)=>{if(good)return m;if(m<z.from)return 1;const extra=m>=z.a3?z.p3:(m>=z.a2?z.p2:(m>=z.a1?z.p1:0));return m*(1+extra/100)};
+function estimate(c,weekend,km,min,offerMult,airKind,good){
   const pr=weekend?c.we:c.wd,a=pr.air;
   const ak=a&&a.on&&(airKind==='pickup'||airKind==='dest')?airKind:'';
   const fromOffer=pr.offerMult&&offerMult>0;
-  let gross,mult,tier,lo,hi,mode,ma=false;
+  let gross,mult,tier,lo,hi,mode,ma=false,zone=0,eadj=0,eeff=1;good=!!good;
   if(ak==='pickup'){
     mult=Math.max(0.1,Math.min(10,fromOffer?offerMult:a.mult));
     let factor=km/a.ref;
     if(a.min&&factor<1){factor=1;ma=true}
     gross=a.base*factor*mult;
     tier=0;lo=0;hi=a.ref;mode='';
+  }else if(c.zone&&c.zone.on){
+    const z=c.zone;let raw=z.base+km*z.km+min*z.min;
+    if(z.minFare>0&&raw<z.minFare){raw=z.minFare;ma=true}
+    const m=Math.max(0.1,Math.min(10,fromOffer?offerMult:z.mult));
+    const adj=zAdjust(z,m,good),eff=zDemand(z,m,good);
+    mult=(eff>1+1e-9||good)?m:1;
+    gross=raw*(1+adj/100)*eff;
+    tier=0;lo=z.realFrom;hi=z.from;mode='Z';zone=good?2:1;eadj=adj;eeff=eff;
   }else{
     const ti=tierIndex(pr,km),t=pr.t[ti];
     mult=Math.max(0.1,Math.min(10,fromOffer?offerMult:t.mult));
@@ -3708,9 +3740,12 @@ function estimate(c,weekend,km,min,offerMult,airKind){
     tier=ti+1;mode=t.mode==='B'?'B':'A';lo=ti===0?0:pr.bp[ti-1];hi=ti===pr.t.length-1?-1:pr.bp[ti];
   }
   const pct=Math.max(0,Math.min(90,c.comm)),fee=ak?a.fee:0,after=fee>0?Math.max(0,gross-fee):gross,comm=after*pct/100;
-  return {gross,comm,net:after-comm,fee,airport:ak,mult,tier,mode,lo,hi,minApplied:ma,weekend,fromOffer};
+  return {gross,comm,net:after-comm,fee,airport:ak,mult,tier,mode,lo,hi,minApplied:ma,weekend,fromOffer,zone,adj:eadj,eff:eeff};
 }
 P.boltEstimate=estimate;
+function distKm(lat1,lon1,lat2,lon2){const rad=Math.PI/180,dLat=(lat2-lat1)*rad,dLon=(lon2-lon1)*rad;const a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*rad)*Math.cos(lat2*rad)*Math.sin(dLon/2)*Math.sin(dLon/2);return 6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))}
+function goodAreaAt(z,lat,lon){if(!z||!z.good)return null;for(const a of z.good)if(distKm(lat,lon,a.lat,a.lon)<=a.r)return a.n;return null}
+P.boltDist=distKm;P.boltZoneAt=goodAreaAt;
 /* aeropuerto: se detecta por el texto de la oferta (igual que el código nativo) */
 const nrm=s=>String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
 const AIR_PICK=/\b(t\s?[1-4]|p\s?1|express|modulo\s?d|terminal|aeropuerto|barajas)\b/,AIR_DEST=/terminal\s?[1-4]|aeropuerto|barajas|hispanidad/;
@@ -3736,7 +3771,7 @@ const spoken=(v,dec)=>{let s=rhu(v,dec);if(s.indexOf('.')>=0)s=s.replace(/0+$/,'
 P.boltMoney=money;
 function voiceText(e,km,min){
   const m=Math.round(min),k=spoken(km,1);
-  return 'Bolt. '+(e.airport==='pickup'?'Recogida en el aeropuerto. ':e.airport==='dest'?'Hacia el aeropuerto. ':'')+'Viaje de '+k+(k==='1'?' kilómetro y ':' kilómetros y ')+m+(m===1?' minuto':' minutos')+(Math.abs(e.mult-1)>1e-9?', demanda por '+spoken(e.mult,2):'')+
+  return 'Bolt. '+(e.airport==='pickup'?'Recogida en el aeropuerto. ':e.airport==='dest'?'Hacia el aeropuerto. ':'')+'Viaje de '+k+(k==='1'?' kilómetro y ':' kilómetros y ')+m+(m===1?' minuto':' minutos')+(e.zone===2?', zona buena':'')+(Math.abs(e.mult-1)>1e-9?', demanda por '+spoken(e.mult,2):'')+
     '. Bruto estimado: '+money(e.gross)+' euros. '+(e.fee>0?'Tasa del aeropuerto: '+money(e.fee)+' euros. ':'')+'Comisión estimada: '+money(e.comm)+' euros. Neto estimado: '+money(e.net)+' euros.';
 }
 P.boltVoice=voiceText;
@@ -3749,21 +3784,24 @@ function isWeekend(c,d){
 P.boltIsWeekend=isWeekend;
 
 /* ---------- estado y guardado permanente ---------- */
-const B={cfg:defaults(),voice:true,vol:1,weekendNow:false,prof:'wd',open:false,sim:{km:8.3,min:10,mult:'',prof:'auto',kind:''},native:false,loaded:false};
+const B={cfg:defaults(),voice:true,vol:1,weekendNow:false,prof:'wd',open:false,sim:{km:8.3,min:10,mult:'',prof:'auto',kind:'',zone:'0'},native:false,loaded:false,zoneLast:'',tiersOpen:null,base:''};
+const snap=()=>JSON.stringify(B.cfg)+'|'+B.voice+'|'+B.vol;B.base=snap();
 P.boltState=B;
 function mirrorToDb(cfgJson){
   try{db.settings.boltCfg=cfgJson;db.settings.boltVoice=B.voice;db.settings.boltVol=B.vol}catch(e){}
 }
-async function load(){
+async function load(guard){
   const sr=SR();B.native=!!sr;let d=null;
   if(sr){try{d=await sr.getBolt()}catch(e){d=null}}
+  if(guard&&snap()!==B.base)return false;
   if(d&&d.cfg){
     try{B.cfg=norm(JSON.parse(d.cfg))}catch(e){B.cfg=defaults()}
-    B.voice=d.voice!==false;B.vol=isN(d.vol)?d.vol:1;B.weekendNow=!!d.weekendNow;B.saved=!!d.saved;
+    B.voice=d.voice!==false;B.vol=isN(d.vol)?d.vol:1;B.weekendNow=!!d.weekendNow;B.saved=!!d.saved;B.zoneLast=typeof d.zoneLast==='string'?d.zoneLast:'';
     // el teléfono perdió sus ajustes (reinstalación…) pero la copia de la cuenta los tiene
     if(!d.saved&&db&&db.settings&&db.settings.boltCfg){
       try{
         const r=await sr.setBolt({cfg:db.settings.boltCfg,voice:db.settings.boltVoice!==false,vol:isN(db.settings.boltVol)?db.settings.boltVol:1});
+        if(guard&&snap()!==B.base)return false;
         B.cfg=norm(JSON.parse((r&&r.cfg)||db.settings.boltCfg));B.voice=db.settings.boltVoice!==false;B.vol=isN(db.settings.boltVol)?db.settings.boltVol:1;B.saved=true;
       }catch(e){}
     }
@@ -3773,7 +3811,7 @@ async function load(){
     if(o){B.cfg=norm(o.cfg);B.voice=o.voice!==false;B.vol=isN(o.vol)?o.vol:1}
     B.weekendNow=isWeekend(B.cfg,new Date());
   }
-  B.loaded=true;
+  B.loaded=true;B.base=snap();return true;
 }
 P.boltLoad=load;
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
@@ -3785,7 +3823,7 @@ async function persist(){
     if(r&&r.cfg){try{back=norm(JSON.parse(r.cfg))}catch(e){}}
     B.saved=true;
   }
-  B.cfg=back;
+  B.cfg=back;B.base=snap();
   const out=JSON.stringify(back);
   try{localStorage.setItem(LSK,JSON.stringify({cfg:back,voice:B.voice,vol:B.vol}))}catch(e){}
   mirrorToDb(out);P.saveNow();
@@ -3799,6 +3837,8 @@ const num=v=>{const s=String(v==null?'':v).trim().replace(',','.');if(s==='')ret
 const show=v=>String(Math.round(v*1e6)/1e6);
 const LIM={base:[0,100],km:[0,20],min:[0,10],mult:[0.1,10],minFare:[0,200],comm:[0,90],bp:[0.01,1000]};
 const LIMAIR={base:[0,200],ref:[1,200],fee:[0,50],mult:[0.1,10]};
+const LIMZ={base:[0,50],km:[0,20],min:[0,10],minFare:[0,200],adj:[-90,300],adjGood:[-90,300],mult:[0.1,10],realFrom:[1,10],from:[1,10],a1:[1,10],a2:[1,10],a3:[1,10],p1:[0,100],p2:[0,100],p3:[0,100]};
+const ZORD=['realFrom','from','a1','a2','a3'];
 function rangeTxt(p,i){const b=p.bp,n=p.t.length;if(n===1)return 'Todos los viajes (sin límite)';return i===0?'De 0 a '+show(b[0])+' km':i===n-1?'Más de '+show(b[n-2])+' km':'Más de '+show(b[i-1])+' hasta '+show(b[i])+' km'}
 const cell=(lab,id,val,path,opts)=>{opts=opts||{};return '<label class="bz-f"><span>'+lab+'</span><input id="'+id+'" type="number" inputmode="decimal" step="'+(opts.step||'0.01')+'" min="'+(opts.min!=null?opts.min:0)+'" value="'+esc(val)+'"'+(opts.on?' oninput="'+opts.on+'"':' data-p="'+path+'" oninput="boltIn(this)"')+(opts.dis?' disabled':'')+'></label>'};
 function tierHtml(pk,i){
@@ -3831,29 +3871,154 @@ function profHtml(pk){
    +airHtml(pk)
    +pr.t.map((_,i)=>tierHtml(pk,i)).join('')+'</div>';
 }
+/* ---------- tarifa por zona (v3.15f) ---------- */
+const mt=v=>{let s=spoken(v,2);return s};
+const pc=v=>(v>1e-9?'+':v<-1e-9?'−':'')+spoken(Math.abs(v),2)+' %';
+function zoneRuleTxt(z){
+  return '<b>Fuera de zona buena</b> (M30, sur…): sin demanda o menos de ×'+mt(z.realFrom)+' → tarifa '+pc(z.adj)+'; de ×'+mt(z.realFrom)+' a menos de ×'+mt(z.from)+' → tarifa real (sin descuento y sin demanda); desde ×'+mt(z.from)+' → tarifa × demanda'
+   +' (desde ×'+mt(z.a1)+' sube '+mt(z.p1)+' %, desde ×'+mt(z.a2)+' sube '+mt(z.p2)+' %, desde ×'+mt(z.a3)+' sube '+mt(z.p3)+' %; cada escalón sustituye al anterior). '
+   +'<b>En zona buena</b>: tarifa '+pc(z.adjGood)+' × la demanda tal como salga, sin escalones.';
+}
+function areasHtml(){
+  const g=B.cfg.zone.good;
+  if(!g.length)return '<div class="bz-hint" id="bz_z_none">No hay ninguna zona buena: en todas partes se usa la tarifa de fuera de zona buena. Añade zonas con el mapa o con «Añadir mi ubicación».</div>';
+  return g.map((a,i)=>{const id=x=>'bz_z_a'+i+'_'+x;
+    return '<div class="bz-ar" id="bz_z_ar'+i+'"><input type="text" class="bz-an" id="'+id('n')+'" maxlength="40" placeholder="Nombre de la zona" value="'+esc(a.n)+'" oninput="boltArea('+i+',\'n\',this)">'
+     +'<div class="bz-ac"><label><span>Latitud</span><input id="'+id('lat')+'" type="number" inputmode="decimal" step="0.0001" value="'+show(a.lat)+'" oninput="boltArea('+i+',\'lat\',this)"></label>'
+     +'<label><span>Longitud</span><input id="'+id('lon')+'" type="number" inputmode="decimal" step="0.0001" value="'+show(a.lon)+'" oninput="boltArea('+i+',\'lon\',this)"></label>'
+     +'<label><span>Radio km</span><input id="'+id('r')+'" type="number" inputmode="decimal" step="0.1" min="0.1" value="'+show(a.r)+'" oninput="boltArea('+i+',\'r\',this)"></label>'
+     +'<button type="button" class="secondary bz-adel" id="'+id('del')+'" onclick="boltAreaDel('+i+')" aria-label="Borrar la zona">🗑</button></div></div>'}).join('');
+}
+function zoneLastTxt(js){
+  let o=null;try{o=js?JSON.parse(js):null}catch(e){}
+  if(!o||!isN(o.t))return '';
+  const ago=Math.max(0,Math.round((Date.now()-o.t)/60000)),when=ago<1?'hace menos de 1 min':ago<60?'hace '+ago+' min':'hace '+Math.round(ago/60)+' h';
+  return 'Última lectura real del lector de pantalla ('+when+'): '+(o.ok?(o.good?'zona buena: '+o.good:'fuera de zona buena')+' · ubicación de hace '+o.age+' s ('+o.prov+')':'sin ubicación ('+o.why+') → se usó la tarifa de fuera de zona buena');
+}
+function zoneHtml(){
+  const z=B.cfg.zone;
+  return '<div class="bz-sec bz-zone'+(z.on?'':' bz-off')+'" id="bz_zone"><b>📍 Tarifa por zona (con el GPS)</b>'
+   +'<div class="bz-row"><div><b>Usar la tarifa por zona</b><br><small>La app mira dónde estás: en una zona buena usa la tarifa de fuera; en el resto (M30, sur…) un descuento. Sustituye a los tramos de más abajo.</small></div><input type="checkbox" id="bz_z_on" data-p="zone.on"'+(z.on?' checked':'')+' onchange="boltIn(this)" style="width:26px;height:26px;flex:none"></div>'
+   +'<div class="bz-hint" id="bz_z_rule">'+zoneRuleTxt(z)+'</div>'
+   +'<div class="bz-g">'+cell('Tarifa inicial (€)','bz_z_base',show(z.base),'zone.base')+cell('Precio por km (€)','bz_z_km',show(z.km),'zone.km')+cell('Precio por minuto (€)','bz_z_min',show(z.min),'zone.min')+cell('Tarifa mínima (€)','bz_z_minFare',show(z.minFare),'zone.minFare')
+   +cell('Fuera de zona buena: ajuste (%)','bz_z_adj',show(z.adj),'zone.adj',{min:-90,step:'1'})+cell('En zona buena: ajuste (%)','bz_z_adjGood',show(z.adjGood),'zone.adjGood',{min:-90,step:'1'})
+   +cell('Demanda si la oferta no la trae (×)','bz_z_mult',show(z.mult),'zone.mult',{min:0.1,step:'0.05'})+'<div></div></div>'
+   +'<b class="bz-sub">Demanda de la oferta (fuera de zona buena)</b>'
+   +'<div class="bz-g">'+cell('Se acaba el descuento desde ×','bz_z_realFrom',show(z.realFrom),'zone.realFrom',{min:1,step:'0.05'})+cell('Se aplica la demanda desde ×','bz_z_from',show(z.from),'zone.from',{min:1,step:'0.05'})
+   +cell('Escalón 1: desde ×','bz_z_a1',show(z.a1),'zone.a1',{min:1,step:'0.05'})+cell('… sube (%)','bz_z_p1',show(z.p1),'zone.p1',{step:'1'})
+   +cell('Escalón 2: desde ×','bz_z_a2',show(z.a2),'zone.a2',{min:1,step:'0.05'})+cell('… sube (%)','bz_z_p2',show(z.p2),'zone.p2',{step:'1'})
+   +cell('Escalón 3: desde ×','bz_z_a3',show(z.a3),'zone.a3',{min:1,step:'0.05'})+cell('… sube (%)','bz_z_p3',show(z.p3),'zone.p3',{step:'1'})+'</div>'
+   +'<div class="bz-err" id="bz_z_ordmsg"></div>'
+   +'<b class="bz-sub">Zonas buenas</b><div class="bz-hint">Cada zona es un círculo (centro y radio). En zona buena se usa la tarifa de fuera × la demanda tal como salga. Se detectan con la ubicación del móvil. Puedes cambiar, borrar y añadir las que quieras, aquí o en el mapa.</div>'
+   +'<div id="bz_z_list">'+areasHtml()+'</div>'
+   +'<div class="bz-zb"><button type="button" class="action" id="bz_z_map" onclick="boltMap()">🗺 Mapa de zonas</button>'
+   +'<button type="button" class="secondary" id="bz_z_here" onclick="boltAreaHere()">➕ Añadir mi ubicación</button>'
+   +'<button type="button" class="secondary" id="bz_z_where" onclick="boltWhere()">📍 Probar ubicación</button>'
+   +'<button type="button" class="secondary" id="bz_z_defa" onclick="boltReset(\'areas\')">↺ Zonas iniciales</button>'
+   +'<button type="button" class="secondary" id="bz_z_defz" onclick="boltReset(\'zone\')">↺ Valores iniciales de la tarifa por zona</button></div>'
+   +'<div class="bz-out" id="bz_z_loc">'+esc(zoneLastTxt(B.zoneLast)||'Pulsa «Probar ubicación» para ver dónde cree la app que estás.')+'</div>'
+   +'<div class="bz-hint">⚠ Las zonas iniciales son <b>aproximadas</b> (centros y radios puestos a ojo): revísalas en el mapa y ajústalas a tus zonas buenas reales. Si el móvil no da la ubicación (sin permiso o sin datos recientes), se usa la tarifa de fuera de zona buena.</div></div>';
+}
+function zoneCheck(){
+  const z=B.cfg.zone,v=ZORD.map(k=>z[k]);let okOrd=true;
+  for(let i=1;i<v.length;i++)if(!(v[i]>=v[i-1]))okOrd=false;
+  ZORD.forEach((k,i)=>{const el=document.getElementById('bz_z_'+k);if(!el)return;const wrong=!okOrd&&((i>0&&v[i]<v[i-1])||(i<v.length-1&&v[i+1]<v[i]));bad(el,wrong||errors.has(el.id))});
+  okOrd?errors.delete('zord'):errors.add('zord');
+  const m=document.getElementById('bz_z_ordmsg');if(m)m.textContent=okOrd?'':'Los umbrales tienen que ir de menor a mayor: «se acaba el descuento» ≤ «se aplica la demanda» ≤ escalón 1 ≤ escalón 2 ≤ escalón 3.';
+  const r=document.getElementById('bz_z_rule');if(r)r.innerHTML=zoneRuleTxt(z);
+}
+window.boltArea=function(i,f,el){
+  const a=B.cfg.zone.good[i];if(!a)return;
+  if(f==='n'){a.n=areaName(el.value);if(P.zmap&&P.zmap.open)P.zmap.redraw();return}
+  const v=num(el.value),lim=f==='lat'?[-90,90]:f==='lon'?[-180,180]:[0.1,100];
+  const okv=Number.isFinite(v)&&v>=lim[0]&&v<=lim[1];bad(el,!okv);okv?errors.delete(el.id):errors.add(el.id);
+  if(okv){a[f]=v;if(P.zmap&&P.zmap.open)P.zmap.redraw()}
+};
+function clearAreaErrors(){for(const e of Array.from(errors))if(/^bz_z_a\d/.test(e))errors.delete(e)}
+function renderAreas(){clearAreaErrors();const l=document.getElementById('bz_z_list');if(l)l.innerHTML=areasHtml();boltSim()}
+window.boltAreaDel=function(i){
+  const g=B.cfg.zone.good;if(i<0||i>=g.length)return;
+  if(!confirm('¿Borrar la zona «'+(g[i].n||'sin nombre')+'»?\n\nNo se guarda hasta que pulses «Guardar».'))return;
+  g.splice(i,1);if(P.zmap&&P.zmap.open){P.zmap.sel=-1;P.zmap.panel();P.zmap.redraw()}renderAreas();
+};
+function newAreaName(){const g=B.cfg.zone.good;let n=g.length+1;while(g.some(a=>a.n==='Zona '+n))n++;return 'Zona '+n}
+function addArea(lat,lon,r,name){
+  const g=B.cfg.zone.good;if(g.length>=40){alert('Hay un máximo de 40 zonas.');return -1}
+  g.push({n:areaName(name||newAreaName()),lat:Math.round(lat*1e6)/1e6,lon:Math.round(lon*1e6)/1e6,r:r||3});renderAreas();return g.length-1;
+}
+P.boltAddArea=addArea;
+/* ubicación: primero la del navegador/WebView; si no, la última que tiene el sistema (la lee el código nativo) */
+function getPos(ms,age){return new Promise(res=>{try{if(!navigator.geolocation)return res({err:'este móvil no da la ubicación a la página'});navigator.geolocation.getCurrentPosition(p=>res({lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy}),e=>res({err:(e&&e.message)||'sin permiso'}),{enableHighAccuracy:true,timeout:ms,maximumAge:age||0})}catch(e){res({err:String(e)})}})}
+async function nativeFix(){
+  const sr=SR();if(!sr)return null;
+  try{const r=await sr.zoneNow({cfg:JSON.stringify(B.cfg)});const o=r&&r.zone?JSON.parse(r.zone):null;return o}catch(e){return null}
+}
+async function myPos(){
+  let g=await getPos(8000,0);if(g&&!g.err)return g;
+  const g2=await getPos(1500,60000);if(g2&&!g2.err)return g2;
+  const n=await nativeFix();if(n&&n.ok)return {lat:n.lat,lon:n.lon,acc:-1,old:n.age};
+  return {err:(g&&g.err)||'sin ubicación'};
+}
+window.boltAreaHere=async function(){
+  const pos=await myPos();
+  if(pos.err){alert('No se pudo obtener tu ubicación ('+pos.err+'). Comprueba que el permiso de ubicación está activado, o añade la zona en el mapa.');return}
+  const i=addArea(pos.lat,pos.lon,3,'Mi ubicación');
+  if(i>=0&&P.toastOk)P.toastOk('📍 Zona añadida en tu ubicación: ponle nombre y radio');
+};
+window.boltWhere=async function(){
+  const out=document.getElementById('bz_z_loc');if(!out)return;
+  out.textContent='Buscando tu ubicación…';
+  const lines=[];
+  const g=await getPos(8000);
+  if(g&&!g.err){const n=goodAreaAt(B.cfg.zone,g.lat,g.lon);lines.push('📍 Ahora (GPS): '+show(Math.round(g.lat*1e5)/1e5)+', '+show(Math.round(g.lon*1e5)/1e5)+(g.acc>0?' (±'+Math.round(g.acc)+' m)':'')+' → '+(n!==null?'ZONA BUENA'+(n?': '+n:''):'fuera de zona buena'))}
+  else lines.push('📍 Ahora (GPS): sin ubicación ('+g.err+')');
+  const sr=SR();
+  if(sr){
+    const n=await nativeFix();
+    if(n)lines.push('🔧 Lo que ve el lector de pantalla: '+(n.ok?'ubicación de hace '+n.age+' s ('+n.prov+') → '+(n.good?'ZONA BUENA: '+n.good:'fuera de zona buena'):'sin ubicación ('+n.why+') → usaría la tarifa de fuera de zona buena'));
+    else lines.push('🔧 Lo que ve el lector de pantalla: no se pudo consultar');
+    try{const d=await sr.getBolt();if(d&&typeof d.zoneLast==='string')B.zoneLast=d.zoneLast}catch(e){}
+    const l=zoneLastTxt(B.zoneLast);if(l)lines.push(l);
+  }
+  out.innerHTML=lines.map(esc).join('<br>');
+};
+const pctSign=v=>(v>1e-9?'+':v<-1e-9?'−':'')+spoken(Math.abs(v),1)+' %';
+function zoneLine(e){const zero=Math.abs(e.adj)<1e-9;return e.zone===2?'Zona buena · tarifa '+(zero?'normal':pctSign(e.adj)):'Fuera de zona buena · tarifa '+(zero?'real':pctSign(e.adj))}
+function zoneDemand(e,om){
+  if(!(om>0))return e.mult>1+1e-9?'Demanda ×'+mt(e.mult)+' (a mano)':'Sin demanda en la oferta';
+  if(!e.fromOffer)return 'Demanda ×'+mt(om)+' de la oferta: ignorada (lo tienes desactivado)';
+  let s='Demanda ×'+mt(om)+' (de la oferta)';
+  if(e.zone===1){if(Math.abs(e.eff-1)<1e-9)s+=': no se aplica (solo desde ×'+mt(e.hi)+')';else if(e.eff>om+1e-9)s+=' +'+spoken(Math.round((e.eff/om-1)*1000)/10,1)+' % = ×'+mt(e.eff)}
+  return s;
+}
+P.boltZoneTxt={line:zoneLine,demand:zoneDemand};
 function simHtml(){
   const k=B.sim.kind;
   return '<div class="bz-sec"><b>🧮 Simulador (para contrastar con viajes reales)</b><small>Escribe los km y minutos del viaje con pasajero y mira qué estimaría la app con los valores de arriba.</small>'
    +'<div class="bz-g">'+cell('Km del viaje','bz_sKm',show(B.sim.km),'',{step:'0.1',on:'boltSim()'})+cell('Minutos del viaje','bz_sMin',show(B.sim.min),'',{step:'1',on:'boltSim()'})
    +cell('Demanda de la oferta (opcional)','bz_sMult',B.sim.mult,'',{step:'0.05',on:'boltSim()'})
    +'<label class="bz-f"><span>Perfil</span><select id="bz_sProf" onchange="boltSim()"><option value="auto"'+(B.sim.prof==='auto'?' selected':'')+'>Hoy (automático)</option><option value="wd"'+(B.sim.prof==='wd'?' selected':'')+'>Lunes a viernes</option><option value="we"'+(B.sim.prof==='we'?' selected':'')+'>Sáb., dom. y festivos</option></select></label>'
-   +'<label class="bz-f bz-w"><span>Tipo de viaje</span><select id="bz_sKind" onchange="boltSim()"><option value=""'+(k===''?' selected':'')+'>Normal (fuera del aeropuerto)</option><option value="pickup"'+(k==='pickup'?' selected':'')+'>Recogida en el aeropuerto</option><option value="dest"'+(k==='dest'?' selected':'')+'>Viaje hacia el aeropuerto</option></select></label></div>'
+   +'<label class="bz-f bz-w"><span>Tipo de viaje</span><select id="bz_sKind" onchange="boltSim()"><option value=""'+(k===''?' selected':'')+'>Normal (fuera del aeropuerto)</option><option value="pickup"'+(k==='pickup'?' selected':'')+'>Recogida en el aeropuerto</option><option value="dest"'+(k==='dest'?' selected':'')+'>Viaje hacia el aeropuerto</option></select></label>'
+   +'<label class="bz-f bz-w"><span>Ubicación (tarifa por zona)</span><select id="bz_sGood" onchange="boltSim()"><option value="0"'+(B.sim.zone!=='1'?' selected':'')+'>Fuera de zona buena (M30, sur…)</option><option value="1"'+(B.sim.zone==='1'?' selected':'')+'>En zona buena</option></select></label></div>'
    +'<div id="bz_sOut" class="bz-out"></div></div>';
 }
 function bodyHtml(){
   const c=B.cfg;
-  return '<div class="bz-note">Cuando la oferta de Bolt <b>no muestra el precio</b>, la app lo <b>estima</b> con estos valores y te dice el bruto, la comisión y el <b>neto estimado</b> (en pantalla y por voz). '
+  return '<div class="bz-note">Cuando la oferta de Bolt <b>no muestra el precio</b>, la app lo <b>estima</b> con estos valores (por defecto con la <b>tarifa por zona</b>, que mira tu ubicación) y te dice el bruto, la comisión y el <b>neto estimado</b> (en pantalla y por voz). '
    +'<b>Son estimaciones nuestras con viajes reales, no tarifas oficiales de Bolt</b>: si ves que Bolt paga más o menos, corrígelas aquí. Si la oferta sí trae el precio, se usa ese y no se estima nada.</div>'
    +'<div class="bz-row"><div><b>Estimar el precio de Bolt</b><br><small>Solo cuando la oferta no lo muestra.</small></div><input type="checkbox" id="bz_on" data-p="on"'+(c.on?' checked':'')+' onchange="boltIn(this)" style="width:26px;height:26px;flex:none"></div>'
    +'<div class="bz-g">'
    +'<label class="bz-f bz-w"><span>Qué perfil usar</span><select id="bz_mode" data-p="mode" onchange="boltIn(this)"><option value="auto"'+(c.mode==='auto'?' selected':'')+'>Automático por la fecha</option><option value="week"'+(c.mode==='week'?' selected':'')+'>Siempre lunes a viernes</option><option value="weekend"'+(c.mode==='weekend'?' selected':'')+'>Siempre fin de semana</option></select></label>'
    +cell('Comisión de Bolt (%)','bz_comm',show(c.comm),'comm',{step:'0.5'})+'<div></div></div>'
    +'<div class="bz-hint" id="bz_today"></div>'
+   +zoneHtml()
+   +'<details id="bz_tiers_det"'+((B.tiersOpen==null?!c.zone.on:B.tiersOpen)?' open':'')+'><summary class="bz-tsum"><b>📏 Tramos, aeropuerto y festivos</b><br><small id="bz_tiers_sum"></small></summary>'
    +'<div class="bz-seg"><button type="button" id="bz_tab_wd" class="'+(B.prof==='wd'?'on':'')+'" onclick="boltTab(\'wd\')">Lunes a viernes</button><button type="button" id="bz_tab_we" class="'+(B.prof==='we'?'on':'')+'" onclick="boltTab(\'we\')">Sáb., dom. y festivos</button></div>'
    +'<div class="bz-hint">Los tramos van seguidos y son los que tú quieras (de 1 a '+MAXT+'): usa «Dividir en dos» para meter un tramo en medio y «Quitar este tramo» para borrarlo. El límite de arriba de cada tramo pertenece a ese tramo (con límites en 5 y 10, un viaje de exactamente 10 km es del tramo 2). Al cambiar el «Hasta» de uno cambia el «Desde» del siguiente.</div>'
    +profHtml(B.prof)
    +'<div class="bz-sec"><b>Festivos (usan el perfil de fin de semana)</b><small>Fechas MM-DD (cada año) o AAAA-MM-DD, separadas por comas. Semana Santa y otros que cambian cada año, añádelos con el año.</small>'
    +'<textarea id="bz_hol" rows="3" data-p="holidays" oninput="boltIn(this)">'+esc((c.holidays||[]).join(', '))+'</textarea></div>'
+   +'</details>'
    +simHtml()
    +'<div class="bz-sec"><b>🔊 Aviso por voz</b><div class="bz-row"><div><b>Leer en voz alta la estimación</b><br><small>«Bolt. Viaje de 8,3 kilómetros y 10 minutos. Bruto estimado… Neto estimado…»</small></div><input type="checkbox" id="bz_voice" onchange="boltIn(this)" data-p="#voice"'+(B.voice?' checked':'')+' style="width:26px;height:26px;flex:none"></div>'
    +'<label class="bz-f"><span>Volumen de la voz</span><input type="range" id="bz_vol" min="0.1" max="1" step="0.1" value="'+B.vol+'" data-p="#vol" oninput="boltIn(this)"></label></div>'
@@ -3867,12 +4032,15 @@ function render(){
   const box=document.getElementById('boltBox');if(!box)return;
   box.innerHTML='<details id="bz_det"'+(B.open?' open':'')+'><summary><b>💶 Estimación del precio de Bolt</b> <span class="bz-badge">NUEVO</span><br><small id="bz_sum"></small></summary><div id="bz_body">'+bodyHtml()+'</div></details>';
   const d=document.getElementById('bz_det');d.addEventListener('toggle',()=>{B.open=d.open});
-  refreshDerived();
+  afterBody();
 }
-function reloadBody(){errors.clear();const b=document.getElementById('bz_body');if(b)b.innerHTML=bodyHtml();refreshDerived()}
+function afterBody(){const t=document.getElementById('bz_tiers_det');if(t&&!t._z){t._z=1;t.addEventListener('toggle',()=>{B.tiersOpen=t.open})}refreshDerived()}
+function reloadBody(){errors.clear();const b=document.getElementById('bz_body');if(b)b.innerHTML=bodyHtml();afterBody()}
 function refreshDerived(){
   const c=B.cfg,e=document.getElementById('bz_sum');
-  if(e)e.textContent=(c.on?'Activada':'Desactivada')+' · comisión '+show(c.comm)+' % · hoy: '+(B.weekendNow?'fin de semana / festivo':'entre semana');
+  if(e)e.textContent=(c.on?'Activada':'Desactivada')+' · '+(c.zone.on?'tarifa por zona (GPS)':'tarifa por tramos')+' · comisión '+show(c.comm)+' %'+(c.zone.on?'':' · hoy: '+(B.weekendNow?'fin de semana / festivo':'entre semana'));
+  const ts=document.getElementById('bz_tiers_sum');if(ts)ts.textContent=c.zone.on?'Con la tarifa por zona activada los tramos no se usan; el aeropuerto sí.':'Ahora se usan estos tramos.';
+  const zb=document.getElementById('bz_zone');if(zb)zb.classList.toggle('bz-off',!c.zone.on);
   const t=document.getElementById('bz_today');
   if(t)t.textContent='Hoy se usaría el perfil de '+(B.weekendNow?'sábados, domingos y festivos':'lunes a viernes')+'.';
   for(const pk of ['wd','we'])if(document.getElementById('bz_prof_'+pk)){const n=c[pk].t.length;for(let i=0;i<n;i++){
@@ -3891,7 +4059,7 @@ window.boltIn=function(el){
   const p=el.getAttribute('data-p');if(p==null)return;
   if(p==='#voice'){B.voice=el.checked;return}
   if(p==='#vol'){B.vol=num(el.value)||1;return}
-  if(el.type==='checkbox'){setPath(B.cfg,p,el.checked);if(p==='on')refreshDerived();else boltSim();return}
+  if(el.type==='checkbox'){setPath(B.cfg,p,el.checked);if(p==='on'||p==='zone.on')refreshDerived();else boltSim();return}
   if(p==='mode'){B.cfg.mode=el.value;B.weekendNow=isWeekend(B.cfg,new Date());refreshDerived();return}
   if(/\.mode$/.test(p)){setPath(B.cfg,p,el.value==='B'?'B':'A');boltSim();return}
   if(p==='holidays'){
@@ -3902,7 +4070,8 @@ window.boltIn=function(el){
   }
   const v=num(el.value);
   const key=p.split('.').pop();
-  const lim=/\.bp\./.test(p)?LIM.bp:/\.air\./.test(p)?LIMAIR[key]:key==='comm'?LIM.comm:key==='minFare'?LIM.minFare:LIM[key];
+  const isZ=/^zone\./.test(p);
+  const lim=isZ?LIMZ[key]:/\.bp\./.test(p)?LIM.bp:/\.air\./.test(p)?LIMAIR[key]:key==='comm'?LIM.comm:key==='minFare'?LIM.minFare:LIM[key];
   let okv=Number.isFinite(v)&&(!lim||(v>=lim[0]&&v<=lim[1]));
   if(okv&&/\.bp\./.test(p)){            // los límites tienen que ir creciendo
     const [pk,,ix]=p.split('.'),arr=B.cfg[pk].bp.slice();arr[Number(ix)]=v;
@@ -3911,6 +4080,7 @@ window.boltIn=function(el){
   bad(el,!okv);okv?errors.delete(el.id):errors.add(el.id);
   if(!okv)return;
   setPath(B.cfg,p,v);
+  if(isZ){zoneCheck();boltSim();return}
   if(/\.bp\./.test(p)){                 // el «Hasta» de un tramo y el «Desde» del siguiente son el mismo límite
     const [pk,,ix]=p.split('.'),i=Number(ix);
     for(const id of ['bz_'+pk+'_'+i+'_hi','bz_'+pk+'_'+(i+1)+'_lo']){const o=document.getElementById(id);if(o&&o!==el){o.value=show(v);bad(o,false);errors.delete(o.id)}}
@@ -3943,37 +4113,215 @@ window.boltSim=function(){
   B.sim.km=Number.isFinite(km)?km:B.sim.km;B.sim.min=Number.isFinite(min)?min:B.sim.min;
   const e0=document.getElementById('bz_sMult');B.sim.mult=e0?e0.value:'';
   if(!(km>=0)||!(min>=0)){out.innerHTML='<span class="bz-warn">Escribe los km y los minutos del viaje con pasajero.</span>';return}
+  const sg=document.getElementById('bz_sGood');if(sg)B.sim.zone=sg.value;
   const wk=B.sim.prof==='we'?true:B.sim.prof==='wd'?false:B.weekendNow;
-  const e=estimate(B.cfg,wk,km,min,Number.isFinite(om)&&om>0?om:-1,B.sim.kind);
+  const omv=Number.isFinite(om)&&om>0?om:-1,gz=B.sim.zone==='1';
+  const e=estimate(B.cfg,wk,km,min,omv,B.sim.kind,gz);
   const pr=wk?B.cfg.we:B.cfg.wd;
-  const tramo=e.airport==='pickup'?'Tarifa de aeropuerto proporcional a los km (referencia '+show(e.hi)+' km, sin minutos)':(e.airport==='dest'?'Hacia el aeropuerto · ':'')+'Tramo '+e.tier+' ('+rangeTxt(pr,e.tier-1)+')';
+  const tramo=e.zone>0?zoneLine(e)+' · '+zoneDemand(e,omv,pr):e.airport==='pickup'?'Tarifa de aeropuerto proporcional a los km (referencia '+show(e.hi)+' km, sin minutos)':(e.airport==='dest'?'Hacia el aeropuerto · ':'')+'Tramo '+e.tier+' ('+rangeTxt(pr,e.tier-1)+')';
   out.innerHTML='<div class="bz-big"><span>NETO ESTIMADO</span><b id="bz_sNet">'+money(e.net)+' €</b></div>'
    +'<div class="bz-line">Bruto estimado: <b id="bz_sGross">'+money(e.gross)+' €</b>'+(e.minApplied?' (tarifa mínima)':'')+(e.fee>0?' − Tasa del aeropuerto: <b id="bz_sFee">'+money(e.fee)+' €</b> = <b id="bz_sAfter">'+money(Math.max(0,e.gross-e.fee))+' €</b> (la tasa se resta antes de la comisión)':'')+' · Comisión ('+show(B.cfg.comm)+' %): <b id="bz_sComm">'+money(e.comm)+' €</b></div>'
-   +'<div class="bz-line">Perfil: '+(wk?'fin de semana / festivo':'entre semana')+' · '+tramo+' · Demanda ×'+spoken(e.mult,2)+(e.fromOffer?' (de la oferta)':'')+(e.mode?' · Modo '+e.mode:'')+'</div>'
+   +'<div class="bz-line">'+(e.zone>0?'':'Perfil: '+(wk?'fin de semana / festivo':'entre semana')+' · ')+tramo+(e.zone>0?'':' · Demanda ×'+spoken(e.mult,2)+(e.fromOffer?' (de la oferta)':'')+(e.mode?' · Modo '+e.mode:''))+'</div>'
    +'<div class="bz-line bz-voice">🔊 «'+esc(voiceText(e,km,min))+'»</div>';
 };
 window.boltSave=async function(silent){
   const err=document.getElementById('bz_err');
+  zoneCheck();
   if(errors.size){if(err)err.textContent='Revisa los campos marcados en rojo: hay valores fuera de rango o límites que no van creciendo.';if(!silent)alert('Revisa los campos marcados en rojo.');return false}
   if(!['wd','we'].every(k=>{const pr=B.cfg[k];return pr.t.length>=1&&pr.t.length<=MAXT&&pr.bp.length===pr.t.length-1&&bpOk(pr.bp)})){if(err)err.textContent='Los límites de los tramos tienen que ir de menor a mayor.';return false}
   if(err)err.textContent='';
   let fixed=false;
   try{fixed=await persist()}catch(e){alert('No se pudo guardar la estimación de Bolt.');return false}
-  if(fixed){const b=document.getElementById('bz_body');if(b)b.innerHTML=bodyHtml();refreshDerived();alert('Algún valor no era válido y se ha corregido. Revísalo antes de seguir.');return true}
+  if(fixed){const b=document.getElementById('bz_body');if(b)b.innerHTML=bodyHtml();afterBody();alert('Algún valor no era válido y se ha corregido. Revísalo antes de seguir.');return true}
   refreshDerived();
   if(!silent&&P.toastOk)P.toastOk('✅ Estimación de Bolt guardada');
   return true;
 };
 window.boltReset=function(which){
   const d=defaults();
-  if(!confirm(which==='all'?'¿Volver a los valores iniciales de TODA la estimación de Bolt (los dos perfiles, comisión y festivos)?':'¿Volver a los valores iniciales de este perfil?\n\nNo se guarda hasta que pulses «Guardar».'))return;
-  if(which==='all'){B.cfg=d}else B.cfg[B.prof]=d[B.prof];
-  reloadBody();B.weekendNow=isWeekend(B.cfg,new Date());refreshDerived();
+  const msg=which==='all'?'¿Volver a los valores iniciales de TODA la estimación de Bolt (tarifa por zona y zonas, los dos perfiles, comisión y festivos)?':which==='zone'?'¿Volver a los valores iniciales de la tarifa por zona (tarifa, ajustes, demanda y zonas buenas)?\n\nNo se guarda hasta que pulses «Guardar».':which==='areas'?'¿Volver a las zonas buenas iniciales?\n\nSe perderán las que hayas cambiado o dibujado. No se guarda hasta que pulses «Guardar».':'¿Volver a los valores iniciales de este perfil?\n\nNo se guarda hasta que pulses «Guardar».';
+  if(!confirm(msg))return;
+  if(which==='all'){B.cfg=d}else if(which==='zone'){B.cfg.zone=d.zone}else if(which==='areas'){B.cfg.zone.good=d.zone.good;if(P.zmap)P.zmap.sel=-1}else B.cfg[B.prof]=d[B.prof];
+  reloadBody();B.weekendNow=isWeekend(B.cfg,new Date());refreshDerived();if(P.zmap&&P.zmap.open)P.zmap.redraw();
 };
 window.boltTestVoice=async function(){
   const ok=await window.boltSave(true);if(ok===false)return;
   const sr=SR();if(!sr){alert('Esta prueba solo funciona en el móvil, con la app instalada.');return}
   try{await sr.testBolt();if(P.toastOk)P.toastOk('Mira y escucha el aviso 👆')}catch(e){alert('Activa primero el lector de pantalla (Accesibilidad).')}
+};
+
+/* ---------- mapa para marcar las zonas buenas ----------
+   Mapa propio y sencillo (sin librerías): arrastras para moverte, ＋/－ o pellizcar para acercar, tocas una zona para editarla y
+   la «cruz» del centro marca dónde se añade una zona nueva. Las IMÁGENES del mapa se descargan de internet (OpenStreetMap, y si no
+   responde CARTO o Esri); sin internet se ven igualmente las zonas sobre un fondo liso y se pueden editar. */
+const TILE_SRC=[
+  {n:'OpenStreetMap',u:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',a:'© OpenStreetMap'},
+  {n:'CARTO',u:'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',a:'© OpenStreetMap · © CARTO'},
+  {n:'Esri',u:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',a:'© Esri'}];
+const TS=256,ZMIN=8,ZMAX=18;
+const M={open:false,lat:40.4168,lon:-3.7038,z:11,w:0,h:0,sel:-1,me:null,src:0,ok:0,err:0,tiles:new Map(),el:null,gone:false};
+P.zmap=M;
+const wx=(lon,z)=>(lon+180)/360*TS*Math.pow(2,z);
+const wy=(lat,z)=>{const s=Math.sin(Math.max(-85.0511,Math.min(85.0511,lat))*Math.PI/180);return (0.5-Math.log((1+s)/(1-s))/(4*Math.PI))*TS*Math.pow(2,z)};
+const lonAt=(x,z)=>x/(TS*Math.pow(2,z))*360-180;
+const latAt=(y,z)=>{const n=Math.PI-2*Math.PI*y/(TS*Math.pow(2,z));return 180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n)))};
+const mpp=(lat,z)=>156543.03392*Math.cos(lat*Math.PI/180)/Math.pow(2,z);
+M.toScreen=(lat,lon)=>({x:wx(lon,M.z)-wx(M.lon,M.z)+M.w/2,y:wy(lat,M.z)-wy(M.lat,M.z)+M.h/2});
+M.fromScreen=(x,y)=>({lat:latAt(wy(M.lat,M.z)+(y-M.h/2),M.z),lon:lonAt(wx(M.lon,M.z)+(x-M.w/2),M.z)});
+function mapDrawTiles(){
+  const host=M.el.tiles,n=Math.pow(2,M.z),cx=wx(M.lon,M.z),cy=wy(M.lat,M.z);
+  const x0=Math.floor((cx-M.w/2)/TS),x1=Math.floor((cx+M.w/2)/TS),y0=Math.max(0,Math.floor((cy-M.h/2)/TS)),y1=Math.min(n-1,Math.floor((cy+M.h/2)/TS));
+  const keep=new Set();
+  for(let ty=y0;ty<=y1;ty++)for(let tx=x0;tx<=x1;tx++){
+    const wxm=((tx%n)+n)%n,key=M.src+'/'+M.z+'/'+tx+'/'+ty;keep.add(key);
+    let img=M.tiles.get(key);
+    if(!img){
+      img=new Image();img.className='zm-tile';img.alt='';img.draggable=false;const sIdx=M.src;
+      img.onload=()=>{if(sIdx!==M.src)return;M.ok++;mapInfo()};
+      img.onerror=()=>{img.remove();if(M.tiles.get(key)===img)M.tiles.delete(key);if(sIdx!==M.src)return;M.err++;mapTileFail()};
+      img.src=TILE_SRC[M.src].u.replace('{z}',M.z).replace('{x}',wxm).replace('{y}',ty);
+      host.appendChild(img);M.tiles.set(key,img);
+    }
+    img.style.transform='translate('+Math.round(tx*TS-cx+M.w/2)+'px,'+Math.round(ty*TS-cy+M.h/2)+'px)';
+  }
+  for(const [k,img] of Array.from(M.tiles))if(!keep.has(k)){img.remove();M.tiles.delete(k)}
+}
+function mapTileFail(){
+  if(M.ok===0&&M.err>=6){
+    if(M.src<TILE_SRC.length-1){M.src++;M.err=0;for(const i of M.tiles.values())i.remove();M.tiles.clear();mapDrawTiles()}
+    else if(!M.gone){M.gone=true;mapInfo()}
+  }
+}
+function mapInfo(){
+  if(!M.el)return;
+  const g=B.cfg.zone.good.length;
+  const a=M.el.attr;if(a)a.textContent=M.gone?'Sin imágenes de mapa (¿sin internet?)':TILE_SRC[M.src].a;
+  const m=M.el.msg;if(m){if(M.gone){m.style.display='block';m.textContent='No se pueden cargar las imágenes del mapa (sin internet o el servidor no responde). Puedes seguir marcando y editando zonas: se ven como círculos sobre fondo liso.'}else m.style.display='none'}
+  const i=M.el.info;if(i)i.textContent=g+(g===1?' zona':' zonas')+' · zoom '+M.z;
+}
+function mapDrawSvg(){
+  const g=B.cfg.zone.good;let h='';
+  g.forEach((a,i)=>{
+    const p=M.toScreen(a.lat,a.lon),r=Math.max(3,a.r*1000/mpp(a.lat,M.z)),sel=i===M.sel;
+    h+='<circle class="zm-c'+(sel?' sel':'')+'" data-i="'+i+'" cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="'+r.toFixed(1)+'"/>';
+    h+='<text class="zm-t" x="'+p.x.toFixed(1)+'" y="'+(p.y+4).toFixed(1)+'">'+esc(a.n||'(sin nombre)')+'</text>';
+  });
+  const s=g[M.sel];if(s){const p=M.toScreen(s.lat,s.lon);h+='<circle class="zm-h" cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="11"/>'}
+  if(M.me){const p=M.toScreen(M.me.lat,M.me.lon);if(M.me.acc>0)h+='<circle class="zm-ma" cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="'+Math.max(6,M.me.acc/mpp(M.me.lat,M.z)).toFixed(1)+'"/>';h+='<circle class="zm-me" cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="7"/>'}
+  M.el.svg.innerHTML=h;
+}
+M.redraw=function(){if(!M.open||!M.el)return;mapDrawTiles();mapDrawSvg();mapInfo()};
+M.zoom=function(dz,fx,fy){
+  const nz=Math.max(ZMIN,Math.min(ZMAX,M.z+dz));if(nz===M.z)return;
+  const px=fx==null?M.w/2:fx,py=fy==null?M.h/2:fy,f=M.fromScreen(px,py);
+  M.z=nz;M.lon=lonAt(wx(f.lon,nz)-(px-M.w/2),nz);M.lat=latAt(wy(f.lat,nz)-(py-M.h/2),nz);
+  for(const i of M.tiles.values())i.remove();M.tiles.clear();M.redraw();
+};
+M.fit=function(){
+  const g=B.cfg.zone.good;
+  if(!g.length){M.lat=40.4168;M.lon=-3.7038;M.z=11;return}
+  let s=90,n=-90,w=180,e=-180;
+  for(const a of g){const dl=a.r/111.19,dn=a.r/(111.19*Math.max(0.1,Math.cos(a.lat*Math.PI/180)));s=Math.min(s,a.lat-dl);n=Math.max(n,a.lat+dl);w=Math.min(w,a.lon-dn);e=Math.max(e,a.lon+dn)}
+  M.lat=(s+n)/2;M.lon=(w+e)/2;
+  for(let z=16;z>=ZMIN;z--){const W=wx(e,z)-wx(w,z),H=wy(s,z)-wy(n,z);if(W<=M.w*0.9&&H<=M.h*0.9){M.z=z;return}}
+  M.z=ZMIN;
+};
+M.select=function(i){M.sel=i;mapPanel();M.redraw()};
+M.panel=function(){if(M.open&&M.el)mapPanel()};
+function mapPanel(){
+  const b=M.el.bot,g=B.cfg.zone.good,a=g[M.sel];
+  if(a){
+    b.innerHTML='<div class="zm-row"><input id="zm_name" type="text" maxlength="40" placeholder="Nombre de la zona" value="'+esc(a.n)+'"><button type="button" id="zm_del" aria-label="Borrar la zona">🗑 Borrar</button></div>'
+     +'<div class="zm-row"><label for="zm_r">Radio: <b id="zm_rv">'+show(a.r)+' km</b></label><input id="zm_r" type="range" min="0.3" max="10" step="0.1" value="'+Math.min(10,Math.max(0.3,a.r))+'"></div>'
+     +'<div class="zm-row"><button type="button" id="zm_mv">⌖ Mover la zona a la cruz</button><button type="button" id="zm_add">➕ Añadir otra aquí</button><button type="button" id="zm_me">📍 Mi ubicación</button></div>'
+     +'<div class="zm-help">Arrastra el punto blanco para mover la zona. Toca un sitio vacío para dejar de editarla.</div>';
+    const nm=M.el.bot.querySelector('#zm_name');nm.oninput=()=>{a.n=areaName(nm.value);M.redraw();const l=document.getElementById('bz_z_a'+M.sel+'_n');if(l)l.value=a.n};
+    const rg=M.el.bot.querySelector('#zm_r');rg.oninput=()=>{a.r=Math.round(Number(rg.value)*10)/10;M.el.bot.querySelector('#zm_rv').textContent=show(a.r)+' km';M.redraw();const l=document.getElementById('bz_z_a'+M.sel+'_r');if(l)l.value=show(a.r)};
+    M.el.bot.querySelector('#zm_del').onclick=()=>{const i=M.sel;window.boltAreaDel(i)};
+    M.el.bot.querySelector('#zm_mv').onclick=()=>{const c=M.fromScreen(M.w/2,M.h/2);a.lat=Math.round(c.lat*1e6)/1e6;a.lon=Math.round(c.lon*1e6)/1e6;M.redraw();syncList()};
+    M.el.bot.querySelector('#zm_add').onclick=mapAdd;
+    M.el.bot.querySelector('#zm_me').onclick=mapLocate;
+  }else{
+    b.innerHTML='<div class="zm-row"><button type="button" id="zm_add">➕ Añadir zona aquí (en la cruz)</button><button type="button" id="zm_me">📍 Mi ubicación</button></div>'
+     +'<div class="zm-help">Mueve el mapa hasta poner la <b>cruz</b> en el sitio y pulsa «Añadir zona aquí». Toca una zona para cambiar su nombre, su radio o borrarla. Las zonas buenas usan la tarifa de fuera de zona buena.</div>';
+    M.el.bot.querySelector('#zm_add').onclick=mapAdd;
+    M.el.bot.querySelector('#zm_me').onclick=mapLocate;
+  }
+}
+function syncList(){const g=B.cfg.zone.good;g.forEach((a,i)=>{for(const f of ['lat','lon','r']){const e=document.getElementById('bz_z_a'+i+'_'+f);if(e&&document.activeElement!==e)e.value=show(a[f])}})}
+function mapAdd(){
+  const c=M.fromScreen(M.w/2,M.h/2),i=addArea(c.lat,c.lon,3);
+  if(i>=0){M.sel=i;mapPanel();M.redraw()}
+}
+async function mapLocate(){
+  const msg=M.el.msg;
+  const pos=await myPos();
+  if(!M.open)return;
+  if(pos.err){msg.style.display='block';msg.textContent='No se pudo obtener tu ubicación ('+pos.err+'). Comprueba el permiso de ubicación.';return}
+  M.me={lat:pos.lat,lon:pos.lon,acc:pos.acc};M.lat=pos.lat;M.lon=pos.lon;if(M.z<13){M.z=13;for(const i of M.tiles.values())i.remove();M.tiles.clear()}
+  M.redraw();
+}
+function mapPointer(){
+  const el=M.el.map,ptrs=new Map();let pan=null,pinch=null,moved=false,t0=0,drag=false;
+  const pos=e=>{const r=el.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top}};
+  const dist=()=>{const a=Array.from(ptrs.values());return Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)};
+  const mid=()=>{const a=Array.from(ptrs.values());return {x:(a[0].x+a[1].x)/2,y:(a[0].y+a[1].y)/2}};
+  el.addEventListener('pointerdown',e=>{
+    try{el.setPointerCapture(e.pointerId)}catch(x){}
+    ptrs.set(e.pointerId,pos(e));
+    if(ptrs.size===1){
+      const p=ptrs.get(e.pointerId);pan={x:p.x,y:p.y,lat:M.lat,lon:M.lon};moved=false;t0=Date.now();drag=false;
+      const s=B.cfg.zone.good[M.sel];if(s){const q=M.toScreen(s.lat,s.lon);drag=Math.hypot(q.x-p.x,q.y-p.y)<24}
+    }else if(ptrs.size===2){pinch={d:dist()};pan=null;drag=false;moved=true}
+  });
+  el.addEventListener('pointermove',e=>{
+    if(!ptrs.has(e.pointerId))return;ptrs.set(e.pointerId,pos(e));
+    if(ptrs.size===2&&pinch){const d=dist(),r=d/pinch.d,m=mid();if(r>1.6){M.zoom(1,m.x,m.y);pinch.d=d}else if(r<0.62){M.zoom(-1,m.x,m.y);pinch.d=d}return}
+    if(!pan)return;const p=ptrs.get(e.pointerId),dx=p.x-pan.x,dy=p.y-pan.y;
+    if(!moved&&Math.hypot(dx,dy)>6)moved=true;
+    if(!moved)return;
+    if(drag){const s=B.cfg.zone.good[M.sel];if(s){const c=M.fromScreen(p.x,p.y);s.lat=Math.round(c.lat*1e6)/1e6;s.lon=Math.round(c.lon*1e6)/1e6;syncList()}}
+    else{const nlon=lonAt(wx(pan.lon,M.z)-dx,M.z),nlat=latAt(wy(pan.lat,M.z)-dy,M.z);M.lon=nlon;M.lat=Math.max(-84,Math.min(84,nlat))}
+    M.redraw();
+  });
+  const up=e=>{
+    if(!ptrs.has(e.pointerId))return;
+    const p=ptrs.get(e.pointerId);
+    if(ptrs.size===1&&!moved&&Date.now()-t0<700&&e.type==='pointerup')mapTap(p.x,p.y);
+    ptrs.delete(e.pointerId);if(ptrs.size<2)pinch=null;if(ptrs.size===0){pan=null;drag=false}
+  };
+  el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
+  el.addEventListener('wheel',e=>{e.preventDefault();const p=pos(e);M.zoom(e.deltaY<0?1:-1,p.x,p.y)},{passive:false});
+}
+function mapTap(x,y){
+  const c=M.fromScreen(x,y),g=B.cfg.zone.good;let best=-1,bd=1e9;
+  g.forEach((a,i)=>{const d=distKm(c.lat,c.lon,a.lat,a.lon);if(d<=a.r&&d<bd){bd=d;best=i}});
+  M.select(best);
+}
+function mapResize(){if(!M.open||!M.el)return;const r=M.el.map.getBoundingClientRect();M.w=Math.round(r.width);M.h=Math.round(r.height);M.redraw()}
+M.close=function(){
+  if(!M.open)return;
+  M.open=false;window.removeEventListener('resize',mapResize);
+  const o=document.getElementById('zmap');if(o)o.remove();
+  for(const i of M.tiles.values())i.remove();M.tiles.clear();M.el=null;
+  renderAreas();
+};
+window.boltMap=function(){
+  if(M.open)return;
+  try{
+    const o=document.createElement('div');o.id='zmap';o.className='zm';o.setAttribute('role','dialog');o.setAttribute('aria-label','Mapa de zonas buenas');
+    o.innerHTML='<div class="zm-top"><b>🗺 Zonas buenas</b><span class="zm-info" id="zm_info"></span><span class="zm-sp"></span><button type="button" id="zm_in" aria-label="Acercar">＋</button><button type="button" id="zm_out" aria-label="Alejar">－</button><button type="button" class="zm-done" id="zm_done">✔ Listo</button></div>'
+     +'<div class="zm-map" id="zm_map"><div class="zm-tiles" id="zm_tiles"></div><svg class="zm-svg" id="zm_svg" xmlns="http://www.w3.org/2000/svg"></svg><div class="zm-cross"></div><div class="zm-msg" id="zm_msg"></div><div class="zm-attr" id="zm_attr"></div></div>'
+     +'<div class="zm-bot" id="zm_bot"></div>';
+    document.body.appendChild(o);
+    M.el={root:o,map:o.querySelector('#zm_map'),tiles:o.querySelector('#zm_tiles'),svg:o.querySelector('#zm_svg'),msg:o.querySelector('#zm_msg'),attr:o.querySelector('#zm_attr'),bot:o.querySelector('#zm_bot'),info:o.querySelector('#zm_info')};
+    M.open=true;M.sel=-1;M.me=null;M.ok=0;M.err=0;M.gone=false;M.src=0;
+    const r=M.el.map.getBoundingClientRect();M.w=Math.round(r.width)||360;M.h=Math.round(r.height)||400;
+    M.fit();
+    o.querySelector('#zm_in').onclick=()=>M.zoom(1);o.querySelector('#zm_out').onclick=()=>M.zoom(-1);o.querySelector('#zm_done').onclick=()=>M.close();
+    mapPointer();mapPanel();M.redraw();
+    window.addEventListener('resize',mapResize);
+  }catch(e){console.warn('mapa de zonas',e);M.open=false;const o=document.getElementById('zmap');if(o)o.remove();alert('No se pudo abrir el mapa. Puedes editar las zonas en la lista.')}
 };
 
 /* ---------- se integra en «Rentabilidad de viajes» ---------- */
@@ -4006,13 +4354,15 @@ if(typeof _rs==='function')window.rentSave=async function(){
 try{
   const e=jEntry('rentabilidad');
   if(e)e[4]='Es un aviso que salta arriba cuando te llega una oferta de Bolt, Uber o Cabify. Cada dato (€/hora, €/km y distancia de recogida) sale con su color: verde si cumple tu objetivo, naranja si se queda un poco corto y rojo si está lejos. Arriba del todo: ACEPTAR si todo está bien, RECHAZAR si algo está muy mal, y A VALORAR si está justo. Se activa en Ajustes → Rentabilidad de viajes. La oferta de Bolt no muestra el precio: la app lo ESTIMA con tus tarifas (tramos según los km del viaje con pasajero, los que tú quieras añadir o quitar, con un perfil para entre semana y otro para sábados, domingos y festivos; y un tramo propio para las recogidas en el aeropuerto, con la tasa restada antes de la comisión) y te dice bruto, comisión y NETO estimados, en pantalla y por voz. Son estimaciones tuyas, no tarifas oficiales de Bolt: los valores se corrigen en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt. En Uber la app lee una captura de la pantalla (dentro del móvil, sin guardarla). Solo avisa: no pulsa nada por ti.';
+  J_KB.push(['boltzonas','📍','Tarifa por zona de Bolt','zona buena^8,zonas buenas^8,tarifa por zona^8,gps bolt^6,mapa zonas^8,marcar zonas^7,zona bolt^6,descuento bolt^5,8 por ciento^4,m30 bolt^5,sur bolt^4,demanda desde 1,4^6,ubicacion bolt^5,probar ubicacion^6,radio zona^5','La tarifa por zona estima el precio de Bolt con UNA sola tarifa (por defecto 2,10 € de inicio + 0,77 €/km + 0,15 €/min, mínimo 6,75 €) y la corrige según dónde estés (la app mira la ubicación del móvil). Fuera de zona buena (M30, sur…): sin demanda o con menos de ×1,2 → tarifa −8 %; de ×1,2 a ×1,3 → tarifa real; desde ×1,4 → tarifa × demanda, y desde ×1,5 sube un 5 %, desde ×2 un 8 % y desde ×2,5 un 10 % (cada escalón sustituye al anterior). En zona buena → tarifa +12 % × la demanda tal como salga. Las zonas buenas son círculos (centro y radio): se marcan en el mapa (🗺 Mapa de zonas: mueve el mapa, pon la cruz en el sitio y pulsa «Añadir zona aquí»; toca una zona para cambiar nombre, radio o borrarla; arrastra el punto blanco para moverla) o en la lista de más abajo, con latitud, longitud y radio. «Probar ubicación» dice dónde cree la app que estás y qué ve el lector de pantalla. Si el móvil no da la ubicación (sin permiso o sin datos recientes) se usa la tarifa de fuera de zona buena y el aviso lo dice. Las imágenes del mapa necesitan internet; sin internet las zonas se ven igual sobre un fondo liso. Todos los valores y zonas se pueden cambiar en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt. Son estimaciones, no tarifas oficiales de Bolt.']);
   J_KB.push(['boltestimacion','💶','Precio estimado de Bolt','aeropuerto bolt^6,tasa aeropuerto^6,tramo aeropuerto^7,añadir tramo^6,quitar tramo^6,precio bolt^6,estimar bolt^7,estimacion bolt^7,neto bolt^6,neto estimado^7,bolt no muestra el precio^8,tramos bolt^6,tarifa bolt^5,comision bolt^5,bruto estimado^6,voz bolt^5,multiplicador^5,demanda^4,fin de semana bolt^5','Bolt no enseña el precio en la oferta, así que la app lo estima: según los km del viaje con pasajero elige uno de tus tramos (al principio 4: hasta 5, hasta 10, hasta 15 y más de 15 km; puedes dividir un tramo en dos o quitar uno, hasta 8), con un perfil para lunes a viernes y otro para sábados, domingos y festivos. Calcula bruto = base + km × precio/km + minutos × precio/min (con el multiplicador de demanda si lo hay), le quita la comisión (25 % al principio) y te da el NETO estimado, en pantalla y por voz. Las recogidas en el aeropuerto (parking P1 de la T1, parking express T2, parking módulo D de la T4…) tienen su propia tarifa, proporcional a los km: bruto = 15,90 € × (km del viaje ÷ 11) × demanda, con 15,90 € como mínimo y sin contar minutos (la demanda multiplica el total). En cualquier viaje del aeropuerto (también hacia «Terminal 1–4», «Aeropuerto» o «Avenida de la Hispanidad») se resta SIEMPRE primero la tasa de 2,57 € (el precio de Bolt ya la incluye, así que se quita una sola vez) y sobre lo que queda se aplica la comisión. Por ejemplo, 13 km sin demanda y comisión del 25 %: bruto 18,79 € − tasa 2,57 € = 16,22 €, comisión 4,06 €, neto 12,17 €. Son estimaciones, no tarifas oficiales: todos los valores se cambian en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt, donde también hay un simulador para contrastarlas con viajes reales.']);
 }catch(e){}
 // al abrir: si el teléfono perdió los ajustes de Bolt y la cuenta los tiene, se recuperan; y la cuenta guarda una copia
 setTimeout(async()=>{
   try{
     const sr=SR();if(!sr)return;
-    await load();
+    const before=snap(),fresh=await load(true);
+    if(fresh&&snap()!==before){const b=document.getElementById('bz_body');if(b&&!errors.size){b.innerHTML=bodyHtml();afterBody()}}
     if(B.saved&&db&&db.settings&&!db.settings.boltCfg){mirrorToDb(JSON.stringify(B.cfg));P.saveNow()}
   }catch(e){}
 },1500);
@@ -4460,6 +4810,49 @@ html.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite *::after{box-shadow:n
 html.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite .header img,
 html.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite .navbtn.active{filter:none!important}
 html.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite .header::before{display:none!important}
+
+/* ---- v3.15f · tarifa por zona y mapa de zonas ---- */
+#boltBox .bz-sub{display:block;margin:12px 0 2px;color:#cfe3f5}
+#boltBox .bz-zone{border-top:2px solid #22c55e66}
+#boltBox .bz-zone.bz-off>.bz-g,#boltBox .bz-zone.bz-off>.bz-hint,#boltBox .bz-zone.bz-off #bz_z_list{opacity:.5}
+#boltBox .bz-ar{margin:8px 0;padding:8px;border:1px solid #ffffff2a;border-radius:14px;background:#ffffff0a}
+#boltBox .bz-ar input.bz-an{width:100%;box-sizing:border-box;padding:9px 10px;border-radius:12px;font-size:15px;margin-bottom:6px}
+#boltBox .bz-ac{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1.5fr) minmax(0,.9fr) auto;gap:6px;align-items:end}
+#boltBox .bz-ac label{display:flex;flex-direction:column;gap:2px;min-width:0}
+#boltBox .bz-ac label span{font-size:11px;font-weight:700;color:#cfe3f5}
+#boltBox .bz-ac input{width:100%;box-sizing:border-box;padding:8px 6px;border-radius:10px;font-size:14px}
+#boltBox .bz-ac .bz-adel{padding:8px 10px;border-radius:10px;font-size:16px}
+#boltBox .bz-zb{display:grid;grid-template-columns:1fr;gap:8px;margin:10px 0}
+#boltBox .bz-zb button{width:100%}
+#boltBox .bz-zb button.secondary{padding:12px 14px;border-radius:14px;border:1px solid #ffffff33;background:#ffffff12;color:inherit;font-size:15px;font-weight:700;line-height:1.25}
+#boltBox .bz-tsum{cursor:pointer;margin:12px 0 4px}
+#boltBox .bz-tsum small{color:#9fb4c8;font-weight:500}
+#boltBox #bz_tiers_det{margin:14px 0;border-top:1px solid #ffffff22;padding-top:6px}
+@media (min-width:600px){#boltBox .bz-zb{grid-template-columns:1fr 1fr}}
+.zm{position:fixed;left:0;top:0;right:0;bottom:0;z-index:100000;background:#06121f;color:#e6f0fa;display:flex;flex-direction:column;font-family:inherit}
+.zm-top{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 8px) 10px 8px;background:#0a1f33;border-bottom:1px solid #1e9dff55}
+.zm-top button,.zm-bot button{border:1px solid #ffffff33;background:#ffffff14;color:#fff;border-radius:12px;padding:9px 12px;font-weight:800;font-size:14px}
+.zm-top button.zm-done{background:#16a34a;border-color:#22c55e}
+.zm-sp{flex:1}
+.zm-info{font-size:11px;color:#9fb4c8}
+.zm-map{position:relative;flex:1;min-height:200px;overflow:hidden;touch-action:none;background:#d6dde2;-webkit-user-select:none;user-select:none;cursor:grab}
+.zm-tiles{position:absolute;left:0;top:0;right:0;bottom:0}
+.zm-tile{position:absolute;left:0;top:0;width:256px;height:256px;max-width:none;pointer-events:none;-webkit-user-select:none;user-select:none}
+.zm-svg{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+.zm-c{fill:rgba(22,163,74,.22);stroke:#15803d;stroke-width:2}
+.zm-c.sel{fill:rgba(37,99,235,.25);stroke:#1d4ed8;stroke-width:3}
+.zm-t{font:700 12px system-ui,sans-serif;fill:#0b2540;paint-order:stroke;stroke:rgba(255,255,255,.85);stroke-width:3px;text-anchor:middle}
+.zm-h{fill:#fff;stroke:#1d4ed8;stroke-width:3}
+.zm-me{fill:#2563eb;stroke:#fff;stroke-width:3}
+.zm-ma{fill:rgba(37,99,235,.15);stroke:rgba(37,99,235,.5);stroke-width:1}
+.zm-cross{position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;pointer-events:none;background:linear-gradient(#0b2540,#0b2540) center/2px 100% no-repeat,linear-gradient(#0b2540,#0b2540) center/100% 2px no-repeat}
+.zm-msg{position:absolute;left:10px;right:10px;top:10px;background:rgba(11,37,64,.92);color:#fde68a;border-radius:12px;padding:8px 10px;font-size:12.5px;display:none;pointer-events:none}
+.zm-attr{position:absolute;right:4px;bottom:2px;font-size:10px;color:#0b2540;background:rgba(255,255,255,.75);padding:1px 5px;border-radius:6px;pointer-events:none}
+.zm-bot{background:#0a1f33;padding:8px 10px calc(env(safe-area-inset-bottom,0px) + 10px);border-top:1px solid #1e9dff55}
+.zm-row{display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap}
+.zm-row input[type=text]{flex:1;min-width:0;padding:9px 10px;border-radius:12px;font-size:15px}
+.zm-row input[type=range]{flex:1;min-width:120px}
+.zm-help{font-size:12px;color:#9fb4c8;line-height:1.35}
 
 </style>
 </body></html><style>

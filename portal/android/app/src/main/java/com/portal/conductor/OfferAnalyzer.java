@@ -34,6 +34,12 @@ public class OfferAnalyzer {
         public String estMode = "";
         public String estAirport = "";              // "" | "pickup" (recogida en el aeropuerto) | "dest" (viaje hacia el aeropuerto)
         public double estFee = 0;                   // tasa del aeropuerto restada antes de la comision
+        // ---- tarifa por zona (v3.15f) ----
+        public int estZone = 0;                     // 0 = no se uso la tarifa por zona | 1 = fuera de zona buena (M30 y sur) | 2 = zona buena
+        public double estAdj = 0;                   // % de ajuste aplicado al calculo con la tarifa de Bolt (-8 fuera con poca demanda, 0 con x1,2 o mas, +12 en zona buena)
+        public double estEff = 1;                   // demanda realmente aplicada (la curva de la demanda, no solo el xN de la oferta)
+        public String estArea = "";                 // nombre de la zona buena donde se detecto la ubicacion
+        public boolean estFromOffer = false;        // true si el calculo uso la demanda que muestra la oferta (false: la de Ajustes)
     }
 
     // =====================================================================
@@ -91,7 +97,86 @@ public class OfferAnalyzer {
         }
     }
 
+    /** Una zona buena: un circulo (centro y radio en km) donde la tarifa de Bolt es mas alta. */
+    public static class Area {
+        public String name = ""; public double lat, lon, r;
+        public Area() { }
+        public Area(String name, double lat, double lon, double r) { this.name = name; this.lat = lat; this.lon = lon; this.r = r; }
+        public Area copy() { return new Area(name, lat, lon, r); }
+    }
+
+    /**
+     * Tarifa por zona (v3.15f). Una sola tarifa normal de Bolt (M30 y sur: la diferencia entre ellas es pequena):
+     *   calculo = inicial + km * precio_km + min * precio_min  (nunca menos que el minimo)
+     * FUERA de zona buena (M30, sur...), segun la demanda m que muestra la oferta:
+     *   m menor que realFrom (x1,2) ........ calculo * (1 + adj/100)            (por defecto -8 %)
+     *   de realFrom a dFrom (x1,2 a x1,3) .. calculo * 1                         (tarifa real, sin demanda)
+     *   desde dFrom (x1,4) ................. calculo * m * (1 + extra/100)       (extra: desde dA1 dP1 %, desde dA2 dP2 %, desde dA3 dP3 %; cada escalon sustituye al anterior)
+     * EN zona buena: calculo * (1 + adjGood/100) * m   (tarifa de fuera + el multiplicador tal como sale, sin escalones; por defecto +12 %)
+     * La zona buena se detecta con la ubicacion del movil (circulos editables). Si no hay ubicacion reciente, se usa la tarifa de fuera de zona buena.
+     */
+    public static class Zone {
+        public boolean on = true;
+        public double base = 2.10, perKm = 0.77, perMin = 0.15, minFare = 6.75;
+        public double adj = -8, adjGood = 12;
+        public double mult = 1.0;                         // demanda a mano si la oferta no muestra ninguna (se trata como si la mostrara)
+        public double realFrom = 1.2;
+        public double dFrom = 1.4, dA1 = 1.5, dP1 = 5, dA2 = 2.0, dP2 = 8, dA3 = 2.5, dP3 = 10;
+        public List<Area> good = defaultAreas();
+        public Zone copy() {
+            Zone z = new Zone();
+            z.on = on; z.base = base; z.perKm = perKm; z.perMin = perMin; z.minFare = minFare; z.adj = adj; z.adjGood = adjGood; z.mult = mult;
+            z.realFrom = realFrom; z.dFrom = dFrom; z.dA1 = dA1; z.dP1 = dP1; z.dA2 = dA2; z.dP2 = dP2; z.dA3 = dA3; z.dP3 = dP3;
+            z.good = new ArrayList<Area>();
+            for (Area a : good) z.good.add(a.copy());
+            return z;
+        }
+        /** Demanda realmente aplicada para el xN que muestra la oferta. */
+        public double demand(double m, boolean goodZone) {
+            if (goodZone) return m;
+            if (m < dFrom) return 1.0;
+            double extra = m >= dA3 ? dP3 : (m >= dA2 ? dP2 : (m >= dA1 ? dP1 : 0));
+            return m * (1 + extra / 100.0);
+        }
+        /** Ajuste (%) sobre el calculo de la tarifa: -8 fuera si hay poca demanda, 0 fuera con x1,2 o mas, +12 en zona buena. */
+        public double adjust(double m, boolean goodZone) {
+            if (goodZone) return adjGood;
+            return m < realFrom ? adj : 0;
+        }
+    }
+
+    /** Zonas buenas por defecto (centros aproximados; se pueden editar en Ajustes). */
+    public static List<Area> defaultAreas() {
+        List<Area> l = new ArrayList<Area>();
+        l.add(new Area("La Moraleja", 40.5133, -3.6452, 2.5));
+        l.add(new Area("Alcobendas", 40.5475, -3.6420, 3.0));
+        l.add(new Area("San Sebasti\u00E1n de los Reyes", 40.5497, -3.6266, 3.0));
+        l.add(new Area("Las Rozas", 40.4929, -3.8738, 4.0));
+        l.add(new Area("Majadahonda", 40.4736, -3.8722, 3.0));
+        l.add(new Area("Pozuelo de Alarc\u00F3n", 40.4352, -3.8135, 3.5));
+        l.add(new Area("Boadilla del Monte", 40.4050, -3.8780, 3.5));
+        l.add(new Area("Aravaca", 40.4545, -3.7810, 2.0));
+        return l;
+    }
+
+    /** Distancia en km entre dos puntos (formula de haversine). */
+    public static double distKm(double lat1, double lon1, double lat2, double lon2) {
+        double rad = Math.PI / 180.0, dLat = (lat2 - lat1) * rad, dLon = (lon2 - lon1) * rad;
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return 6371.0 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    /** Nombre de la zona buena que contiene el punto, o null si no esta en ninguna. */
+    public static String goodAreaAt(Zone z, double lat, double lon) {
+        if (z == null || z.good == null) return null;
+        for (Area a : z.good) if (distKm(lat, lon, a.lat, a.lon) <= a.r) return a.name;
+        return null;
+    }
+
     public static class BoltCfg {
+        public Zone zone = new Zone();
+        public boolean goodZone = false;     // lo pone el servicio en cada lectura segun la ubicacion (no se guarda)
+        public String goodName = "";
         public boolean on = true;
         public String mode = "auto";         // auto (por fecha) | week | weekend
         public double comm = 25;             // comision de Bolt, %
@@ -148,6 +233,8 @@ public class OfferAnalyzer {
         public String mode = "A";
         public String airport = "";          // "" | "pickup" | "dest"
         public boolean minApplied, weekend, fromOffer;
+        public int zone = 0;                 // 0 = tramos | 1 = tarifa por zona fuera de zona buena | 2 = zona buena
+        public double adj = 0, eff = 1;      // % de ajuste aplicado y demanda realmente aplicada
     }
 
     // ---- aeropuerto: se detecta por el texto de la oferta ----
@@ -190,6 +277,16 @@ public class OfferAnalyzer {
             if (a.min && factor < 1.0) { factor = 1.0; ma = true; }
             gross = a.base * factor * mult;
             e.tier = 0; e.lo = 0; e.hi = a.ref; e.mode = "";
+        } else if (c.zone != null && c.zone.on) {
+            Zone z = c.zone;
+            double raw = z.base + km * z.perKm + min * z.perMin;
+            if (z.minFare > 0 && raw < z.minFare) { raw = z.minFare; ma = true; }
+            double m = fromOffer ? Math.max(0.1, Math.min(10.0, offerMult)) : Math.max(0.1, Math.min(10.0, z.mult));
+            double adj = z.adjust(m, c.goodZone), eff = z.demand(m, c.goodZone);
+            mult = eff > 1.0 + 1e-9 || c.goodZone ? m : 1.0;       // lo que se dice en voz alta: solo la demanda que de verdad se aplica
+            gross = raw * (1 + adj / 100.0) * eff;
+            e.tier = 0; e.lo = z.realFrom; e.hi = z.dFrom; e.mode = "Z";           // en modo zona: lo = desde que demanda se acaba el descuento, hi = desde que demanda se aplica
+            e.zone = c.goodZone ? 2 : 1; e.adj = adj; e.eff = eff;
         } else {
             int ti = tierIndex(pr, km);
             Tier t = pr.t[ti];
@@ -245,6 +342,7 @@ public class OfferAnalyzer {
             if ("pickup".equals(r.estAirport)) b.append("Recogida en el aeropuerto. ");
             else if ("dest".equals(r.estAirport)) b.append("Hacia el aeropuerto. ");
             b.append("Viaje de ").append(km).append("1".equals(km) ? " kil\u00F3metro y " : " kil\u00F3metros y ").append(min).append(min == 1 ? " minuto" : " minutos");
+            if (r.estZone == 2) b.append(", zona buena");
             if (Math.abs(r.estMult - 1.0) > 1e-9) b.append(", demanda por ").append(spokenNum(r.estMult, 2));
             b.append(". Bruto estimado: ").append(money(r.estGross)).append(" euros. ");
             if (r.estFee > 0) b.append("Tasa del aeropuerto: ").append(money(r.estFee)).append(" euros. ");
@@ -447,6 +545,7 @@ public class OfferAnalyzer {
                 r.estimated = true; r.estGross = e.gross; r.estComm = e.comm; r.estNet = e.net; r.estMult = e.mult;
                 r.estOfferMult = om; r.estMode = e.mode; r.estTier = e.tier; r.estLo = e.lo; r.estHi = e.hi;
                 r.estAirport = e.airport; r.estFee = e.fee;
+                r.estZone = e.zone; r.estAdj = e.adj; r.estEff = e.eff; r.estFromOffer = e.fromOffer; r.estArea = p.bolt.goodZone ? p.bolt.goodName : "";
                 r.estMinApplied = e.minApplied; r.estWeekend = e.weekend; r.estCommPct = Math.max(0, Math.min(90, p.bolt.comm));
                 r.price = e.net;          // el semaforo se juzga sobre el NETO estimado; no se vuelve a descontar comision
                 useEstimate = true;

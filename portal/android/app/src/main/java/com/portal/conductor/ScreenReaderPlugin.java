@@ -145,6 +145,7 @@ public class ScreenReaderPlugin extends Plugin {
         r.put("voice", sp.getInt("bolt_voice", 1) == 1);
         r.put("vol", (double) sp.getFloat("bolt_vol", 1f));
         r.put("weekendNow", OfferAnalyzer.isWeekend(c, java.util.Calendar.getInstance()));
+        r.put("zoneLast", sp.getString("zone_last", ""));
         call.resolve(r);
     }
 
@@ -169,6 +170,23 @@ public class ScreenReaderPlugin extends Plugin {
         if (ScreenReaderService.instance == null) { call.reject("El lector de pantalla no est\u00e1 activado"); return; }
         ScreenReaderService.instance.demoBolt();
         call.resolve();
+    }
+
+    /** v3.15f: donde esta el movil ahora segun la ultima ubicacion del sistema y si cae en una zona buena (para el boton "Probar ubicacion" de Ajustes) */
+    @PluginMethod
+    public void zoneNow(PluginCall call) {
+        android.content.SharedPreferences sp = getContext().getSharedPreferences("portal", Context.MODE_PRIVATE);
+        OfferAnalyzer.BoltCfg c = BoltConfig.parse(call.hasOption("cfg") ? call.getString("cfg", "") : sp.getString("bolt_cfg", ""));
+        long now = System.currentTimeMillis();
+        ZoneLocator.reset();
+        ZoneLocator.Fix f = ZoneLocator.lastFix(getContext(), now);
+        if (f != null) {
+            String n = OfferAnalyzer.goodAreaAt(c.zone, f.lat, f.lon);
+            if (n != null) { c.goodZone = true; c.goodName = n; }
+        }
+        JSObject r = new JSObject();
+        r.put("zone", ZoneLocator.json(f, c, now));
+        call.resolve(r);
     }
 
     @PluginMethod
