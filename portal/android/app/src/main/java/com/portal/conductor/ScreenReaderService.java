@@ -36,6 +36,7 @@ import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.view.ViewOutlineProvider;
 import android.widget.Toast;
+import java.util.Locale;
 import android.os.Bundle;
 import android.media.AudioAttributes;
 import android.speech.tts.TextToSpeech;
