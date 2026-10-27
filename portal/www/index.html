@@ -2525,6 +2525,29 @@ function daySummary(k,title){
   return summaryHtml(title||'Resumen del día',x.ts.length,tripsEur,x.comp.total,ents.length,x.f,x.tips||0,'viajes + cancelaciones + propinas');
 }
 P.daySummary=daySummary;
+// Aeropuerto y Cancelaciones miden lo mismo que los botones de plataforma (Bolt/Uber/Cabify/Privados): se copia su altura y su separación.
+let rowRO=null;
+function syncBtnRow(){
+  try{
+    const row=document.querySelector('.airport-row');if(!row)return;
+    const pl=document.querySelector('.platforms .platform');if(!pl)return;
+    const h=Math.round(pl.getBoundingClientRect().height*100)/100;
+    if(h>=40&&h<=200)row.style.setProperty('--pdc-bh',h+'px');
+    const g=parseFloat(getComputedStyle(pl.parentElement).columnGap);
+    if(g>=0&&g<=24)row.style.setProperty('--pdc-bg',g+'px');
+  }catch(e){}
+}
+function watchBtnRow(){
+  syncBtnRow();
+  try{
+    if(typeof ResizeObserver==='undefined')return;
+    const pl=document.querySelector('.platforms .platform');if(!pl)return;
+    if(rowRO)rowRO.disconnect();
+    rowRO=new ResizeObserver(()=>syncBtnRow());rowRO.observe(pl);
+  }catch(e){}
+}
+window.addEventListener('resize',syncBtnRow);
+window.addEventListener('orientationchange',()=>setTimeout(syncBtnRow,200));
 function decorateCalc(){
   const root=document.getElementById('content');if(!root)return;
   const k=(typeof calcAnchor!=='undefined'&&calcAnchor)?calcAnchor:today();
@@ -2538,6 +2561,7 @@ function decorateCalc(){
     b.onclick=()=>window.cancelOpen();
     row.appendChild(b);
   }
+  watchBtnRow();
   // 2) totales por plataforma (con las compensaciones de cada una)
   const ps=root.querySelector('.platform-summary');
   if(ps){
@@ -4285,17 +4309,23 @@ if(typeof _ras==='function')window.renderAppSettings=function(){
 <style id="v315-style">
 /* ===================== v3.14 ===================== */
 /* --- botón Cancelaciones junto a Aeropuerto --- */
-.airport-row{display:flex;gap:8px;align-items:stretch;margin-top:12px}
-html body .airport-row>.airport-premium{flex:1 1 0;min-width:0;margin-top:0!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:4px!important;padding:8px 6px!important;min-height:92px!important;text-align:center!important}
-html body .airport-row>.airport-premium .airport-plane{flex:0 0 auto!important;width:34px!important;height:34px!important;font-size:19px!important}
-html body .airport-row>.airport-premium .airport-copy{padding:0 9px!important;gap:2px!important;align-items:center!important;text-align:center!important;min-width:0!important;box-sizing:border-box!important;max-width:100%!important}
-html body .airport-row>.airport-premium .airport-copy strong{font-size:clamp(12.5px,3.7vw,16px)!important;white-space:normal!important;line-height:1.12!important;overflow-wrap:break-word}
-html body .airport-row>.airport-premium .airport-copy small{font-size:clamp(9.5px,2.7vw,11.5px)!important;white-space:normal!important;line-height:1.2!important;overflow-wrap:break-word}
+/* Aeropuerto (verde, como Bolt) y Cancelaciones: MISMA altura que los botones Bolt/Uber/Cabify/Privados y cada uno ocupa dos de sus columnas.
+   La altura y la separacion exactas las copia 20_cancel.js de los botones de plataforma (--pdc-bh y --pdc-bg); estos valores son solo el plan B. */
+.airport-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--pdc-bg,6px);align-items:stretch;margin-top:12px}
+html body .airport-row>.airport-premium,html body .airport-row>.cancel-btn{box-sizing:border-box!important;position:relative!important;width:auto!important;min-width:0!important;margin:0!important;height:var(--pdc-bh,75px)!important;min-height:0!important;max-height:var(--pdc-bh,75px)!important;padding:6px 8px!important;display:flex!important;flex-direction:row!important;align-items:center!important;gap:7px!important;overflow:hidden!important;border-radius:14px!important}
+html body .airport-row>.airport-premium{justify-content:flex-start!important;text-align:left!important;background:linear-gradient(130deg,#008c4a 0%,#00d66a 42%,#00f18b 100%)!important;border:1px solid #ffffffa8!important;box-shadow:0 0 0 1px #00f58b99,0 0 12px #00f58b99,0 6px 18px #00101d35,inset 0 1px 0 #ffffff70!important}
+html body .airport-row>.airport-premium:before{content:"";position:absolute;z-index:-1;inset:3px 4px 50% 4px;border-radius:11px;border:0;background:linear-gradient(180deg,#ffffff38,#ffffff00);pointer-events:none}
+html body .airport-row>.airport-premium:after{display:none!important}
+html body .airport-row>.airport-premium .airport-plane{flex:0 0 auto!important;width:32px!important;height:32px!important;font-size:17px!important;background:linear-gradient(145deg,#ffffff35,#ffffff08)!important;border:1px solid #ffffff70!important;box-shadow:inset 0 1px 2px #ffffff44,0 0 9px #ffffff22!important;transform:none!important}
+html body .airport-row>.airport-premium .airport-copy{flex:1 1 auto!important;min-width:0!important;max-width:100%!important;padding:0!important;gap:1px!important;align-items:flex-start!important;text-align:left!important;box-sizing:border-box!important}
+html body .airport-row>.airport-premium .airport-copy strong{font-size:clamp(11.5px,3.3vw,15px)!important;white-space:normal!important;line-height:1.1!important;overflow-wrap:break-word;color:#fff!important;text-shadow:0 1px 3px #00101c99!important}
+html body .airport-row>.airport-premium .airport-copy small{font-size:clamp(8.5px,2.4vw,11px)!important;white-space:normal!important;line-height:1.15!important;overflow-wrap:break-word;color:#fff!important;font-weight:800!important;text-shadow:0 1px 3px #00101c99!important;display:-webkit-box!important;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 html body .airport-row>.airport-premium .airport-add,html body .airport-row>.airport-premium .airport-luggage{display:none!important}
-.cancel-btn{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:8px 6px;border:1px solid #ff9f73cc;border-radius:22px;background:linear-gradient(160deg,#3a120e 0%,#a3341d 55%,#34100c 100%);color:#fff;font-weight:900;font-size:clamp(13px,3.9vw,17px);line-height:1.1;letter-spacing:-.1px;text-align:center;box-shadow:0 0 14px #ff6a3d55,inset 0 1px 3px #ffffff44;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+html body .airport-row>.cancel-btn{justify-content:center!important;border:1px solid #ff9f73cc;background:linear-gradient(160deg,#3a120e 0%,#a3341d 55%,#34100c 100%);color:#fff;font-weight:900;font-size:clamp(11.5px,3.4vw,15px);line-height:1.1;letter-spacing:-.1px;text-align:center;box-shadow:0 0 14px #ff6a3d55,inset 0 1px 3px #ffffff44;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .cancel-btn:active{transform:scale(.97)}
-.cancel-ico{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;border:1px solid #ffb89a;background:radial-gradient(circle at 30% 20%,#ff7a4d,#7a1d0e 80%);font-size:18px;box-shadow:0 0 10px #ff6a3d77}
-.cancel-txt{max-width:100%;white-space:nowrap}
+.cancel-ico{flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;border:1px solid #ffb89a;background:radial-gradient(circle at 30% 20%,#ff7a4d,#7a1d0e 80%);font-size:16px;box-shadow:0 0 10px #ff6a3d77}
+.cancel-txt{min-width:0;max-width:100%;white-space:nowrap}
+@media(max-width:340px){html body .airport-row>.airport-premium,html body .airport-row>.cancel-btn{padding:6px 5px!important;gap:5px!important}.cancel-ico{width:26px;height:26px;font-size:14px}html body .airport-row>.airport-premium .airport-plane{width:28px!important;height:28px!important;font-size:15px!important}html body .airport-row>.cancel-btn{font-size:11px}}
 /* --- ventana --- */
 .cn-overlay{position:fixed;inset:0;z-index:99990;background:rgba(2,8,20,.78);display:flex;align-items:flex-end;justify-content:center;padding:12px;box-sizing:border-box}
 .cn-card{width:100%;max-width:520px;max-height:92vh;overflow:auto;background:linear-gradient(160deg,#0d2a52,#071a33);border:2px solid #3fc8ff;border-radius:22px;padding:16px;color:#fff;box-shadow:0 0 24px #1e9bff66;box-sizing:border-box}
