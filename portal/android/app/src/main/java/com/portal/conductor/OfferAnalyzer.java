@@ -13,6 +13,8 @@ public class OfferAnalyzer {
     public static class Params {
         public double minHour = 15, minKm = 1.0, maxPickup = 5.0, commission = 0, tolPct = 15, tolPickup = 1.0;
         public boolean includePickup = true;
+        public BoltCfg bolt = new BoltCfg();     // estimacion de Bolt cuando la oferta no trae precio
+        public boolean weekendNow = false;       // perfil de fin de semana/festivo (lo decide quien llama con isWeekend)
     }
 
     public static class Result {
@@ -24,7 +26,165 @@ public class OfferAnalyzer {
         public String why = "";
         public boolean acceptSeen, unreadable;
         public int stH = -1, stK = -1, stP = -1;   // 0 verde, 1 naranja, 2 rojo, -1 sin dato
+        // ---- estimacion de Bolt (solo si la oferta no trae precio) ----
+        public boolean isBolt, estimated, estWeekend, estMinApplied;
+        public double estGross = -1, estComm = -1, estNet = -1, estMult = 1, estOfferMult = -1, estLo = -1, estHi = -1;
+        public int estTier = -1;
+        public double estCommPct = -1;
+        public String estMode = "";
     }
+
+    // =====================================================================
+    //  Estimacion del precio de Bolt cuando la oferta NO muestra el precio.
+    //  Todos los valores son ESTIMACIONES editables por el conductor, NO son tarifas oficiales de Bolt.
+    // =====================================================================
+
+    /** Un tramo de distancia del viaje con pasajero. */
+    public static class Tier {
+        public double base, perKm, perMin, mult = 1.0;
+        public String mode = "A";            // A: el multiplicador solo afecta a los km; B: afecta al importe completo
+        public Tier() { }
+        public Tier(double base, double perKm, double perMin) { this.base = base; this.perKm = perKm; this.perMin = perMin; }
+        public Tier copy() { Tier t = new Tier(base, perKm, perMin); t.mult = mult; t.mode = mode; return t; }
+    }
+
+    /** Perfil de tarifas con 4 tramos continuos: bp[0], bp[1] y bp[2] son el fin de los tramos 1, 2 y 3. */
+    public static class Profile {
+        public double[] bp = {5, 10, 15};
+        public Tier[] t = new Tier[4];
+        public double minFare = 0;           // 0 = sin tarifa minima
+        public boolean offerMult = true;     // usar el xN que muestre la oferta, si aparece
+        public Profile copy() {
+            Profile p = new Profile();
+            p.bp = new double[]{bp[0], bp[1], bp[2]};
+            for (int i = 0; i < 4; i++) p.t[i] = t[i].copy();
+            p.minFare = minFare; p.offerMult = offerMult;
+            return p;
+        }
+    }
+
+    public static class BoltCfg {
+        public boolean on = true;
+        public String mode = "auto";         // auto (por fecha) | week | weekend
+        public double comm = 25;             // comision de Bolt, %
+        public Profile wd = defaultWeekday(), we = defaultWeekend();
+        public List<String> holidays = defaultHolidays();   // "yyyy-MM-dd" o "MM-dd"
+    }
+
+    public static Profile defaultWeekday() {
+        Profile p = new Profile();
+        p.t[0] = new Tier(3.50, 0.95, 0.11);
+        p.t[1] = new Tier(3.50, 0.80, 0.11);
+        p.t[2] = new Tier(1.95, 0.95, 0.11);
+        p.t[3] = new Tier(1.95, 0.80, 0.11);
+        p.minFare = 5.95;
+        return p;
+    }
+
+    /** Valores provisionales de fin de semana: 5,50 base, 1,70 por km y 0,22 por minuto en los cuatro tramos. */
+    public static Profile defaultWeekend() {
+        Profile p = new Profile();
+        for (int i = 0; i < 4; i++) p.t[i] = new Tier(5.50, 1.70, 0.22);
+        p.minFare = 9.00;
+        return p;
+    }
+
+    /** Festivos nacionales fijos y el de la Comunidad de Madrid. Los que cambian cada ano (Semana Santa) se anaden a mano con aaaa-mm-dd. */
+    public static List<String> defaultHolidays() {
+        List<String> l = new ArrayList<String>();
+        for (String s : new String[]{"01-01", "01-06", "05-01", "05-02", "08-15", "10-12", "11-01", "12-06", "12-08", "12-25"}) l.add(s);
+        return l;
+    }
+
+    /** Tramo (0..3) segun los km del viaje con pasajero. El limite superior pertenece al tramo de abajo: sin huecos ni solapes. */
+    public static int tierIndex(Profile p, double km) {
+        if (km <= p.bp[0]) return 0;
+        if (km <= p.bp[1]) return 1;
+        if (km <= p.bp[2]) return 2;
+        return 3;
+    }
+
+    /** true si hoy se aplica el perfil de fin de semana / festivo. */
+    public static boolean isWeekend(BoltCfg c, java.util.Calendar cal) {
+        if ("week".equals(c.mode)) return false;
+        if ("weekend".equals(c.mode)) return true;
+        int dow = cal.get(java.util.Calendar.DAY_OF_WEEK);
+        if (dow == java.util.Calendar.SATURDAY || dow == java.util.Calendar.SUNDAY) return true;
+        int mo = cal.get(java.util.Calendar.MONTH) + 1, dd = cal.get(java.util.Calendar.DAY_OF_MONTH), yy = cal.get(java.util.Calendar.YEAR);
+        String full = String.format(Locale.ROOT, "%04d-%02d-%02d", yy, mo, dd), md = String.format(Locale.ROOT, "%02d-%02d", mo, dd);
+        if (c.holidays != null) for (String h : c.holidays) if (full.equals(h) || md.equals(h)) return true;
+        return false;
+    }
+
+    public static class Est {
+        public double gross, comm, net, mult, lo, hi;
+        public int tier;                     // 1..4
+        public String mode = "A";
+        public boolean minApplied, weekend, fromOffer;
+    }
+
+    /** Bruto = base + km*precioKm*mult + min*precioMin (modo A) o (base + km*precioKm + min*precioMin)*mult (modo B). Sin redondeos intermedios. */
+    public static Est estimate(BoltCfg c, boolean weekend, double km, double min, double offerMult) {
+        Profile pr = weekend ? c.we : c.wd;
+        int ti = tierIndex(pr, km);
+        Tier t = pr.t[ti];
+        boolean fromOffer = pr.offerMult && offerMult > 0;
+        double mult = fromOffer ? offerMult : t.mult;
+        mult = Math.max(0.1, Math.min(10.0, mult));
+        double gross = "B".equals(t.mode) ? (t.base + km * t.perKm + min * t.perMin) * mult : t.base + km * t.perKm * mult + min * t.perMin;
+        boolean ma = false;
+        if (pr.minFare > 0 && gross < pr.minFare) { gross = pr.minFare; ma = true; }
+        double pct = Math.max(0, Math.min(90, c.comm));
+        Est e = new Est();
+        e.gross = gross; e.comm = gross * pct / 100.0; e.net = gross - e.comm;
+        e.mult = mult; e.tier = ti + 1; e.mode = "B".equals(t.mode) ? "B" : "A";
+        e.lo = ti == 0 ? 0 : pr.bp[ti - 1]; e.hi = ti == 3 ? -1 : pr.bp[ti];
+        e.minApplied = ma; e.weekend = weekend; e.fromOffer = fromOffer;
+        return e;
+    }
+
+    // multiplicador de demanda que a veces muestra la oferta: "x1.7", "x1,4", "1.5x"
+    private static final Pattern DEM1 = Pattern.compile("(?<![A-Za-z0-9])[x\u00d7]\\s?(\\d{1,2}(?:[.,]\\d{1,2})?)(?![\\d%A-Za-z])", Pattern.CASE_INSENSITIVE);
+    private static final Pattern DEM2 = Pattern.compile("(?<![\\d.,])(\\d{1,2}(?:[.,]\\d{1,2})?)\\s?[x\u00d7](?![A-Za-z0-9])", Pattern.CASE_INSENSITIVE);
+
+    static double detectDemand(List<String> nodes) {
+        for (String t : nodes) {
+            String s = t.trim(), n = norm(s);
+            boolean dem = n.contains("demanda") || n.contains("surge") || n.contains("multiplicador");
+            if (!dem && s.length() > 14) continue;
+            Matcher m = DEM1.matcher(s);
+            if (!m.find()) { m = DEM2.matcher(s); if (!m.find()) continue; }
+            double v = num(m.group(1));
+            if (v >= 1.0 && v <= 6.0) return v;
+        }
+        return -1;
+    }
+
+    /** Importe con 2 decimales y coma, sin ruido de coma flotante. */
+    public static String money(double v) {
+        return java.math.BigDecimal.valueOf(Math.round(v * 1e6) / 1e6).setScale(2, java.math.RoundingMode.HALF_UP).toPlainString().replace('.', ',');
+    }
+
+    /** Numero para la voz: coma decimal, sin ceros sobrantes (8,3 / 8 / 1,45). */
+    private static String spokenNum(double v, int dec) {
+        return java.math.BigDecimal.valueOf(v).setScale(dec, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString().replace('.', ',');
+    }
+
+    /** Frase para el aviso por voz (con los valores reales de la oferta). null si no hay nada que decir. */
+    public static String voiceText(Result r) {
+        if (r == null || !r.isBolt || !r.offer) return null;
+        if (r.estimated) {
+            long min = Math.round(r.tripMin);
+            String km = spokenNum(r.tripKm, 1);
+            StringBuilder b = new StringBuilder("Bolt. Viaje de ").append(km).append("1".equals(km) ? " kil\u00F3metro y " : " kil\u00F3metros y ").append(min).append(min == 1 ? " minuto" : " minutos");
+            if (Math.abs(r.estMult - 1.0) > 1e-9) b.append(", demanda por ").append(spokenNum(r.estMult, 2));
+            b.append(". Bruto estimado: ").append(money(r.estGross)).append(" euros. Comisi\u00f3n estimada: ").append(money(r.estComm)).append(" euros. Neto estimado: ").append(money(r.estNet)).append(" euros.");
+            return b.toString();
+        }
+        if (r.price > 0) return "Bolt. Precio de la oferta: " + money(r.price) + " euros.";
+        return null;
+    }
+
 
     private static class Item { int node; char kind; double v; boolean used; }
     private static class Seg { double km = -1, min = -1; String ctx = ""; int first = 99; }
@@ -76,7 +236,10 @@ public class OfferAnalyzer {
 
     public static Result analyze(List<String> rawNodes, Params p) { return analyze(rawNodes, p, false); }
 
-    public static Result analyze(List<String> rawNodes, Params p, boolean lenient) {
+    public static Result analyze(List<String> rawNodes, Params p, boolean lenient) { return analyze(rawNodes, p, lenient, false); }
+
+    /** isBolt: la oferta viene de Bolt (paquete bolt/mtakso). Solo en ese caso, y sin precio visible, se estima el precio. */
+    public static Result analyze(List<String> rawNodes, Params p, boolean lenient, boolean isBolt) {
         List<String> nodes = new ArrayList<String>();
         for (String x : rawNodes) for (String line : clean(x).split("\\n")) if (line.trim().length() > 0) nodes.add(line.trim());
         Result r = new Result();
@@ -119,12 +282,12 @@ public class OfferAnalyzer {
                 if (b.kind == 'm' && !b.used && b.node == a.node) { a.used = true; b.used = true; pairs.add(new Item[]{a, b}); break; }
             }
         }
-        // fase B: el minuto va justo antes del km (tambien con un "•" entre medias) o, si no, justo despues
+        // fase B: el minuto va justo antes del km (tambien con un "\u2022" entre medias) o, si no, justo despues
         for (Item a : items) {
             if (a.kind != 'k' || a.used) continue;
             Item best = null;
             for (int d = 1; d <= 2 && best == null; d++) {
-                if (d == 2 && nodes.get(a.node - 1).trim().length() > 2) break;
+                if (d == 2 && (a.node < 1 || nodes.get(a.node - 1).trim().length() > 2)) break;
                 for (Item b : items) if (b.kind == 'm' && !b.used && b.node == a.node - d) { best = b; break; }
             }
             if (best == null) for (Item b : items) if (b.kind == 'm' && !b.used && b.node == a.node + 1) { best = b; break; }
@@ -160,16 +323,32 @@ public class OfferAnalyzer {
         else if (pick == null && !rest.isEmpty() && trip != null) { pick = rest.get(0); r.orderAssumed = true; }
         if (trip != null) { r.tripKm = trip.km; r.tripMin = trip.min; }
         if (pick != null) { r.pickupKm = pick.km; r.pickupMin = pick.min; }
-        // ---- oferta sin precio visible (Bolt): solo se puede juzgar la distancia de recogida
+        // ---- Bolt sin precio visible: estimacion con los km y minutos del viaje con pasajero (nunca los de recogida)
+        r.isBolt = isBolt;
+        boolean useEstimate = false;
+        boolean boltEst = isBolt && p.bolt != null && p.bolt.on;
+        if (r.price <= 0 && boltEst) {
+            boolean tripSure = !(r.orderAssumed && pick == null);   // un unico bloque sin etiqueta no se da por viaje
+            if (tripSure && r.tripKm > 0 && r.tripMin > 0) {
+                double om = detectDemand(nodes);
+                Est e = estimate(p.bolt, p.weekendNow, r.tripKm, r.tripMin, om);
+                r.estimated = true; r.estGross = e.gross; r.estComm = e.comm; r.estNet = e.net; r.estMult = e.mult;
+                r.estOfferMult = om; r.estMode = e.mode; r.estTier = e.tier; r.estLo = e.lo; r.estHi = e.hi;
+                r.estMinApplied = e.minApplied; r.estWeekend = e.weekend; r.estCommPct = Math.max(0, Math.min(90, p.bolt.comm));
+                r.price = e.net;          // el semaforo se juzga sobre el NETO estimado; no se vuelve a descontar comision
+                useEstimate = true;
+            }
+        }
+        // ---- oferta sin precio visible: solo se puede juzgar la distancia de recogida
         if (r.price <= 0) {
             r.stP = r.pickupKm > 0 ? (r.pickupKm <= p.maxPickup ? 0 : (r.pickupKm <= p.maxPickup + p.tolPickup ? 1 : 2)) : -1;
             if (r.stP == 2) { r.verdict = "NO"; r.reason = String.format(Locale.GERMANY, "recogida %.1f km (m\u00E1x. %.1f)", r.pickupKm, p.maxPickup); }
-            else { r.verdict = "DATA"; r.reason = "Esta oferta no muestra el precio."; }
+            else { r.verdict = "DATA"; r.reason = boltEst ? "No se pudo estimar el precio de Bolt: faltan los km o los minutos del viaje con pasajero." : "Esta oferta no muestra el precio."; }
             return r;
         }
         // ---- datos suficientes
         if (r.tripKm <= 0 || r.tripMin <= 0) { r.verdict = "DATA"; r.reason = r.tripMin <= 0 ? "No se pudo leer el tiempo del viaje." : "No se pudo leer la distancia del viaje."; return r; }
-        double net = r.price * (1 - Math.max(0, Math.min(90, p.commission)) / 100.0);
+        double net = useEstimate ? r.price : r.price * (1 - Math.max(0, Math.min(90, p.commission)) / 100.0);
         double km = r.tripKm + (p.includePickup && r.pickupKm > 0 ? r.pickupKm : 0);
         double min = r.tripMin + (p.includePickup && r.pickupMin > 0 ? r.pickupMin : 0);
         r.perKm = net / km; r.perHour = net / (min / 60.0);

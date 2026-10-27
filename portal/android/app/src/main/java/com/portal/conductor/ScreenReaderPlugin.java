@@ -135,6 +135,43 @@ public class ScreenReaderPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void getBolt(PluginCall call) {
+        android.content.SharedPreferences sp = getContext().getSharedPreferences("portal", Context.MODE_PRIVATE);
+        OfferAnalyzer.BoltCfg c = BoltConfig.parse(sp.getString("bolt_cfg", ""));
+        JSObject r = new JSObject();
+        r.put("cfg", BoltConfig.toJson(c));
+        r.put("defaults", BoltConfig.defaultsJson());
+        r.put("saved", sp.contains("bolt_cfg"));
+        r.put("voice", sp.getInt("bolt_voice", 1) == 1);
+        r.put("vol", (double) sp.getFloat("bolt_vol", 1f));
+        r.put("weekendNow", OfferAnalyzer.isWeekend(c, java.util.Calendar.getInstance()));
+        call.resolve(r);
+    }
+
+    @PluginMethod
+    public void setBolt(PluginCall call) {
+        android.content.SharedPreferences.Editor e = getContext().getSharedPreferences("portal", Context.MODE_PRIVATE).edit();
+        JSObject r = new JSObject();
+        if (call.hasOption("cfg")) {
+            String norm = BoltConfig.toJson(BoltConfig.parse(call.getString("cfg", "")));
+            e.putString("bolt_cfg", norm);
+            r.put("cfg", norm);
+        }
+        e.putInt("bolt_voice", Boolean.FALSE.equals(call.getBoolean("voice", true)) ? 0 : 1);
+        double vol = call.getDouble("vol", 1.0);
+        e.putFloat("bolt_vol", (float) Math.max(0.1, Math.min(1.0, vol)));
+        e.apply();
+        call.resolve(r);
+    }
+
+    @PluginMethod
+    public void testBolt(PluginCall call) {
+        if (ScreenReaderService.instance == null) { call.reject("El lector de pantalla no est\u00e1 activado"); return; }
+        ScreenReaderService.instance.demoBolt();
+        call.resolve();
+    }
+
+    @PluginMethod
     public void testRent(PluginCall call) {
         if (ScreenReaderService.instance == null) { call.reject("El lector de pantalla no est\u00E1 activado"); return; }
         ScreenReaderService.instance.demoAlert(call.getString("verdict", "OK"));

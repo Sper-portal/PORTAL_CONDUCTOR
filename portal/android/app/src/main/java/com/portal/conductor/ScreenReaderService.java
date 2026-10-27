@@ -36,6 +36,9 @@ import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.view.ViewOutlineProvider;
 import android.widget.Toast;
+import android.os.Bundle;
+import android.media.AudioAttributes;
+import android.speech.tts.TextToSpeech;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.text.Normalizer;
@@ -78,6 +81,7 @@ public class ScreenReaderService extends AccessibilityService {
     @Override public boolean onUnbind(Intent i) {
         hideBubble();
         hideAlert();
+        shutdownTts();
         instance = null;
         return super.onUnbind(i);
     }
@@ -441,6 +445,8 @@ public class ScreenReaderService extends AccessibilityService {
         p.includePickup = sp.getInt("rent_incl", 1) == 1;
         p.tolPct = sp.getFloat("rent_tolPct", 15f);
         p.tolPickup = sp.getFloat("rent_tolPickup", 1f);
+        p.bolt = boltCfg();
+        p.weekendNow = OfferAnalyzer.isWeekend(p.bolt, java.util.Calendar.getInstance());
         return p;
     }
 
@@ -582,14 +588,14 @@ public class ScreenReaderService extends AccessibilityService {
                 if (now - lastSnapTs > 3000) {
                     sp.edit().putString("snap_" + pkg, ta.length() + " textos visibles: " + (all.length() > 600 ? all.substring(0, 600) : all)).apply();
                 }
-                OfferAnalyzer.Result r = OfferAnalyzer.analyze(nodes, rentParams());
+                OfferAnalyzer.Result r = OfferAnalyzer.analyze(nodes, rentParams(), false, BOLT_PKG.matcher(pkg).find());
                 if (all.contains("\u20AC") || all.toLowerCase().contains("km")) {
                     sp.edit().putLong("rent_evalTs", now).putString("rent_why", r.offer
-                        ? ("Oferta reconocida: " + r.verdict + " | precio " + r.price + " | viaje " + r.tripKm + " km/" + r.tripMin + " min | recogida " + r.pickupKm + " km/" + r.pickupMin + " min" + (r.orderAssumed ? " (orden estimado)" : ""))
+                        ? ("Oferta reconocida: " + r.verdict + (r.estimated ? " | neto estimado Bolt " : " | precio ") + r.price + " | viaje " + r.tripKm + " km/" + r.tripMin + " min | recogida " + r.pickupKm + " km/" + r.pickupMin + " min" + (r.orderAssumed ? " (orden estimado)" : ""))
                         : ("Texto con importes o km, pero NO reconocido como oferta: " + r.why)).apply();
                 }
                 if (r.offer || r.acceptSeen || (all.contains("\u20AC") && all.toLowerCase().contains("km"))) {
-                    String info = r.offer ? ("veredicto=" + r.verdict + " precio=" + r.price + " viajeKm=" + r.tripKm + " viajeMin=" + r.tripMin + " recogidaKm=" + r.pickupKm + " recogidaMin=" + r.pickupMin + (r.orderAssumed ? " (orden asumido)" : "")) : "no reconocida como oferta";
+                    String info = r.offer ? ("veredicto=" + r.verdict + (r.estimated ? " netoEstimadoBolt=" : " precio=") + r.price + " viajeKm=" + r.tripKm + " viajeMin=" + r.tripMin + " recogidaKm=" + r.pickupKm + " recogidaMin=" + r.pickupMin + (r.orderAssumed ? " (orden asumido)" : "")) : "no reconocida como oferta";
                     sp.edit().putString("rent_lastText", pkg + "\n" + all).putString("rent_lastInfo", info).apply();
                 }
                 if (r.offer) { found = r; break; }
@@ -603,6 +609,7 @@ public class ScreenReaderService extends AccessibilityService {
             if (found != null) {
                 lastOfferSeen = now;
                 showAlert(found);
+                speakOffer(found);
                 rh.removeCallbacks(hideRun);
                 rh.postDelayed(hideRun, 25000);
             } else if (alertShown && now - lastOfferSeen > 1800) {
@@ -686,6 +693,8 @@ public class ScreenReaderService extends AccessibilityService {
     private static String f(double v, int dec) { return String.format(java.util.Locale.GERMANY, "%." + dec + "f", v); }
 
     private void showAlert(OfferAnalyzer.Result r) {
+        if (r.estimated) { showEstimateAlert(r); return; }
+        resetEstimateViews();
         try {
             if (alertView == null) buildAlert();
             final float d = getResources().getDisplayMetrics().density;
@@ -731,6 +740,7 @@ public class ScreenReaderService extends AccessibilityService {
     }
 
     private void hideAlert() {
+        stopSpeech();
         try { if (alertShown && alertView != null) wm.removeView(alertView); } catch (Exception e) { }
         alertShown = false;
     }
@@ -745,6 +755,187 @@ public class ScreenReaderService extends AccessibilityService {
         showAlert(r);
         rh.removeCallbacks(hideRun);
         rh.postDelayed(hideRun, 6000);
+    }
+
+    // ===================== Bolt: precio estimado, aviso destacado y voz =====================
+    private static final Pattern BOLT_PKG = Pattern.compile("mtakso|bolt", Pattern.CASE_INSENSITIVE);
+    private String boltJsonCache = null;
+    private OfferAnalyzer.BoltCfg boltCfgCache = null;
+
+    /** ajustes de la estimacion de Bolt (se vuelven a leer solo si han cambiado) */
+    private OfferAnalyzer.BoltCfg boltCfg() {
+        String js = getSharedPreferences("portal", Context.MODE_PRIVATE).getString("bolt_cfg", "");
+        if (js == null) js = "";
+        if (boltCfgCache == null || !js.equals(boltJsonCache)) { boltCfgCache = BoltConfig.parse(js); boltJsonCache = js; }
+        return boltCfgCache;
+    }
+
+    // ---- voz (texto a voz del movil) ----
+    private TextToSpeech tts = null;
+    private boolean ttsReady = false;
+    private String ttsPending = null;
+    private float ttsVol = 1f;
+    private String lastVoice = null;
+
+    private void ensureTts() {
+        if (tts != null) return;
+        try {
+            tts = new TextToSpeech(getApplicationContext(), new TextToSpeech.OnInitListener() {
+                @Override public void onInit(int status) {
+                    if (status != TextToSpeech.SUCCESS) { ttsReady = false; return; }
+                    try {
+                        int lr = tts.setLanguage(new Locale("es", "ES"));
+                        if (lr == TextToSpeech.LANG_MISSING_DATA || lr == TextToSpeech.LANG_NOT_SUPPORTED) tts.setLanguage(Locale.getDefault());
+                        tts.setAudioAttributes(new AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
+                    } catch (Exception e) { }
+                    ttsReady = true;
+                    if (ttsPending != null) { String t = ttsPending; ttsPending = null; sayNow(t); }
+                }
+            });
+        } catch (Exception e) { tts = null; }
+    }
+
+    private void sayNow(String text) {
+        try {
+            Bundle b = new Bundle();
+            b.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, ttsVol);
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, b, "portal-bolt");
+        } catch (Exception e) { }
+    }
+
+    /** dice la oferta de Bolt en voz alta (solo Bolt; una vez por oferta; respeta el interruptor y el volumen de Ajustes) */
+    private void speakOffer(OfferAnalyzer.Result r) {
+        try {
+            String t = OfferAnalyzer.voiceText(r);
+            if (t == null) return;
+            SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);
+            if (sp.getInt("bolt_voice", 1) != 1) return;
+            if (t.equals(lastVoice)) return;
+            lastVoice = t;
+            ttsVol = Math.max(0.1f, Math.min(1f, sp.getFloat("bolt_vol", 1f)));
+            ensureTts();
+            if (tts == null) return;
+            if (ttsReady) sayNow(t); else ttsPending = t;
+        } catch (Exception e) { }
+    }
+
+    private void stopSpeech() {
+        lastVoice = null;
+        ttsPending = null;
+        try { if (tts != null && ttsReady) tts.stop(); } catch (Exception e) { }
+    }
+
+    private void shutdownTts() {
+        try { if (tts != null) { tts.stop(); tts.shutdown(); } } catch (Exception e) { }
+        tts = null;
+        ttsReady = false;
+    }
+
+    // ---- aviso de Bolt con precio estimado: el NETO estimado va grande y destacado ----
+    private LinearLayout aNetBox;
+    private TextView aNetLbl, aNetVal;
+
+    private void resetEstimateViews() {
+        if (aNetBox != null) aNetBox.setVisibility(View.GONE);
+        if (aMain != null) aMain.setTextSize(18);
+    }
+
+    private static String num1(double v) {
+        String s = f(v, 1);
+        return s.endsWith(",0") ? s.substring(0, s.length() - 2) : s;
+    }
+
+    private static String multTxt(double v) {
+        String s = f(v, 2);
+        if (s.endsWith("0")) s = s.substring(0, s.length() - 1);
+        return s;
+    }
+
+    private void showEstimateAlert(OfferAnalyzer.Result r) {
+        try {
+            if (alertView == null) buildAlert();
+            final float d = getResources().getDisplayMetrics().density;
+            String v = r.verdict;
+            boolean ok = "OK".equals(v), no = "NO".equals(v);
+            int col = ok ? Color.parseColor("#22C55E") : (no ? Color.parseColor("#EF4444") : Color.parseColor("#F59E0B"));
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(Color.parseColor("#F00A2E70"));
+            bg.setCornerRadius(20 * d);
+            bg.setStroke((int) (3 * d), col);
+            alertView.setBackground(bg);
+            GradientDrawable chip = new GradientDrawable();
+            chip.setColor(col);
+            chip.setCornerRadius(14 * d);
+            aChip.setBackground(chip);
+            aChip.setTextColor(ok || no ? Color.WHITE : Color.BLACK);
+            aChip.setText(ok ? "\u2713  ACEPTAR" : (no ? "\u2715  RECHAZAR" : ("WARN".equals(v) ? "\u26a0  A VALORAR" : "\u26a0  DATOS INSUFICIENTES")));
+            paintPill(aP1, r.perHour > 0 ? r.stH : -1, f(r.perHour, 1) + " \u20ac/h");
+            paintPill(aP2, r.perKm > 0 ? r.stK : -1, f(r.perKm, 2) + " \u20ac/km");
+            paintPill(aP3, r.pickupKm > 0 ? r.stP : -1, "Recog. " + f(r.pickupKm, 1) + " km");
+            if (aNetBox == null) {
+                aNetBox = new LinearLayout(this);
+                aNetBox.setOrientation(LinearLayout.VERTICAL);
+                aNetBox.setGravity(Gravity.CENTER_HORIZONTAL);
+                aNetLbl = new TextView(this);
+                aNetLbl.setTextColor(Color.parseColor("#DCEBFF"));
+                aNetLbl.setTextSize(12);
+                aNetLbl.setTypeface(Typeface.DEFAULT_BOLD);
+                aNetLbl.setGravity(Gravity.CENTER);
+                aNetVal = new TextView(this);
+                aNetVal.setTextColor(Color.WHITE);
+                aNetVal.setTextSize(34);
+                aNetVal.setTypeface(Typeface.DEFAULT_BOLD);
+                aNetVal.setGravity(Gravity.CENTER);
+                aNetBox.addView(aNetLbl);
+                aNetBox.addView(aNetVal);
+                LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                nlp.setMargins(0, (int) (8 * d), 0, 0);
+                alertView.addView(aNetBox, 2, nlp);
+            }
+            GradientDrawable nb = new GradientDrawable();
+            nb.setColor(Color.parseColor("#33000000"));
+            nb.setCornerRadius(14 * d);
+            nb.setStroke((int) (2 * d), col);
+            aNetBox.setBackground(nb);
+            aNetBox.setPadding((int) (10 * d), (int) (4 * d), (int) (10 * d), (int) (6 * d));
+            aNetLbl.setText("NETO ESTIMADO");
+            aNetVal.setText(OfferAnalyzer.money(r.estNet) + " \u20ac");
+            aNetBox.setVisibility(View.VISIBLE);
+            aMain.setTextSize(15);
+            aMain.setText("Bruto est. " + OfferAnalyzer.money(r.estGross) + " \u20ac  \u00b7  Comisi\u00f3n est. " + OfferAnalyzer.money(r.estComm) + " \u20ac (" + num1(r.estCommPct) + " %)");
+            StringBuilder dt = new StringBuilder();
+            dt.append("Viaje con pasajero: ").append((int) Math.round(r.tripMin)).append(" min (").append(num1(r.tripKm)).append(" km)\n");
+            String rango = r.estHi < 0 ? ("m\u00e1s de " + num1(r.estLo) + " km") : (r.estLo <= 0 ? ("hasta " + num1(r.estHi) + " km") : (num1(r.estLo) + "\u2013" + num1(r.estHi) + " km"));
+            dt.append("Tramo ").append(r.estTier).append(" (").append(rango).append(") \u00b7 ").append(r.estWeekend ? "fin de semana / festivo" : "lunes a viernes").append("\n");
+            dt.append("Demanda \u00d7").append(multTxt(r.estMult)).append(r.estOfferMult > 0 ? " (de la oferta)" : "").append(" \u00b7 modo ").append(r.estMode).append("\n");
+            if (r.estMinApplied) dt.append("Se aplic\u00f3 la tarifa m\u00ednima estimada\n");
+            if (r.pickupKm > 0 || r.pickupMin > 0) {
+                dt.append("Recogida (no cuenta en el precio): ");
+                if (r.pickupMin > 0) dt.append((int) r.pickupMin).append(" min");
+                if (r.pickupKm > 0) dt.append(r.pickupMin > 0 ? " (" : "").append(f(r.pickupKm, 1)).append(" km").append(r.pickupMin > 0 ? ")" : "");
+                dt.append("\n");
+            }
+            dt.append(r.reason);
+            dt.append("\nPrecio ESTIMADO con tarifas aproximadas (no son las oficiales de Bolt)");
+            aDetail.setText(dt.toString());
+            if (!alertShown) { wm.addView(alertView, alp); alertShown = true; }
+        } catch (Exception e) { }
+    }
+
+    /** prueba desde Ajustes: oferta de Bolt de ejemplo (8,3 km, 12 min, x1,4) con TUS tarifas; se ve y se oye */
+    public void demoBolt() {
+        try {
+            List<String> n = new ArrayList<String>();
+            for (String s : new String[]{"x1.4", "6 min", "\u2022", "2.1 km", "Calle de ejemplo", "12 min", "\u2022", "8.3 km", "Destino de ejemplo", "Aceptar"}) n.add(s);
+            OfferAnalyzer.Result r = OfferAnalyzer.analyze(n, rentParams(), false, true);
+            lastVoice = null;
+            showAlert(r);
+            speakOffer(r);
+            rh.removeCallbacks(hideRun);
+            rh.postDelayed(hideRun, 9000);
+        } catch (Exception e) { }
     }
 
     public void forceBubble() {
