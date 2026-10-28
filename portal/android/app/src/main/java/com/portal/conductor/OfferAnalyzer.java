@@ -34,8 +34,8 @@ public class OfferAnalyzer {
         public String estMode = "";
         public String estAirport = "";              // "" | "pickup" (recogida en el aeropuerto) | "dest" (viaje hacia el aeropuerto)
         public double estFee = 0;                   // tasa del aeropuerto restada antes de la comision
-        // ---- tarifa por zona (v3.15f) ----
-        public int estZone = 0;                     // 0 = no se uso la tarifa por zona | 1 = fuera de zona buena (M30 y sur) | 2 = zona buena
+        // ---- ajuste por zona (v3.15f/g) ----
+        public int estZone = 0;                     // 0 = sin ajuste de zona (aeropuerto, o ajuste apagado) | 1 = fuera de zona buena (M30 y sur) | 2 = zona buena
         public double estAdj = 0;                   // % de ajuste aplicado al calculo con la tarifa de Bolt (-8 fuera con poca demanda, 0 con x1,2 o mas, +12 en zona buena)
         public double estEff = 1;                   // demanda realmente aplicada (la curva de la demanda, no solo el xN de la oferta)
         public String estArea = "";                 // nombre de la zona buena donde se detecto la ubicacion
@@ -43,89 +43,84 @@ public class OfferAnalyzer {
     }
 
     // =====================================================================
-    //  Estimacion del precio de Bolt cuando la oferta NO muestra el precio.
+    //  Estimacion del precio de Bolt cuando la oferta NO muestra el precio (v3.15g).
     //  Todos los valores son ESTIMACIONES editables por el conductor, NO son tarifas oficiales de Bolt.
+    //  Cuatro tarjetas de precios: normal y aeropuerto, cada una para entre semana y para fin de semana.
+    //  Que tarjeta se usa lo deciden las franjas de fin de semana que define el conductor (y los festivos), no el dia del calendario.
     // =====================================================================
 
-    /** Un tramo de distancia del viaje con pasajero. */
-    public static class Tier {
-        public double base, perKm, perMin, mult = 1.0;
-        public String mode = "A";            // A: el multiplicador solo afecta a los km; B: afecta al importe completo
-        public Tier() { }
-        public Tier(double base, double perKm, double perMin) { this.base = base; this.perKm = perKm; this.perMin = perMin; }
-        public Tier copy() { Tier t = new Tier(base, perKm, perMin); t.mult = mult; t.mode = mode; return t; }
+    /** Una tarjeta de precios: inicial + km * precioKm + min * precioMin, nunca menos que la minima (0 = sin minima). */
+    public static class Card {
+        public double base, perKm, perMin, minFare;
+        public Card() { }
+        public Card(double base, double perKm, double perMin, double minFare) { this.base = base; this.perKm = perKm; this.perMin = perMin; this.minFare = minFare; }
+        public Card copy() { return new Card(base, perKm, perMin, minFare); }
     }
 
-    /**
-     * Tarifa especial de las RECOGIDAS en el aeropuerto y tasa que se resta en TODOS los viajes del aeropuerto.
-     * Formula provisional (editable): bruto = base * (km del viaje / ref) * demanda; despues se resta la tasa y sobre el resto se calcula la comision.
-     */
-    public static class Air {
+    /** Minutos de una semana (de lunes 00:00 a domingo 24:00). */
+    public static final int WEEK_MIN = 10080;
+
+    /** Franja de fin de semana: de "from" a "to" en minutos desde el lunes 00:00 (0..10079); si "to" es menor que "from" da la vuelta al domingo. */
+    public static class Slot {
         public boolean on = true;
-        public double base = 15.90;          // tarifa de referencia: lo que cuestan "ref" kilometros
-        public double ref = 11;              // km a los que corresponde esa tarifa
-        public boolean min = true;           // true: nunca menos que la tarifa de referencia (viajes de menos de "ref" km)
-        public double fee = 2.57;            // tasa del aeropuerto (se resta del bruto ANTES de la comision)
-        public double mult = 1.0;            // demanda si la oferta no muestra ninguna (multiplica el importe completo)
-        public Air copy() { Air a = new Air(); a.on = on; a.base = base; a.ref = ref; a.min = min; a.fee = fee; a.mult = mult; return a; }
+        public int from, to;
+        public Slot() { }
+        public Slot(int from, int to) { this.from = from; this.to = to; }
+        public Slot copy() { Slot s = new Slot(from, to); s.on = on; return s; }
+        /** true si el minuto de la semana w (0..10079) cae dentro: el principio cuenta, el final no. */
+        public boolean contains(int w) { return from < to ? (w >= from && w < to) : (w >= from || w < to); }
     }
 
-    public static final int MAX_TIERS = 8;
-
-    /** Fin de cada tramo cuando no hay limites validos: 5, 10, 15, 20, 25... (n tramos = n-1 limites). */
-    public static double[] defaultBp(int n) {
-        double[] b = new double[Math.max(0, n - 1)];
-        for (int i = 0; i < b.length; i++) b[i] = 5 * (i + 1);
-        return b;
+    /** Franjas iniciales: de viernes 18:00 a domingo 06:00. */
+    public static List<Slot> defaultSlots() {
+        List<Slot> l = new ArrayList<Slot>();
+        l.add(new Slot(4 * 1440 + 18 * 60, 6 * 1440 + 6 * 60));
+        return l;
     }
 
-    /** Perfil de tarifas con n tramos continuos (1..MAX_TIERS): bp[i] es el fin del tramo i+1; el ultimo tramo no tiene limite. */
-    public static class Profile {
-        public double[] bp = {5, 10, 15};
-        public Tier[] t = new Tier[4];
-        public Air air = new Air();
-        public double minFare = 0;           // 0 = sin tarifa minima
-        public boolean offerMult = true;     // usar el xN que muestre la oferta, si aparece
-        public Profile copy() {
-            Profile p = new Profile();
-            p.bp = bp.clone();
-            p.t = new Tier[t.length];
-            for (int i = 0; i < t.length; i++) p.t[i] = t[i].copy();
-            p.air = air.copy();
-            p.minFare = minFare; p.offerMult = offerMult;
-            return p;
+    /** Una zona buena: un poligono dibujado a mano (puntos [latitud, longitud] en orden). */
+    public static class Area {
+        public String name = "";
+        public List<double[]> pts = new ArrayList<double[]>();
+        public Area() { }
+        public Area(String name, List<double[]> pts) { this.name = name; this.pts = pts; }
+        public Area copy() {
+            List<double[]> p = new ArrayList<double[]>();
+            for (double[] q : pts) p.add(new double[]{q[0], q[1]});
+            return new Area(name, p);
+        }
+        /** Punto dentro del poligono (regla par-impar; la orilla puede salir en cualquiera de los dos lados). */
+        public boolean contains(double lat, double lon) {
+            boolean in = false;
+            for (int i = 0, j = pts.size() - 1; i < pts.size(); j = i++) {
+                double yi = pts.get(i)[0], xi = pts.get(i)[1], yj = pts.get(j)[0], xj = pts.get(j)[1];
+                if (((yi > lat) != (yj > lat)) && (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi)) in = !in;
+            }
+            return in;
         }
     }
 
-    /** Una zona buena: un circulo (centro y radio en km) donde la tarifa de Bolt es mas alta. */
-    public static class Area {
-        public String name = ""; public double lat, lon, r;
-        public Area() { }
-        public Area(String name, double lat, double lon, double r) { this.name = name; this.lat = lat; this.lon = lon; this.r = r; }
-        public Area copy() { return new Area(name, lat, lon, r); }
-    }
-
     /**
-     * Tarifa por zona (v3.15f). Una sola tarifa normal de Bolt (M30 y sur: la diferencia entre ellas es pequena):
-     *   calculo = inicial + km * precio_km + min * precio_min  (nunca menos que el minimo)
+     * Ajuste por zona y por demanda (solo viajes normales; el aeropuerto no lo usa). Se aplica a la tarjeta normal:
+     *   calculo = inicial + km * precio_km + min * precio_min  (nunca menos que la minima)
      * FUERA de zona buena (M30, sur...), segun la demanda m que muestra la oferta:
      *   m menor que realFrom (x1,2) ........ calculo * (1 + adj/100)            (por defecto -8 %)
      *   de realFrom a dFrom (x1,2 a x1,3) .. calculo * 1                         (tarifa real, sin demanda)
      *   desde dFrom (x1,4) ................. calculo * m * (1 + extra/100)       (extra: desde dA1 dP1 %, desde dA2 dP2 %, desde dA3 dP3 %; cada escalon sustituye al anterior)
-     * EN zona buena: calculo * (1 + adjGood/100) * m   (tarifa de fuera + el multiplicador tal como sale, sin escalones; por defecto +12 %)
-     * La zona buena se detecta con la ubicacion del movil (circulos editables). Si no hay ubicacion reciente, se usa la tarifa de fuera de zona buena.
+     * EN zona buena: calculo * (1 + adjGood/100) * m   (por defecto +12 %; el multiplicador tal como sale, sin escalones)
+     * Las zonas buenas son poligonos que dibuja el conductor y se detectan con la ubicacion del movil (sin ubicacion reciente: fuera de zona buena).
+     * Con "on" apagado no hay ajustes: tarjeta * demanda tal como sale.
      */
     public static class Zone {
         public boolean on = true;
-        public double base = 2.10, perKm = 0.77, perMin = 0.15, minFare = 6.75;
         public double adj = -8, adjGood = 12;
         public double mult = 1.0;                         // demanda a mano si la oferta no muestra ninguna (se trata como si la mostrara)
         public double realFrom = 1.2;
         public double dFrom = 1.4, dA1 = 1.5, dP1 = 5, dA2 = 2.0, dP2 = 8, dA3 = 2.5, dP3 = 10;
-        public List<Area> good = defaultAreas();
+        public List<Area> good = new ArrayList<Area>();   // sin zonas al principio
         public Zone copy() {
             Zone z = new Zone();
-            z.on = on; z.base = base; z.perKm = perKm; z.perMin = perMin; z.minFare = minFare; z.adj = adj; z.adjGood = adjGood; z.mult = mult;
+            z.on = on; z.adj = adj; z.adjGood = adjGood; z.mult = mult;
             z.realFrom = realFrom; z.dFrom = dFrom; z.dA1 = dA1; z.dP1 = dP1; z.dA2 = dA2; z.dP2 = dP2; z.dA3 = dA3; z.dP3 = dP3;
             z.good = new ArrayList<Area>();
             for (Area a : good) z.good.add(a.copy());
@@ -138,25 +133,11 @@ public class OfferAnalyzer {
             double extra = m >= dA3 ? dP3 : (m >= dA2 ? dP2 : (m >= dA1 ? dP1 : 0));
             return m * (1 + extra / 100.0);
         }
-        /** Ajuste (%) sobre el calculo de la tarifa: -8 fuera si hay poca demanda, 0 fuera con x1,2 o mas, +12 en zona buena. */
+        /** Ajuste (%) sobre el calculo de la tarjeta: -8 fuera si hay poca demanda, 0 fuera con x1,2 o mas, +12 en zona buena. */
         public double adjust(double m, boolean goodZone) {
             if (goodZone) return adjGood;
             return m < realFrom ? adj : 0;
         }
-    }
-
-    /** Zonas buenas por defecto (centros aproximados; se pueden editar en Ajustes). */
-    public static List<Area> defaultAreas() {
-        List<Area> l = new ArrayList<Area>();
-        l.add(new Area("La Moraleja", 40.5133, -3.6452, 2.5));
-        l.add(new Area("Alcobendas", 40.5475, -3.6420, 3.0));
-        l.add(new Area("San Sebasti\u00E1n de los Reyes", 40.5497, -3.6266, 3.0));
-        l.add(new Area("Las Rozas", 40.4929, -3.8738, 4.0));
-        l.add(new Area("Majadahonda", 40.4736, -3.8722, 3.0));
-        l.add(new Area("Pozuelo de Alarc\u00F3n", 40.4352, -3.8135, 3.5));
-        l.add(new Area("Boadilla del Monte", 40.4050, -3.8780, 3.5));
-        l.add(new Area("Aravaca", 40.4545, -3.7810, 2.0));
-        return l;
     }
 
     /** Distancia en km entre dos puntos (formula de haversine). */
@@ -169,7 +150,7 @@ public class OfferAnalyzer {
     /** Nombre de la zona buena que contiene el punto, o null si no esta en ninguna. */
     public static String goodAreaAt(Zone z, double lat, double lon) {
         if (z == null || z.good == null) return null;
-        for (Area a : z.good) if (distKm(lat, lon, a.lat, a.lon) <= a.r) return a.name;
+        for (Area a : z.good) if (a != null && a.contains(lat, lon)) return a.name;
         return null;
     }
 
@@ -178,28 +159,17 @@ public class OfferAnalyzer {
         public boolean goodZone = false;     // lo pone el servicio en cada lectura segun la ubicacion (no se guarda)
         public String goodName = "";
         public boolean on = true;
-        public String mode = "auto";         // auto (por fecha) | week | weekend
+        public String mode = "auto";         // auto (por las franjas) | week (siempre entre semana) | weekend (siempre fin de semana)
         public double comm = 25;             // comision de Bolt, %
-        public Profile wd = defaultWeekday(), we = defaultWeekend();
+        public boolean offerMult = true;     // usar el xN que muestre la oferta, si aparece
+        // las cuatro tarjetas: normal / aeropuerto, entre semana (wd) / fin de semana (we)
+        public Card nWd = new Card(2.10, 0.77, 0.15, 6.75), nWe = new Card(2.10, 0.77, 0.15, 6.75);
+        public Card aWd = new Card(2.89, 0.82, 0.15, 13.50), aWe = new Card(2.89, 0.82, 0.15, 13.50);
+        public boolean airOn = true;         // usar la tarjeta del aeropuerto (recogidas y viajes hacia el aeropuerto)
+        public double airFee = 2.57;         // tasa del aeropuerto: se resta del bruto ANTES de la comision
+        public List<Slot> slots = defaultSlots();
+        public boolean holidaysWe = true;    // los festivos cuentan como fin de semana
         public List<String> holidays = defaultHolidays();   // "yyyy-MM-dd" o "MM-dd"
-    }
-
-    public static Profile defaultWeekday() {
-        Profile p = new Profile();
-        p.t[0] = new Tier(3.50, 0.95, 0.11);
-        p.t[1] = new Tier(3.50, 0.80, 0.11);
-        p.t[2] = new Tier(1.95, 0.95, 0.11);
-        p.t[3] = new Tier(1.95, 0.80, 0.11);
-        p.minFare = 5.95;
-        return p;
-    }
-
-    /** Valores provisionales de fin de semana: 5,50 base, 1,70 por km y 0,22 por minuto en los cuatro tramos. */
-    public static Profile defaultWeekend() {
-        Profile p = new Profile();
-        for (int i = 0; i < 4; i++) p.t[i] = new Tier(5.50, 1.70, 0.22);
-        p.minFare = 9.00;
-        return p;
     }
 
     /** Festivos nacionales fijos y el de la Comunidad de Madrid. Los que cambian cada ano (Semana Santa) se anaden a mano con aaaa-mm-dd. */
@@ -209,31 +179,37 @@ public class OfferAnalyzer {
         return l;
     }
 
-    /** Tramo (0..n-1) segun los km del viaje con pasajero. El limite superior pertenece al tramo de abajo: sin huecos ni solapes. */
-    public static int tierIndex(Profile p, double km) {
-        for (int i = 0; i < p.bp.length; i++) if (km <= p.bp[i]) return i;
-        return p.t.length - 1;
-    }
-
-    /** true si hoy se aplica el perfil de fin de semana / festivo. */
-    public static boolean isWeekend(BoltCfg c, java.util.Calendar cal) {
-        if ("week".equals(c.mode)) return false;
-        if ("weekend".equals(c.mode)) return true;
-        int dow = cal.get(java.util.Calendar.DAY_OF_WEEK);
-        if (dow == java.util.Calendar.SATURDAY || dow == java.util.Calendar.SUNDAY) return true;
+    /** true si el dia del calendario es uno de los festivos de la lista. */
+    public static boolean isHoliday(BoltCfg c, java.util.Calendar cal) {
         int mo = cal.get(java.util.Calendar.MONTH) + 1, dd = cal.get(java.util.Calendar.DAY_OF_MONTH), yy = cal.get(java.util.Calendar.YEAR);
         String full = String.format(Locale.ROOT, "%04d-%02d-%02d", yy, mo, dd), md = String.format(Locale.ROOT, "%02d-%02d", mo, dd);
         if (c.holidays != null) for (String h : c.holidays) if (full.equals(h) || md.equals(h)) return true;
         return false;
     }
 
+    /** Minuto de la semana (0 = lunes 00:00 ... 10079 = domingo 23:59) de un instante. */
+    public static int weekMinute(java.util.Calendar cal) {
+        int dow = (cal.get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7;       // lunes = 0 ... domingo = 6
+        return dow * 1440 + cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE);
+    }
+
+    /** true si ahora se usa la tarjeta de fin de semana: lo decide la franja en la que cae la hora (o un festivo), no el dia del calendario. */
+    public static boolean isWeekend(BoltCfg c, java.util.Calendar cal) {
+        if ("week".equals(c.mode)) return false;
+        if ("weekend".equals(c.mode)) return true;
+        if (c.holidaysWe && isHoliday(c, cal)) return true;
+        int w = weekMinute(cal);
+        if (c.slots != null) for (Slot s : c.slots) if (s != null && s.on && s.contains(w)) return true;
+        return false;
+    }
+
     public static class Est {
         public double gross, comm, net, mult, lo, hi, fee;
-        public int tier;                     // 1..n (0 = tarifa de aeropuerto)
-        public String mode = "A";
+        public int tier;                     // siempre 0 (ya no hay tramos; se deja para no cambiar el resto del codigo)
+        public String mode = "";             // "Z" = ajuste por zona y demanda | "" = tarjeta por la demanda tal como sale
         public String airport = "";          // "" | "pickup" | "dest"
         public boolean minApplied, weekend, fromOffer;
-        public int zone = 0;                 // 0 = tramos | 1 = tarifa por zona fuera de zona buena | 2 = zona buena
+        public int zone = 0;                 // 0 = sin ajuste de zona | 1 = fuera de zona buena | 2 = zona buena
         public double adj = 0, eff = 1;      // % de ajuste aplicado y demanda realmente aplicada
     }
 
@@ -259,48 +235,39 @@ public class OfferAnalyzer {
     public static Est estimate(BoltCfg c, boolean weekend, double km, double min, double offerMult) { return estimate(c, weekend, km, min, offerMult, ""); }
 
     /**
-     * Bruto = base + km*precioKm*mult + min*precioMin (modo A) o (base + km*precioKm + min*precioMin)*mult (modo B). Sin redondeos intermedios.
-     * Aeropuerto (airKind): en una RECOGIDA el bruto es proporcional a los km: base * (km / ref) * demanda (sin minutos; con "min" nunca menos que la base);
-     * en cualquier viaje del aeropuerto se resta la tasa del bruto ANTES de calcular la comision.
+     * Bruto = (inicial + km*precioKm + min*precioMin, nunca menos que la minima) de la tarjeta que toca, sin redondeos intermedios.
+     *  - Tarjeta: la del aeropuerto (recogidas Y viajes hacia el aeropuerto) o la normal; la de entre semana o la de fin de semana segun "weekend".
+     *  - Aeropuerto: la demanda multiplica todo (minima incluida), sin ajustes de zona; despues se resta la tasa del aeropuerto y sobre el resto se calcula la comision.
+     *  - Normal con el ajuste por zona activado: ver Zone. Con el ajuste apagado: tarjeta * demanda tal como sale.
      */
     public static Est estimate(BoltCfg c, boolean weekend, double km, double min, double offerMult, String airKind) {
-        Profile pr = weekend ? c.we : c.wd;
-        Air a = pr.air;
-        String ak = (a != null && a.on && ("pickup".equals(airKind) || "dest".equals(airKind))) ? airKind : "";
-        boolean fromOffer = pr.offerMult && offerMult > 0;
+        boolean air = c.airOn && ("pickup".equals(airKind) || "dest".equals(airKind));
+        String ak = air ? airKind : "";
+        Card card = air ? (weekend ? c.aWe : c.aWd) : (weekend ? c.nWe : c.nWd);
+        boolean fromOffer = c.offerMult && offerMult > 0;
         Est e = new Est();
-        double gross, mult;
+        double raw = card.base + km * card.perKm + min * card.perMin;
         boolean ma = false;
-        if ("pickup".equals(ak)) {
-            mult = Math.max(0.1, Math.min(10.0, fromOffer ? offerMult : a.mult));
-            double factor = km / a.ref;
-            if (a.min && factor < 1.0) { factor = 1.0; ma = true; }
-            gross = a.base * factor * mult;
-            e.tier = 0; e.lo = 0; e.hi = a.ref; e.mode = "";
-        } else if (c.zone != null && c.zone.on) {
-            Zone z = c.zone;
-            double raw = z.base + km * z.perKm + min * z.perMin;
-            if (z.minFare > 0 && raw < z.minFare) { raw = z.minFare; ma = true; }
-            double m = fromOffer ? Math.max(0.1, Math.min(10.0, offerMult)) : Math.max(0.1, Math.min(10.0, z.mult));
+        if (card.minFare > 0 && raw < card.minFare) { raw = card.minFare; ma = true; }
+        Zone z = c.zone;
+        double m = Math.max(0.1, Math.min(10.0, fromOffer ? offerMult : z.mult));
+        double gross, mult;
+        if (!air && z.on) {
             double adj = z.adjust(m, c.goodZone), eff = z.demand(m, c.goodZone);
             mult = eff > 1.0 + 1e-9 || c.goodZone ? m : 1.0;       // lo que se dice en voz alta: solo la demanda que de verdad se aplica
             gross = raw * (1 + adj / 100.0) * eff;
-            e.tier = 0; e.lo = z.realFrom; e.hi = z.dFrom; e.mode = "Z";           // en modo zona: lo = desde que demanda se acaba el descuento, hi = desde que demanda se aplica
+            e.lo = z.realFrom; e.hi = z.dFrom; e.mode = "Z";       // en modo zona: lo = desde que demanda se acaba el descuento, hi = desde que demanda se aplica
             e.zone = c.goodZone ? 2 : 1; e.adj = adj; e.eff = eff;
         } else {
-            int ti = tierIndex(pr, km);
-            Tier t = pr.t[ti];
-            mult = Math.max(0.1, Math.min(10.0, fromOffer ? offerMult : t.mult));
-            gross = "B".equals(t.mode) ? (t.base + km * t.perKm + min * t.perMin) * mult : t.base + km * t.perKm * mult + min * t.perMin;
-            if (pr.minFare > 0 && gross < pr.minFare) { gross = pr.minFare; ma = true; }
-            e.tier = ti + 1; e.mode = "B".equals(t.mode) ? "B" : "A";
-            e.lo = ti == 0 ? 0 : pr.bp[ti - 1]; e.hi = ti == pr.t.length - 1 ? -1 : pr.bp[ti];
+            mult = m;
+            gross = raw * m;
+            e.eff = m;
         }
         double pct = Math.max(0, Math.min(90, c.comm));
-        double fee = ak.length() > 0 ? a.fee : 0;
+        double fee = air ? c.airFee : 0;
         double after = fee > 0 ? Math.max(0, gross - fee) : gross;
         e.gross = gross; e.fee = fee; e.comm = after * pct / 100.0; e.net = after - e.comm;
-        e.mult = mult; e.airport = ak;
+        e.mult = mult; e.airport = ak; e.tier = 0;
         e.minApplied = ma; e.weekend = weekend; e.fromOffer = fromOffer;
         return e;
     }
@@ -343,6 +310,7 @@ public class OfferAnalyzer {
             else if ("dest".equals(r.estAirport)) b.append("Hacia el aeropuerto. ");
             b.append("Viaje de ").append(km).append("1".equals(km) ? " kil\u00F3metro y " : " kil\u00F3metros y ").append(min).append(min == 1 ? " minuto" : " minutos");
             if (r.estZone == 2) b.append(", zona buena");
+            if (r.estWeekend) b.append(", tarifa de fin de semana");
             if (Math.abs(r.estMult - 1.0) > 1e-9) b.append(", demanda por ").append(spokenNum(r.estMult, 2));
             b.append(". Bruto estimado: ").append(money(r.estGross)).append(" euros. ");
             if (r.estFee > 0) b.append("Tasa del aeropuerto: ").append(money(r.estFee)).append(" euros. ");
