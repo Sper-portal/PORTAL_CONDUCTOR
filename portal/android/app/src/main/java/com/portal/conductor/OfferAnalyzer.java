@@ -1,5 +1,6 @@
 package com.portal.conductor;
 
+import java.math.BigDecimal;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
@@ -14,7 +15,7 @@ public class OfferAnalyzer {
         public double minHour = 15, minKm = 1.0, maxPickup = 5.0, commission = 0, tolPct = 15, tolPickup = 1.0;
         public boolean includePickup = true;
         public BoltCfg bolt = new BoltCfg();     // estimacion de Bolt cuando la oferta no trae precio
-        public boolean weekendNow = false;       // perfil de fin de semana/festivo (lo decide quien llama con isWeekend)
+        public boolean weekendNow = false;       // v3.15h: \u00abahora es hora punta\u00bb para la zona actual (lo decide quien llama con isWeekend)
     }
 
     public static class Result {
@@ -27,27 +28,32 @@ public class OfferAnalyzer {
         public boolean acceptSeen, unreadable;
         public int stH = -1, stK = -1, stP = -1;   // 0 verde, 1 naranja, 2 rojo, -1 sin dato
         // ---- estimacion de Bolt (solo si la oferta no trae precio) ----
-        public boolean isBolt, estimated, estWeekend, estMinApplied;
-        public double estGross = -1, estComm = -1, estNet = -1, estMult = 1, estOfferMult = -1, estLo = -1, estHi = -1;
-        public int estTier = -1;
+        public boolean isBolt, estimated, estWeekend, estMinApplied;   // estWeekend = franja de hora punta ahora
+        public double estGross = -1, estComm = -1, estNet = -1, estMult = 1, estOfferMult = -1;
+        public double estNetLo = -1, estNetHi = -1;                     // rango (viajes cortos con demanda); -1 si no hay rango
+        public boolean estRange;
+        public double estAlt = -1;                                      // neto si la hora punta contara (solo si hay franja punta y NO se aplica); -1 si no
+        public boolean estPeakUsed;                                     // la tarjeta de punta se uso de verdad en el calculo
+        public double estFine = 0;                                      // ajuste fino de demanda aplicado (%)
         public double estCommPct = -1;
-        public String estMode = "";
         public String estAirport = "";              // "" | "pickup" (recogida en el aeropuerto) | "dest" (viaje hacia el aeropuerto)
         public double estFee = 0;                   // tasa del aeropuerto restada antes de la comision
-        // ---- ajuste por zona (v3.15f/g) ----
-        public int estZone = 0;                     // 0 = sin ajuste de zona (aeropuerto, o ajuste apagado) | 1 = fuera de zona buena (M30 y sur) | 2 = zona buena
-        public double estAdj = 0;                   // % de ajuste aplicado al calculo con la tarifa de Bolt (-8 fuera con poca demanda, 0 con x1,2 o mas, +12 en zona buena)
-        public double estEff = 1;                   // demanda realmente aplicada (la curva de la demanda, no solo el xN de la oferta)
-        public String estArea = "";                 // nombre de la zona buena donde se detecto la ubicacion
-        public boolean estFromOffer = false;        // true si el calculo uso la demanda que muestra la oferta (false: la de Ajustes)
+        public int estZone = 1;                     // zona de la recogida: 0 baja, 1 media, 2 alta
+        public String estArea = "";                 // nombre de la zona dibujada donde se detecto la ubicacion
+        public String estZoneSrc = "";              // "area" (dibujada) | "default" (fuera de tus zonas) | "forced" (forzada en Ajustes)
     }
 
     // =====================================================================
-    //  Estimacion del precio de Bolt cuando la oferta NO muestra el precio (v3.15g).
+    //  Estimacion del precio de Bolt cuando la oferta NO muestra el precio (v3.15h).
     //  Todos los valores son ESTIMACIONES editables por el conductor, NO son tarifas oficiales de Bolt.
-    //  Cuatro tarjetas de precios: normal y aeropuerto, cada una para entre semana y para fin de semana.
-    //  Que tarjeta se usa lo deciden las franjas de fin de semana que define el conductor (y los festivos), no el dia del calendario.
+    //  Ocho tarjetas: zona baja / media / alta (de la RECOGIDA, nunca del destino) x valle / punta, mas las dos del aeropuerto (recogidas).
+    //  La demanda de la oferta multiplica todo. Las franjas de hora punta las define el conductor (una lista para media y baja, otra para alta).
     // =====================================================================
+
+    /** Zonas: 0 baja, 1 media, 2 alta. */
+    public static final int Z_LOW = 0, Z_MID = 1, Z_HIGH = 2;
+
+    public static String zoneName(int k) { return k == Z_HIGH ? "alta" : (k == Z_LOW ? "baja" : "media"); }
 
     /** Una tarjeta de precios: inicial + km * precioKm + min * precioMin, nunca menos que la minima (0 = sin minima). */
     public static class Card {
@@ -60,34 +66,63 @@ public class OfferAnalyzer {
     /** Minutos de una semana (de lunes 00:00 a domingo 24:00). */
     public static final int WEEK_MIN = 10080;
 
-    /** Franja de fin de semana: de "from" a "to" en minutos desde el lunes 00:00 (0..10079); si "to" es menor que "from" da la vuelta al domingo. */
+    /**
+     * Franja de hora punta: unos dias de la semana (days: bit 0 = lunes ... bit 6 = domingo) desde la hora "a" hasta la hora "b" (minutos del dia, 0..1440).
+     * Si "b" es menor o igual que "a", la franja acaba al dia siguiente (por ejemplo jueves 17:00 -> 02:00 del viernes). a = 0 y b = 1440 es el dia entero.
+     */
     public static class Slot {
         public boolean on = true;
-        public int from, to;
+        public int days, a, b;
         public Slot() { }
-        public Slot(int from, int to) { this.from = from; this.to = to; }
-        public Slot copy() { Slot s = new Slot(from, to); s.on = on; return s; }
+        public Slot(int days, int a, int b) { this.days = days; this.a = a; this.b = b; }
+        public Slot copy() { Slot s = new Slot(days, a, b); s.on = on; return s; }
+        public int length() { return b > a ? b - a : b + 1440 - a; }
         /** true si el minuto de la semana w (0..10079) cae dentro: el principio cuenta, el final no. */
-        public boolean contains(int w) { return from < to ? (w >= from && w < to) : (w >= from || w < to); }
+        public boolean contains(int w) {
+            int len = length();
+            for (int d = 0; d < 7; d++) {
+                if ((days & (1 << d)) == 0) continue;
+                int st = d * 1440 + a;
+                int x = w - st;
+                if (x < 0) x += WEEK_MIN;
+                if (x >= 0 && x < len) return true;
+            }
+            return false;
+        }
     }
 
-    /** Franjas iniciales: de viernes 18:00 a domingo 06:00. */
+    private static final int WEEKDAYS = 31, WEEKEND = 96;     // lunes a viernes / sabado y domingo
+
+    /** Franjas de hora punta iniciales de zona media y baja: lunes a viernes 07:00-10:00 y 17:00-20:00, sabado y domingo todo el dia. */
     public static List<Slot> defaultSlots() {
         List<Slot> l = new ArrayList<Slot>();
-        l.add(new Slot(4 * 1440 + 18 * 60, 6 * 1440 + 6 * 60));
+        l.add(new Slot(WEEKDAYS, 7 * 60, 10 * 60));
+        l.add(new Slot(WEEKDAYS, 17 * 60, 20 * 60));
+        l.add(new Slot(WEEKEND, 0, 1440));
         return l;
     }
 
-    /** Una zona buena: un poligono dibujado a mano (puntos [latitud, longitud] en orden). */
+    /** Zona alta: igual, pero por la manana empieza a las 08:00 (visto el 29-10; sin confirmar). */
+    public static List<Slot> defaultSlotsHigh() {
+        List<Slot> l = new ArrayList<Slot>();
+        l.add(new Slot(WEEKDAYS, 8 * 60, 10 * 60));
+        l.add(new Slot(WEEKDAYS, 17 * 60, 20 * 60));
+        l.add(new Slot(WEEKEND, 0, 1440));
+        return l;
+    }
+
+    /** Una zona dibujada a mano: un poligono (puntos [latitud, longitud] en orden) de zona alta, media o baja. */
     public static class Area {
         public String name = "";
+        public int kind = Z_HIGH;
         public List<double[]> pts = new ArrayList<double[]>();
         public Area() { }
         public Area(String name, List<double[]> pts) { this.name = name; this.pts = pts; }
+        public Area(String name, int kind, List<double[]> pts) { this.name = name; this.kind = kind; this.pts = pts; }
         public Area copy() {
             List<double[]> p = new ArrayList<double[]>();
             for (double[] q : pts) p.add(new double[]{q[0], q[1]});
-            return new Area(name, p);
+            return new Area(name, kind, p);
         }
         /** Punto dentro del poligono (regla par-impar; la orilla puede salir en cualquiera de los dos lados). */
         public boolean contains(double lat, double lon) {
@@ -100,43 +135,14 @@ public class OfferAnalyzer {
         }
     }
 
-    /**
-     * Ajuste por zona y por demanda (solo viajes normales; el aeropuerto no lo usa). Se aplica a la tarjeta normal:
-     *   calculo = inicial + km * precio_km + min * precio_min  (nunca menos que la minima)
-     * FUERA de zona buena (M30, sur...), segun la demanda m que muestra la oferta:
-     *   m menor que realFrom (x1,2) ........ calculo * (1 + adj/100)            (por defecto -8 %)
-     *   de realFrom a dFrom (x1,2 a x1,3) .. calculo * 1                         (tarifa real, sin demanda)
-     *   desde dFrom (x1,4) ................. calculo * m * (1 + extra/100)       (extra: desde dA1 dP1 %, desde dA2 dP2 %, desde dA3 dP3 %; cada escalon sustituye al anterior)
-     * EN zona buena: calculo * (1 + adjGood/100) * m   (por defecto +12 %; el multiplicador tal como sale, sin escalones)
-     * Las zonas buenas son poligonos que dibuja el conductor y se detectan con la ubicacion del movil (sin ubicacion reciente: fuera de zona buena).
-     * Con "on" apagado no hay ajustes: tarjeta * demanda tal como sale.
-     */
+    /** Las zonas dibujadas. Fuera de todas ellas vale la zona por defecto de Ajustes (media de fabrica). */
     public static class Zone {
-        public boolean on = true;
-        public double adj = -8, adjGood = 12;
-        public double mult = 1.0;                         // demanda a mano si la oferta no muestra ninguna (se trata como si la mostrara)
-        public double realFrom = 1.2;
-        public double dFrom = 1.4, dA1 = 1.5, dP1 = 5, dA2 = 2.0, dP2 = 8, dA3 = 2.5, dP3 = 10;
         public List<Area> good = new ArrayList<Area>();   // sin zonas al principio
         public Zone copy() {
             Zone z = new Zone();
-            z.on = on; z.adj = adj; z.adjGood = adjGood; z.mult = mult;
-            z.realFrom = realFrom; z.dFrom = dFrom; z.dA1 = dA1; z.dP1 = dP1; z.dA2 = dA2; z.dP2 = dP2; z.dA3 = dA3; z.dP3 = dP3;
             z.good = new ArrayList<Area>();
             for (Area a : good) z.good.add(a.copy());
             return z;
-        }
-        /** Demanda realmente aplicada para el xN que muestra la oferta. */
-        public double demand(double m, boolean goodZone) {
-            if (goodZone) return m;
-            if (m < dFrom) return 1.0;
-            double extra = m >= dA3 ? dP3 : (m >= dA2 ? dP2 : (m >= dA1 ? dP1 : 0));
-            return m * (1 + extra / 100.0);
-        }
-        /** Ajuste (%) sobre el calculo de la tarjeta: -8 fuera si hay poca demanda, 0 fuera con x1,2 o mas, +12 en zona buena. */
-        public double adjust(double m, boolean goodZone) {
-            if (goodZone) return adjGood;
-            return m < realFrom ? adj : 0;
         }
     }
 
@@ -147,29 +153,57 @@ public class OfferAnalyzer {
         return 6371.0 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
-    /** Nombre de la zona buena que contiene el punto, o null si no esta en ninguna. */
-    public static String goodAreaAt(Zone z, double lat, double lon) {
+    /** La zona dibujada que contiene el punto (si cae en varias, manda la alta, luego la media y luego la baja), o null. */
+    public static Area areaAt(Zone z, double lat, double lon) {
         if (z == null || z.good == null) return null;
-        for (Area a : z.good) if (a != null && a.contains(lat, lon)) return a.name;
-        return null;
+        Area best = null;
+        for (Area a : z.good) {
+            if (a == null || !a.contains(lat, lon)) continue;
+            if (best == null || a.kind > best.kind) best = a;
+        }
+        return best;
+    }
+
+    /** Nombre de la zona dibujada que contiene el punto, o null si no esta en ninguna. */
+    public static String goodAreaAt(Zone z, double lat, double lon) {
+        Area a = areaAt(z, lat, lon);
+        return a == null ? null : a.name;
     }
 
     public static class BoltCfg {
         public Zone zone = new Zone();
-        public boolean goodZone = false;     // lo pone el servicio en cada lectura segun la ubicacion (no se guarda)
-        public String goodName = "";
+        // lo pone el servicio en cada lectura segun la ubicacion y la zona forzada (no se guarda)
+        public int zoneKind = Z_MID;
+        public String zoneName = "", zoneSrc = "default";
+        public String zoneForce = "auto";    // auto (por tus zonas dibujadas) | low | mid | high
+        public int zoneDef = Z_MID;          // zona de la recogida cuando no cae en ninguna zona dibujada
         public boolean on = true;
-        public String mode = "auto";         // auto (por las franjas) | week (siempre entre semana) | weekend (siempre fin de semana)
+        public String mode = "auto";         // auto (por las franjas) | week (siempre valle) | weekend (siempre punta)
         public double comm = 25;             // comision de Bolt, %
-        public boolean offerMult = true;     // usar el xN que muestre la oferta, si aparece
-        // las cuatro tarjetas: normal / aeropuerto, entre semana (wd) / fin de semana (we)
-        public Card nWd = new Card(2.10, 0.77, 0.15, 6.75), nWe = new Card(2.10, 0.77, 0.15, 6.75);
-        public Card aWd = new Card(2.89, 0.82, 0.15, 13.50), aWe = new Card(2.89, 0.82, 0.15, 13.50);
-        public boolean airOn = true;         // usar la tarjeta del aeropuerto (recogidas y viajes hacia el aeropuerto)
-        public double airFee = 2.57;         // tasa del aeropuerto: se resta del bruto ANTES de la comision
-        public List<Slot> slots = defaultSlots();
-        public boolean holidaysWe = true;    // los festivos cuentan como fin de semana
+        public boolean peakApplies = false;  // la tarjeta de punta SUBE el precio estimado (apagado: se calcula con la de valle y se avisa de lo que saldria)
+        public boolean round5 = true;        // el bruto se redondea a 5 centimos (como hace Bolt); el neto nunca se redondea
+        public double fine = 0;              // ajuste fino (%) que se suma al calculo cuando hay demanda
+        public double shortKm = 6, shortFrom = 1.2, bumpLo = 0, bumpHi = 2.5;   // viajes cortos con demanda: rango (menos de shortKm km y demanda desde shortFrom; el inicial real sube entre bumpLo y bumpHi euros)
+        // zona baja / media / alta x valle / punta
+        public Card lowV = new Card(2.02, 0.79, 0.13, 6.30), lowP = new Card(3.03, 0.80, 0.16, 8.85);
+        public Card midV = new Card(2.10, 0.77, 0.15, 6.75), midP = new Card(2.68, 0.84, 0.20, 7.65);
+        public Card highV = new Card(2.39, 0.85, 0.16, 6.70), highP = new Card(3.56, 0.91, 0.21, 8.35);
+        // aeropuerto (solo las RECOGIDAS en el aeropuerto): valle / punta
+        public Card airV = new Card(2.89, 0.82, 0.15, 13.50), airP = new Card(2.89, 0.82, 0.15, 13.50);
+        public boolean airOn = true;         // usar la tarjeta del aeropuerto en las recogidas
+        public double airFee = 2.57;         // tasa del aeropuerto (recogidas y viajes hacia el aeropuerto): se resta del bruto ANTES de la comision
+        public double airFlatKm = 11;        // recogida en el aeropuerto: hasta estos km solo vale la minima
+        public List<Slot> slots = defaultSlots();         // hora punta de zona media y baja
+        public List<Slot> slotsH = defaultSlotsHigh();    // hora punta de zona alta
+        public boolean holidaysWe = true;    // los festivos cuentan como hora punta todo el dia
         public List<String> holidays = defaultHolidays();   // "yyyy-MM-dd" o "MM-dd"
+    }
+
+    /** La tarjeta de la zona dada, de punta o de valle. */
+    public static Card zoneCard(BoltCfg c, int kind, boolean peak) {
+        if (kind == Z_HIGH) return peak ? c.highP : c.highV;
+        if (kind == Z_LOW) return peak ? c.lowP : c.lowV;
+        return peak ? c.midP : c.midV;
     }
 
     /** Festivos nacionales fijos y el de la Comunidad de Madrid. Los que cambian cada ano (Semana Santa) se anaden a mano con aaaa-mm-dd. */
@@ -193,31 +227,36 @@ public class OfferAnalyzer {
         return dow * 1440 + cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE);
     }
 
-    /** true si ahora se usa la tarjeta de fin de semana: lo decide la franja en la que cae la hora (o un festivo), no el dia del calendario. */
-    public static boolean isWeekend(BoltCfg c, java.util.Calendar cal) {
+    /** true si ahora es hora punta en la zona actual (c.zoneKind): lo decide la franja en la que cae la hora (o un festivo), no el dia del calendario. */
+    public static boolean isWeekend(BoltCfg c, java.util.Calendar cal) { return isPeak(c, c.zoneKind, cal); }
+
+    /** true si en la zona dada es hora punta a ese instante. */
+    public static boolean isPeak(BoltCfg c, int kind, java.util.Calendar cal) {
         if ("week".equals(c.mode)) return false;
         if ("weekend".equals(c.mode)) return true;
         if (c.holidaysWe && isHoliday(c, cal)) return true;
         int w = weekMinute(cal);
-        if (c.slots != null) for (Slot s : c.slots) if (s != null && s.on && s.contains(w)) return true;
+        List<Slot> l = kind == Z_HIGH ? c.slotsH : c.slots;
+        if (l != null) for (Slot s : l) if (s != null && s.on && s.contains(w)) return true;
         return false;
     }
 
     public static class Est {
-        public double gross, comm, net, mult, lo, hi, fee;
-        public int tier;                     // siempre 0 (ya no hay tramos; se deja para no cambiar el resto del codigo)
-        public String mode = "";             // "Z" = ajuste por zona y demanda | "" = tarjeta por la demanda tal como sale
+        public double gross, comm, net, mult, fee;
+        public double grossLo, grossHi, netLo, netHi;   // rango (solo si range)
+        public boolean range;
+        public double alt = -1;                          // neto con la tarjeta de punta si hay franja punta y no se aplica
         public String airport = "";          // "" | "pickup" | "dest"
-        public boolean minApplied, weekend, fromOffer;
-        public int zone = 0;                 // 0 = sin ajuste de zona | 1 = fuera de zona buena | 2 = zona buena
-        public double adj = 0, eff = 1;      // % de ajuste aplicado y demanda realmente aplicada
+        public boolean minApplied, weekend, peakUsed;    // weekend = franja de hora punta ahora
+        public int zone = Z_MID;
+        public double fine = 0;
     }
 
     // ---- aeropuerto: se detecta por el texto de la oferta ----
     // recogida: "parking P1 de la T1", "parking express T2", "parking modulo D planta 4 de la T4"
     private static final Pattern AIR_PICK_HINT = Pattern.compile("\\b(t\\s?[1-4]|p\\s?1|express|modulo\\s?d|terminal|aeropuerto|barajas)\\b");
-    // destino: "Terminal 1..4", "Aeropuerto ...", "Avenida de la Hispanidad"
-    private static final Pattern AIR_DEST = Pattern.compile("terminal\\s?[1-4]|aeropuerto|barajas|hispanidad");
+    // destino: "Terminal 1..4", "Aeropuerto ..." (el barrio de Barajas o la Avenida de la Hispanidad NO cuentan)
+    private static final Pattern AIR_DEST = Pattern.compile("terminal\\s?[1-4]|aeropuerto");
 
     /** "pickup" si se recoge en el aeropuerto, "dest" si el viaje va al aeropuerto, "" si no tiene que ver con el aeropuerto. */
     public static String detectAirport(List<String> nodes) {
@@ -232,45 +271,62 @@ public class OfferAnalyzer {
         return pick ? "pickup" : (dest ? "dest" : "");
     }
 
-    public static Est estimate(BoltCfg c, boolean weekend, double km, double min, double offerMult) { return estimate(c, weekend, km, min, offerMult, ""); }
+    /** Redondeo del bruto a 5 centimos (medio hacia arriba), sin ruido de coma flotante. */
+    static double r5(BoltCfg c, double x) {
+        if (!c.round5) return x;
+        double v = Math.round(x * 1e6) / 1e6;
+        return Math.floor(v * 20 + 0.5 + 1e-7) / 20.0;
+    }
+
+    public static Est estimate(BoltCfg c, boolean peak, double km, double min, double offerMult) { return estimate(c, peak, km, min, offerMult, ""); }
 
     /**
-     * Bruto = (inicial + km*precioKm + min*precioMin, nunca menos que la minima) de la tarjeta que toca, sin redondeos intermedios.
-     *  - Tarjeta: la del aeropuerto (recogidas Y viajes hacia el aeropuerto) o la normal; la de entre semana o la de fin de semana segun "weekend".
-     *  - Aeropuerto: la demanda multiplica todo (minima incluida), sin ajustes de zona; despues se resta la tasa del aeropuerto y sobre el resto se calcula la comision.
-     *  - Normal con el ajuste por zona activado: ver Zone. Con el ajuste apagado: tarjeta * demanda tal como sale.
+     * Bruto = (inicial + km*precioKm + min*precioMin, nunca menos que la minima) de la tarjeta que toca, x la demanda de la oferta (x1 si no hay), redondeado a 5 centimos.
+     *  - Tarjeta: la de la ZONA de la recogida (c.zoneKind) y de valle o punta; solo las recogidas en el aeropuerto usan la del aeropuerto.
+     *  - Punta: la tarjeta de punta solo cuenta si peak (franja) y c.peakApplies; si no, se calcula con valle y se guarda en alt lo que saldria con punta.
+     *  - Aeropuerto (recogida o viaje hacia alli): se resta la tasa del bruto y despues se calcula la comision. Recogida: hasta airFlatKm solo vale la minima.
+     *  - Viajes cortos con demanda: rango entre inicial + bumpLo e inicial + bumpHi (el calculo usa el punto medio).
      */
-    public static Est estimate(BoltCfg c, boolean weekend, double km, double min, double offerMult, String airKind) {
+    public static Est estimate(BoltCfg c, boolean peak, double km, double min, double offerMult, String airKind) {
         boolean air = c.airOn && ("pickup".equals(airKind) || "dest".equals(airKind));
         String ak = air ? airKind : "";
-        Card card = air ? (weekend ? c.aWe : c.aWd) : (weekend ? c.nWe : c.nWd);
-        boolean fromOffer = c.offerMult && offerMult > 0;
-        Est e = new Est();
-        double raw = card.base + km * card.perKm + min * card.perMin;
-        boolean ma = false;
-        if (card.minFare > 0 && raw < card.minFare) { raw = card.minFare; ma = true; }
-        Zone z = c.zone;
-        double m = Math.max(0.1, Math.min(10.0, fromOffer ? offerMult : z.mult));
-        double gross, mult;
-        if (!air && z.on) {
-            double adj = z.adjust(m, c.goodZone), eff = z.demand(m, c.goodZone);
-            mult = eff > 1.0 + 1e-9 || c.goodZone ? m : 1.0;       // lo que se dice en voz alta: solo la demanda que de verdad se aplica
-            gross = raw * (1 + adj / 100.0) * eff;
-            e.lo = z.realFrom; e.hi = z.dFrom; e.mode = "Z";       // en modo zona: lo = desde que demanda se acaba el descuento, hi = desde que demanda se aplica
-            e.zone = c.goodZone ? 2 : 1; e.adj = adj; e.eff = eff;
-        } else {
-            mult = m;
-            gross = raw * m;
-            e.eff = m;
-        }
-        double pct = Math.max(0, Math.min(90, c.comm));
-        double fee = air ? c.airFee : 0;
-        double after = fee > 0 ? Math.max(0, gross - fee) : gross;
-        e.gross = gross; e.fee = fee; e.comm = after * pct / 100.0; e.net = after - e.comm;
-        e.mult = mult; e.airport = ak; e.tier = 0;
-        e.minApplied = ma; e.weekend = weekend; e.fromOffer = fromOffer;
+        boolean up = peak && c.peakApplies;
+        Est e = calc(c, up, km, min, offerMult, ak);
+        e.weekend = peak; e.peakUsed = up; e.zone = c.zoneKind;
+        if (peak && !c.peakApplies) e.alt = calc(c, true, km, min, offerMult, ak).net;
         return e;
     }
+
+    private static Est calc(BoltCfg c, boolean up, double km, double min, double offerMult, String ak) {
+        boolean pickup = "pickup".equals(ak);
+        boolean air = ak.length() > 0;
+        Card card = pickup ? (up ? c.airP : c.airV) : zoneCard(c, c.zoneKind, up);
+        double raw = card.base + km * card.perKm + min * card.perMin;
+        boolean ma = false;
+        if (pickup && c.airFlatKm > 0 && km <= c.airFlatKm && card.minFare > 0) { raw = card.minFare; ma = true; }
+        else if (card.minFare > 0 && raw < card.minFare) { raw = card.minFare; ma = true; }
+        double m = offerMult > 1.0 ? Math.min(10.0, offerMult) : 1.0;
+        double fm = m > 1.0 + 1e-9 ? 1 + c.fine / 100.0 : 1.0;
+        boolean range = !pickup && m > 1.0 + 1e-9 && m >= c.shortFrom - 1e-9 && km < c.shortKm && c.bumpHi > c.bumpLo;
+        double mid = range ? raw + (c.bumpLo + c.bumpHi) / 2.0 : raw;
+        double gross = r5(c, mid * m * fm);
+        double pct = Math.max(0, Math.min(90, c.comm));
+        double fee = air ? c.airFee : 0;
+        Est e = new Est();
+        e.gross = gross; e.fee = fee;
+        double after = fee > 0 ? Math.max(0, gross - fee) : gross;
+        e.comm = after * pct / 100.0; e.net = after - e.comm;
+        e.mult = m; e.fine = m > 1.0 + 1e-9 ? c.fine : 0; e.airport = ak; e.minApplied = ma; e.range = range;
+        e.grossLo = e.gross; e.grossHi = e.gross; e.netLo = e.net; e.netHi = e.net;
+        if (range) {
+            e.grossLo = r5(c, (raw + c.bumpLo) * m * fm);
+            e.grossHi = r5(c, (raw + c.bumpHi) * m * fm);
+            double aLo = fee > 0 ? Math.max(0, e.grossLo - fee) : e.grossLo, aHi = fee > 0 ? Math.max(0, e.grossHi - fee) : e.grossHi;
+            e.netLo = aLo * (1 - pct / 100.0); e.netHi = aHi * (1 - pct / 100.0);
+        }
+        return e;
+    }
+
 
     // multiplicador de demanda que a veces muestra la oferta: "x1.7", "x1,4", "1.5x"
     private static final Pattern DEM1 = Pattern.compile("(?<![A-Za-z0-9])[x\u00d7]\\s?(\\d{1,2}(?:[.,]\\d{1,2})?)(?![\\d%A-Za-z])", Pattern.CASE_INSENSITIVE);
@@ -299,6 +355,7 @@ public class OfferAnalyzer {
         return java.math.BigDecimal.valueOf(v).setScale(dec, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString().replace('.', ',');
     }
 
+
     /** Frase para el aviso por voz (con los valores reales de la oferta). null si no hay nada que decir. */
     public static String voiceText(Result r) {
         if (r == null || !r.isBolt || !r.offer) return null;
@@ -309,12 +366,15 @@ public class OfferAnalyzer {
             if ("pickup".equals(r.estAirport)) b.append("Recogida en el aeropuerto. ");
             else if ("dest".equals(r.estAirport)) b.append("Hacia el aeropuerto. ");
             b.append("Viaje de ").append(km).append("1".equals(km) ? " kil\u00F3metro y " : " kil\u00F3metros y ").append(min).append(min == 1 ? " minuto" : " minutos");
-            if (r.estZone == 2) b.append(", zona buena");
-            if (r.estWeekend) b.append(", tarifa de fin de semana");
+            if (r.estZone == Z_HIGH) b.append(", zona alta");
+            else if (r.estZone == Z_LOW) b.append(", zona baja");
+            if (r.estPeakUsed) b.append(", tarifa de hora punta");
             if (Math.abs(r.estMult - 1.0) > 1e-9) b.append(", demanda por ").append(spokenNum(r.estMult, 2));
             b.append(". Bruto estimado: ").append(money(r.estGross)).append(" euros. ");
             if (r.estFee > 0) b.append("Tasa del aeropuerto: ").append(money(r.estFee)).append(" euros. ");
-            b.append("Comisi\u00f3n estimada: ").append(money(r.estComm)).append(" euros. Neto estimado: ").append(money(r.estNet)).append(" euros.");
+            b.append("Comisi\u00F3n estimada: ").append(money(r.estComm)).append(" euros. Neto estimado: ").append(money(r.estNet)).append(" euros");
+            if (r.estRange && r.estNetLo >= 0 && r.estNetHi > r.estNetLo + 1e-9) b.append(", entre ").append(money(r.estNetLo)).append(" y ").append(money(r.estNetHi));
+            b.append(".");
             return b.toString();
         }
         if (r.price > 0) return "Bolt. Precio de la oferta: " + money(r.price) + " euros.";
@@ -511,9 +571,11 @@ public class OfferAnalyzer {
                 double om = detectDemand(nodes);
                 Est e = estimate(p.bolt, p.weekendNow, r.tripKm, r.tripMin, om, detectAirport(nodes));
                 r.estimated = true; r.estGross = e.gross; r.estComm = e.comm; r.estNet = e.net; r.estMult = e.mult;
-                r.estOfferMult = om; r.estMode = e.mode; r.estTier = e.tier; r.estLo = e.lo; r.estHi = e.hi;
+                r.estOfferMult = om;
                 r.estAirport = e.airport; r.estFee = e.fee;
-                r.estZone = e.zone; r.estAdj = e.adj; r.estEff = e.eff; r.estFromOffer = e.fromOffer; r.estArea = p.bolt.goodZone ? p.bolt.goodName : "";
+                r.estZone = e.zone; r.estArea = p.bolt.zoneName; r.estZoneSrc = p.bolt.zoneSrc;
+                r.estRange = e.range; r.estNetLo = e.range ? e.netLo : -1; r.estNetHi = e.range ? e.netHi : -1;
+                r.estAlt = e.alt; r.estPeakUsed = e.peakUsed; r.estFine = e.fine;
                 r.estMinApplied = e.minApplied; r.estWeekend = e.weekend; r.estCommPct = Math.max(0, Math.min(90, p.bolt.comm));
                 r.price = e.net;          // el semaforo se juzga sobre el NETO estimado; no se vuelve a descontar comision
                 useEstimate = true;

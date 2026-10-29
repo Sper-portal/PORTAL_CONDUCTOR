@@ -1,3 +1,4 @@
+cd /workspaces/PORTAL_CONDUCTOR && gh run download $(gh run list -L 1 --status success --json databaseId -q '.[0].databaseId') -D apk_v315g && ls -R apk_v315g
 # -*- coding: utf-8 -*-
 """Super portal del conductor 1.0  (v3.15g)
 

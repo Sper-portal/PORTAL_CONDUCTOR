@@ -1721,7 +1721,7 @@ window.fareReadScreen=async function(){
 })();
 </script>
 
-<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">v3.15g lector</div>
+<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">v3.15h lector</div>
 <script id="screenReaderPatch2">
 /* v2.3 Burbuja flotante (movil): recibe el precio leido y lo pone en la calculadora */
 (function(){
@@ -3649,29 +3649,35 @@ if(typeof _sam==='function')window.setAuthMode=function(m){
 };
 })();
 
-/* ===================== v3.15g · ESTIMACIÓN DEL PRECIO DE BOLT (pantalla de ajustes) =====================
+/* ===================== v3.15h · ESTIMACIÓN DEL PRECIO DE BOLT (pantalla de ajustes) =====================
    Cuando la oferta de Bolt no muestra el precio, el lector (Java) lo estima por los km y los minutos del viaje con pasajero.
-   Hay CUATRO tarjetas de precios, cada una con su propio inicial, precio por km, precio por minuto y mínima: la tarjeta NORMAL y la del AEROPUERTO
-   (recogidas y viajes hacia el aeropuerto), cada una para ENTRE SEMANA y para FIN DE SEMANA. Qué tarjeta se usa lo deciden las FRANJAS de fin de semana
-   que tú defines (por defecto de viernes 18:00 a domingo 06:00, y los festivos cuentan como fin de semana), no el día del calendario.
-   Aeropuerto: la demanda multiplica todo (mínima incluida), no lleva ajuste de zona y se resta la tasa antes de la comisión.
-   Viajes normales: ajuste por ZONA y por DEMANDA con el GPS (fuera de zona buena: sin demanda o menos de ×1,2 → −8 %; de ×1,2 a ×1,4 → tarifa real;
-   desde ×1,4 → tarifa × demanda, con +5/+8/+10 % desde ×1,5/×2/×2,5; en zona buena: tarifa +12 % × la demanda tal como salga).
-   Las zonas buenas son polígonos que dibujas tú en un mapa. Son estimaciones del conductor (no tarifas oficiales de Bolt). Los valores iniciales y el cálculo
-   son los mismos que usa el código nativo (se comprueba en las pruebas contra Java). */
+   Hay OCHO tarjetas de precios, cada una con su propio inicial, precio por km, precio por minuto y mínima:
+   zona BAJA / MEDIA / ALTA × VALLE / PUNTA (la zona es la de la RECOGIDA, nunca la del destino) y las dos del AEROPUERTO (solo recogidas) valle / punta.
+   La demanda que muestra la oferta (×1,4…) se lee siempre y multiplica todo, mínima incluida. El bruto se redondea a 5 céntimos (como Bolt); el neto no.
+   La zona sale de los polígonos que dibujas en el mapa (cada uno es alta, media o baja); fuera de todos vale la zona por defecto (media). También se puede forzar una zona.
+   La hora punta sale de tus franjas (una lista para media y baja, otra para alta); los festivos cuentan como punta. Por defecto la tarjeta de punta NO sube el precio
+   (hay poca evidencia de que Bolt la pague al conductor): se calcula con la de valle y el aviso dice lo que saldría con la de punta. Se enciende en Ajustes.
+   Viajes cortos (menos de 6 km) con demanda: el inicial real que cobra Bolt sube de forma impredecible, así que se da un rango de neto.
+   Aeropuerto: las recogidas usan la tarjeta del aeropuerto (con mínima fija hasta 11 km); los viajes HACIA el aeropuerto usan la tarjeta de la zona; en los dos se resta la tasa antes de la comisión.
+   Son estimaciones del conductor (no tarifas oficiales de Bolt). Los valores iniciales y el cálculo son los mismos que usa el código nativo (se comprueba en las pruebas contra Java). */
 (function(){
 const P=window.PDC314;if(!P||P.bolt)return;P.bolt=true;
 const SR=()=>{try{if(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform())return (Capacitor.Plugins&&Capacitor.Plugins.ScreenReader)||Capacitor.registerPlugin('ScreenReader')}catch(e){}return null};
 const LSK='pdc_bolt';
-const MAXZ=40,MAXPT=200,MAXS=20,WEEK=10080;
+const MAXZ=40,MAXPT=200,MAXS=30,WEEK=10080;
+const Z_LOW=0,Z_MID=1,Z_HIGH=2,ZW=['low','mid','high'],ZN=['baja','media','alta'],ZK=['l','m','h'];
+const kindOfKey=k=>k==='h'?Z_HIGH:k==='l'?Z_LOW:Z_MID;
+const keyOfKind=k=>ZK[k]||'m';
 const CARD=(b,k,m,f)=>({base:b,km:k,min:m,minFare:f});
-const SLOTS=()=>[{on:true,from:4*1440+18*60,to:6*1440+6*60}];          // viernes 18:00 → domingo 06:00
-const ZONE=()=>({on:true,adj:-8,adjGood:12,mult:1,realFrom:1.2,from:1.4,a1:1.5,p1:5,a2:2,p2:8,a3:2.5,p3:10,zones:[]});
-const defaults=()=>({on:true,mode:'auto',comm:25,offerMult:true,airOn:true,airFee:2.57,holidaysWe:true,
-  holidays:['01-01','01-06','05-01','05-02','08-15','10-12','11-01','12-06','12-08','12-25'],
-  slots:SLOTS(),
-  cards:{nwd:CARD(2.1,0.77,0.15,6.75),nwe:CARD(2.1,0.77,0.15,6.75),awd:CARD(2.89,0.82,0.15,13.5),awe:CARD(2.89,0.82,0.15,13.5)},
-  zone:ZONE()});
+const SL=(d,a,b)=>({on:true,d,a,b});
+const slotsM=()=>[SL(31,420,600),SL(31,1020,1200),SL(96,0,1440)];         // lunes a viernes 07-10 y 17-20, sábado y domingo todo el día
+const slotsHi=()=>[SL(31,480,600),SL(31,1020,1200),SL(96,0,1440)];        // zona alta: por la mañana desde las 08:00 (visto el 29-10; sin confirmar)
+const HOLS=()=>['01-01','01-06','05-01','05-02','08-15','10-12','11-01','12-06','12-08','12-25'];
+const defaults=()=>({on:true,mode:'auto',comm:25,peakApplies:false,round5:true,fine:0,zoneForce:'auto',zoneDef:'mid',
+  short:{km:6,from:1.2,lo:0,hi:2.5},airOn:true,airFee:2.57,airFlatKm:11,holidaysWe:true,holidays:HOLS(),slots:slotsM(),slotsH:slotsHi(),
+  cards:{lv:CARD(2.02,0.79,0.13,6.30),lp:CARD(3.03,0.80,0.16,8.85),mv:CARD(2.10,0.77,0.15,6.75),mp:CARD(2.68,0.84,0.20,7.65),
+         hv:CARD(2.39,0.85,0.16,6.70),hp:CARD(3.56,0.91,0.21,8.35),av:CARD(2.89,0.82,0.15,13.50),ap:CARD(2.89,0.82,0.15,13.50)},
+  zone:{zones:[]}});
 P.boltDefaults=defaults;
 const clone=o=>JSON.parse(JSON.stringify(o));
 const isN=v=>typeof v==='number'&&Number.isFinite(v);
@@ -3679,73 +3685,100 @@ const isObj=v=>!!v&&typeof v==='object'&&!Array.isArray(v);
 const rng=(v,d,lo,hi)=>isN(v)&&v>=lo&&v<=hi?v:d;
 /* misma validación que el código nativo: lo no válido vuelve a su valor inicial */
 function normCard(o,d){const c=clone(d);if(!isObj(o))return c;c.base=rng(o.base,d.base,0,100);c.km=rng(o.km,d.km,0,20);c.min=rng(o.min,d.min,0,10);c.minFare=rng(o.minFare,d.minFare,0,200);return c}
+const sameCard=(a,b,k,m,f)=>Math.abs(a.base-b)<1e-9&&Math.abs(a.km-k)<1e-9&&Math.abs(a.min-m)<1e-9&&Math.abs(a.minFare-f)<1e-9;
 const areaName=v=>{if(typeof v!=='string')return '';let s=v.replace(/[\u0000-\u001F\u007F]/g,' ').replace(/^ +| +$/g,'');if(s.length>40)s=s.slice(0,40).replace(/^ +| +$/g,'');return s};
+const kindKey=(v,d)=>v==='h'||v==='m'||v==='l'?v:d;
+/* zonas dibujadas: polígonos [latitud, longitud] con su tipo (k: h alta, m media, l baja; las de la v3.15g no traían tipo y eran «zonas buenas» = altas) */
 function normZone(o,d){const z=clone(d);if(!isObj(o))return z;
-  z.on=typeof o.on==='boolean'?o.on:d.on;
-  z.adj=rng(o.adj,d.adj,-90,300);z.adjGood=rng(o.adjGood,d.adjGood,-90,300);z.mult=rng(o.mult,d.mult,0.1,10);
-  const rf=rng(o.realFrom,d.realFrom,1,10),df=rng(o.from,d.from,1,10),a1=rng(o.a1,d.a1,1,10),a2=rng(o.a2,d.a2,1,10),a3=rng(o.a3,d.a3,1,10);
-  if(rf<=df&&df<=a1&&a1<=a2&&a2<=a3){z.realFrom=rf;z.from=df;z.a1=a1;z.a2=a2;z.a3=a3}else{z.realFrom=d.realFrom;z.from=d.from;z.a1=d.a1;z.a2=d.a2;z.a3=d.a3}
-  z.p1=rng(o.p1,d.p1,0,100);z.p2=rng(o.p2,d.p2,0,100);z.p3=rng(o.p3,d.p3,0,100);
-  // zonas buenas: polígonos [latitud, longitud]. Los ajustes de la v3.15f traían círculos en «good»: se ignoran (el mapa empieza vacío)
   if(Array.isArray(o.zones)){
     const l=[];for(const a of o.zones){if(!isObj(a)||l.length>=MAXZ||!Array.isArray(a.pts))continue;
       const pts=[];for(const p of a.pts){if(!Array.isArray(p)||p.length!==2||pts.length>=MAXPT)continue;
         const lat=rng(p[0],999,-90,90),lon=rng(p[1],999,-180,180);if(lat===999||lon===999)continue;pts.push([lat,lon])}
-      if(pts.length>=3)l.push({n:areaName(a.n),pts})}
+      if(pts.length>=3)l.push({n:areaName(a.n),k:kindKey(a.k,'h'),pts})}
     z.zones=l}
   return z}
+/* franjas de hora punta {on,d,a,b}: d = días (bit 0 lunes … bit 6 domingo), a = desde y b = hasta (minutos del día); las de la v3.15g (from/to) no valen y vuelven a las de fábrica */
 function normSlots(o,d){if(!Array.isArray(o))return d;const l=[];
-  for(const x of o){if(!isObj(x)||l.length>=MAXS)continue;const f=rng(x.from,-1,0,WEEK-1),t=rng(x.to,-1,0,WEEK-1);
-    if(f<0||t<0||!Number.isInteger(f)||!Number.isInteger(t)||f===t)continue;l.push({on:typeof x.on==='boolean'?x.on:true,from:f,to:t})}
+  for(const x of o){if(!isObj(x))continue;if('from' in x||'to' in x)return d;if(l.length>=MAXS)continue;
+    const dd=rng(x.d,-1,1,127),a=rng(x.a,-1,0,1439),b=rng(x.b,-1,1,1440);
+    if(dd<0||a<0||b<0||!Number.isInteger(dd)||!Number.isInteger(a)||!Number.isInteger(b)||a===b)continue;
+    l.push({on:typeof x.on==='boolean'?x.on:true,d:dd,a,b})}
   return l}
-function norm(o){const d=defaults(),c=d;if(!isObj(o))return c;
+function norm(o){const c=defaults();if(!isObj(o))return c;
   if(typeof o.on==='boolean')c.on=o.on;if(['auto','week','weekend'].includes(o.mode))c.mode=o.mode;c.comm=rng(o.comm,c.comm,0,90);
-  // wd / zone.base…: ajustes de la v3.15 y de la v3.15f (de ahí se aprovechan algunos valores)
-  const zm=isObj(o.zone)?o.zone:null,wdm=isObj(o.wd)?o.wd:null,airm=wdm&&isObj(wdm.air)?wdm.air:null;
-  let om=o.offerMult;if(typeof om!=='boolean'&&wdm)om=wdm.offerMult;c.offerMult=typeof om==='boolean'?om:c.offerMult;
-  let ao=o.airOn;if(typeof ao!=='boolean'&&airm)ao=airm.on;c.airOn=typeof ao==='boolean'?ao:c.airOn;
-  let af=o.airFee;if(typeof af!=='number'&&airm)af=airm.fee;c.airFee=rng(af,c.airFee,0,50);
-  c.holidaysWe=typeof o.holidaysWe==='boolean'?o.holidaysWe:c.holidaysWe;
-  if(Array.isArray(o.holidays)){const h=[];for(const x of o.holidays)if(typeof x==='string'){const y=x.trim();if(/^(\d{4}-\d{2}-\d{2}|\d{2}-\d{2})$/.test(y)&&!h.includes(y))h.push(y)}c.holidays=h}
-  c.slots=normSlots(o.slots,c.slots);
+  if(typeof o.peakApplies==='boolean')c.peakApplies=o.peakApplies;if(typeof o.round5==='boolean')c.round5=o.round5;c.fine=rng(o.fine,c.fine,-50,100);
+  if(['auto','low','mid','high'].includes(o.zoneForce))c.zoneForce=o.zoneForce;if(['low','mid','high'].includes(o.zoneDef))c.zoneDef=o.zoneDef;
+  if(isObj(o.short)){const s=o.short,sk=rng(s.km,c.short.km,0,50),sf=rng(s.from,c.short.from,1,10),lo=rng(s.lo,c.short.lo,0,20),hi=rng(s.hi,c.short.hi,0,20);
+    c.short.km=sk;c.short.from=sf;if(lo<=hi){c.short.lo=lo;c.short.hi=hi}}
+  if(typeof o.airOn==='boolean')c.airOn=o.airOn;c.airFee=rng(o.airFee,c.airFee,0,50);c.airFlatKm=rng(o.airFlatKm,c.airFlatKm,0,100);
+  if(typeof o.holidaysWe==='boolean')c.holidaysWe=o.holidaysWe;
+  c.slots=normSlots(o.slots,c.slots);c.slotsH=normSlots(o.slotsH,c.slotsH);
   const cm=isObj(o.cards)?o.cards:null;
-  if(cm){c.cards.nwd=normCard(cm.nwd,c.cards.nwd);c.cards.nwe=normCard(cm.nwe,c.cards.nwe);c.cards.awd=normCard(cm.awd,c.cards.awd);c.cards.awe=normCard(cm.awe,c.cards.awe)}
-  else if(zm){c.cards.nwd=normCard(zm,c.cards.nwd);c.cards.nwe=clone(c.cards.nwd)}      // la v3.15f tenía una sola tarjeta normal para todos los días
-  c.zone=normZone(o.zone,d.zone);
+  if(cm){
+    for(const k of ['lv','lp','mv','mp','hv','hp','av','ap'])c.cards[k]=normCard(cm[k],c.cards[k]);
+    // v3.15g: tarjetas normal / aeropuerto × entre semana / fin de semana. Solo se aprovecha lo que el conductor había cambiado de fábrica.
+    if(cm.nwd!=null){const x=normCard(cm.nwd,c.cards.mv);if(!sameCard(x,2.10,0.77,0.15,6.75))c.cards.mv=x}
+    if(cm.nwe!=null){const x=normCard(cm.nwe,c.cards.mp);if(!sameCard(x,2.10,0.77,0.15,6.75))c.cards.mp=x}
+    if(cm.awd!=null){const x=normCard(cm.awd,c.cards.av);if(!sameCard(x,2.89,0.82,0.15,13.5))c.cards.av=x}
+    if(cm.awe!=null){const x=normCard(cm.awe,c.cards.ap);if(!sameCard(x,2.89,0.82,0.15,13.5))c.cards.ap=x}
+  }
+  if(Array.isArray(o.holidays)){const h=[];for(const x of o.holidays)if(typeof x==='string'){const y=x.trim();if(/^(\d{4}-\d{2}-\d{2}|\d{2}-\d{2})$/.test(y)&&!h.includes(y))h.push(y)}c.holidays=h}
+  c.zone=normZone(o.zone,c.zone);
   return c}
 P.boltNorm=norm;
 
-/* ---------- el mismo cálculo que el aviso (sin redondeos intermedios) ---------- */
-/* ajuste (%) y demanda realmente aplicada (igual que Zone.adjust / Zone.demand de Java) */
-const zAdjust=(z,m,good)=>good?z.adjGood:(m<z.realFrom?z.adj:0);
-const zDemand=(z,m,good)=>{if(good)return m;if(m<z.from)return 1;const extra=m>=z.a3?z.p3:(m>=z.a2?z.p2:(m>=z.a1?z.p1:0));return m*(1+extra/100)};
-function estimate(c,weekend,km,min,offerMult,airKind,good){
-  const air=!!c.airOn&&(airKind==='pickup'||airKind==='dest'),ak=air?airKind:'';
-  const card=air?(weekend?c.cards.awe:c.cards.awd):(weekend?c.cards.nwe:c.cards.nwd);
-  const fromOffer=!!c.offerMult&&offerMult>0;
+/* ---------- el mismo cálculo que el aviso (igual que OfferAnalyzer.estimate de Java) ---------- */
+const zcard=(c,k,peak)=>c.cards[(k===Z_HIGH?'h':k===Z_LOW?'l':'m')+(peak?'p':'v')];
+/* redondeo del bruto a 5 céntimos (medio hacia arriba), sin ruido de coma flotante */
+const r5=(c,x)=>{if(!c.round5)return x;const v=Math.round(x*1e6)/1e6;return Math.floor(v*20+0.5+1e-7)/20};
+function calc(c,up,km,min,om,ak,zk){
+  const pickup=ak==='pickup',air=ak!=='';
+  const card=pickup?(up?c.cards.ap:c.cards.av):zcard(c,zk,up);
   let raw=card.base+km*card.km+min*card.min,ma=false;
-  if(card.minFare>0&&raw<card.minFare){raw=card.minFare;ma=true}
-  const z=c.zone;good=!!good;
-  const m=Math.max(0.1,Math.min(10,fromOffer?offerMult:z.mult));
-  let gross,mult,lo=0,hi=0,mode='',zone=0,eadj=0,eeff=m;
-  if(!air&&z.on){
-    const adj=zAdjust(z,m,good),eff=zDemand(z,m,good);
-    mult=(eff>1+1e-9||good)?m:1;
-    gross=raw*(1+adj/100)*eff;
-    lo=z.realFrom;hi=z.from;mode='Z';zone=good?2:1;eadj=adj;eeff=eff;
-  }else{mult=m;gross=raw*m}
-  const pct=Math.max(0,Math.min(90,c.comm)),fee=air?c.airFee:0,after=fee>0?Math.max(0,gross-fee):gross,comm=after*pct/100;
-  return {gross,comm,net:after-comm,fee,airport:ak,mult,tier:0,mode,lo,hi,minApplied:ma,weekend,fromOffer,zone,adj:eadj,eff:eeff};
+  if(pickup&&c.airFlatKm>0&&km<=c.airFlatKm&&card.minFare>0){raw=card.minFare;ma=true}
+  else if(card.minFare>0&&raw<card.minFare){raw=card.minFare;ma=true}
+  const m=om>1?Math.min(10,om):1,fm=m>1+1e-9?1+c.fine/100:1;
+  const range=!pickup&&m>1+1e-9&&m>=c.short.from-1e-9&&km<c.short.km&&c.short.hi>c.short.lo;
+  const mid=range?raw+(c.short.lo+c.short.hi)/2:raw;
+  const gross=r5(c,mid*m*fm),pct=Math.max(0,Math.min(90,c.comm)),fee=air?c.airFee:0;
+  const after=fee>0?Math.max(0,gross-fee):gross,comm=after*pct/100,net=after-comm;
+  const e={gross,comm,net,mult:m,fee,grossLo:gross,grossHi:gross,netLo:net,netHi:net,range,alt:-1,airport:ak,minApplied:ma,weekend:false,peakUsed:false,zone:zk,fine:m>1+1e-9?c.fine:0};
+  if(range){
+    e.grossLo=r5(c,(raw+c.short.lo)*m*fm);e.grossHi=r5(c,(raw+c.short.hi)*m*fm);
+    const aLo=fee>0?Math.max(0,e.grossLo-fee):e.grossLo,aHi=fee>0?Math.max(0,e.grossHi-fee):e.grossHi;
+    e.netLo=aLo*(1-pct/100);e.netHi=aHi*(1-pct/100);
+  }
+  return e;
+}
+/* peak = ¿es hora punta ahora en esa zona? (por las franjas). La tarjeta de punta solo se usa si además c.peakApplies; si no, se calcula con valle y se guarda en alt lo que saldría con punta */
+function estimate(c,peak,km,min,offerMult,airKind,zoneKind){
+  const air=!!c.airOn&&(airKind==='pickup'||airKind==='dest'),ak=air?airKind:'';
+  const zk=zoneKind==null?Z_MID:zoneKind,up=!!peak&&!!c.peakApplies;
+  const e=calc(c,up,km,min,offerMult,ak,zk);
+  e.weekend=!!peak;e.peakUsed=up;e.zone=zk;
+  if(peak&&!c.peakApplies)e.alt=calc(c,true,km,min,offerMult,ak,zk).net;
+  return e;
 }
 P.boltEstimate=estimate;
 function distKm(lat1,lon1,lat2,lon2){const rad=Math.PI/180,dLat=(lat2-lat1)*rad,dLon=(lon2-lon1)*rad;const a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*rad)*Math.cos(lat2*rad)*Math.sin(dLon/2)*Math.sin(dLon/2);return 6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))}
 /* punto dentro de un polígono [[lat,lon],…] (regla par-impar; igual que Area.contains de Java) */
 function inPoly(pts,lat,lon){let inside=false;for(let i=0,j=pts.length-1;i<pts.length;j=i++){const yi=pts[i][0],xi=pts[i][1],yj=pts[j][0],xj=pts[j][1];if(((yi>lat)!==(yj>lat))&&(lon<(xj-xi)*(lat-yi)/(yj-yi)+xi))inside=!inside}return inside}
-function goodAreaAt(z,lat,lon){if(!z||!Array.isArray(z.zones))return null;for(const a of z.zones)if(a&&inPoly(a.pts,lat,lon))return a.n;return null}
-P.boltDist=distKm;P.boltZoneAt=goodAreaAt;P.boltInPoly=inPoly;
-/* aeropuerto: se detecta por el texto de la oferta (igual que el código nativo) */
+/* la zona dibujada que contiene el punto (si cae en varias manda la alta, luego la media y luego la baja), o null */
+function areaAt(z,lat,lon){if(!z||!Array.isArray(z.zones))return null;let best=null;for(const a of z.zones){if(!a||!inPoly(a.pts,lat,lon))continue;if(best===null||kindOfKey(a.k)>kindOfKey(best.k))best=a}return best}
+function goodAreaAt(z,lat,lon){const a=areaAt(z,lat,lon);return a?a.n:null}
+/* zona de la recogida: la forzada en Ajustes, luego las zonas dibujadas y, si no cae en ninguna o no hay ubicación, la de por defecto (igual que ZoneLocator.resolve de Java) */
+function resolveZone(c,fix){
+  const def=kindOfKey(c.zoneDef==='high'?'h':c.zoneDef==='low'?'l':'m');
+  if(c.zoneForce==='low')return {kind:Z_LOW,name:'',src:'forced'};
+  if(c.zoneForce==='mid')return {kind:Z_MID,name:'',src:'forced'};
+  if(c.zoneForce==='high')return {kind:Z_HIGH,name:'',src:'forced'};
+  if(fix){const a=areaAt(c.zone,fix.lat,fix.lon);if(a)return {kind:kindOfKey(a.k),name:a.n||'',src:'area'}}
+  return {kind:def,name:'',src:'default'};
+}
+P.boltDist=distKm;P.boltZoneAt=goodAreaAt;P.boltAreaAt=areaAt;P.boltResolve=resolveZone;P.boltInPoly=inPoly;
+/* aeropuerto: se detecta por el texto de la oferta (igual que el código nativo; el barrio de Barajas y la Avenida de la Hispanidad NO cuentan) */
 const nrm=s=>String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
-const AIR_PICK=/\b(t\s?[1-4]|p\s?1|express|modulo\s?d|terminal|aeropuerto|barajas)\b/,AIR_DEST=/terminal\s?[1-4]|aeropuerto|barajas|hispanidad/;
+const AIR_PICK=/\b(t\s?[1-4]|p\s?1|express|modulo\s?d|terminal|aeropuerto|barajas)\b/,AIR_DEST=/terminal\s?[1-4]|aeropuerto/;
 function detectAirport(nodes){
   let pick=false,dest=false;if(!Array.isArray(nodes))return '';
   for(const raw of nodes){if(raw==null||String(raw).length>120)continue;const n=nrm(raw);
@@ -3768,27 +3801,38 @@ const spoken=(v,dec)=>{let s=rhu(v,dec);if(s.indexOf('.')>=0)s=s.replace(/0+$/,'
 P.boltMoney=money;
 function voiceText(e,km,min){
   const m=Math.round(min),k=spoken(km,1);
-  return 'Bolt. '+(e.airport==='pickup'?'Recogida en el aeropuerto. ':e.airport==='dest'?'Hacia el aeropuerto. ':'')+'Viaje de '+k+(k==='1'?' kilómetro y ':' kilómetros y ')+m+(m===1?' minuto':' minutos')+(e.zone===2?', zona buena':'')+(e.weekend?', tarifa de fin de semana':'')+(Math.abs(e.mult-1)>1e-9?', demanda por '+spoken(e.mult,2):'')+
-    '. Bruto estimado: '+money(e.gross)+' euros. '+(e.fee>0?'Tasa del aeropuerto: '+money(e.fee)+' euros. ':'')+'Comisión estimada: '+money(e.comm)+' euros. Neto estimado: '+money(e.net)+' euros.';
+  return 'Bolt. '+(e.airport==='pickup'?'Recogida en el aeropuerto. ':e.airport==='dest'?'Hacia el aeropuerto. ':'')+'Viaje de '+k+(k==='1'?' kilómetro y ':' kilómetros y ')+m+(m===1?' minuto':' minutos')
+    +(e.zone===Z_HIGH?', zona alta':e.zone===Z_LOW?', zona baja':'')+(e.peakUsed?', tarifa de hora punta':'')+(Math.abs(e.mult-1)>1e-9?', demanda por '+spoken(e.mult,2):'')+
+    '. Bruto estimado: '+money(e.gross)+' euros. '+(e.fee>0?'Tasa del aeropuerto: '+money(e.fee)+' euros. ':'')+'Comisión estimada: '+money(e.comm)+' euros. Neto estimado: '+money(e.net)+' euros'
+    +(e.range&&e.netLo>=0&&e.netHi>e.netLo+1e-9?', entre '+money(e.netLo)+' y '+money(e.netHi):'')+'.';
 }
 P.boltVoice=voiceText;
-/* franjas de fin de semana: minutos desde el lunes 00:00; si «to» es menor que «from» da la vuelta al domingo (igual que Slot.contains de Java) */
-const inSlot=(s,w)=>s.from<s.to?(w>=s.from&&w<s.to):(w>=s.from||w<s.to);
+/* franjas de hora punta (igual que Slot.contains de Java): el principio cuenta, el final no */
+const slotLen=s=>s.b>s.a?s.b-s.a:s.b+1440-s.a;
+function slotHas(s,w){const len=slotLen(s);for(let d=0;d<7;d++){if(!(s.d&(1<<d)))continue;let x=w-(d*1440+s.a);if(x<0)x+=WEEK;if(x>=0&&x<len)return true}return false}
 function isHoliday(c,d){
   const p2=n=>String(n).padStart(2,'0'),md=p2(d.getMonth()+1)+'-'+p2(d.getDate()),full=d.getFullYear()+'-'+md;
   return (c.holidays||[]).some(h=>h===full||h===md);
 }
 const weekMinute=d=>((d.getDay()+6)%7)*1440+d.getHours()*60+d.getMinutes();
-function isWeekend(c,d){
-  if(c.mode==='week')return false;if(c.mode==='weekend')return true;
-  if(c.holidaysWe&&isHoliday(c,d))return true;
-  const w=weekMinute(d);
-  return (c.slots||[]).some(s=>s&&s.on&&inSlot(s,w));
+/* ¿hora punta en esa zona a ese minuto de la semana? why = motivo (para las pruebas de la pantalla) */
+function peakWhy(c,kind,w,hol){
+  if(c.mode==='week')return {peak:false,why:'has elegido «Siempre valle»'};
+  if(c.mode==='weekend')return {peak:true,why:'has elegido «Siempre hora punta»'};
+  if(c.holidaysWe&&hol)return {peak:true,why:'es festivo'};
+  const l=kind===Z_HIGH?c.slotsH:c.slots;
+  for(const s of (l||[]))if(s&&s.on&&slotHas(s,w))return {peak:true,why:'cae dentro de la franja '+slotTxt(s)};
+  return {peak:false,why:'no cae en ninguna franja'};
 }
-P.boltIsWeekend=isWeekend;
+const isPeak=(c,kind,d)=>peakWhy(c,kind,weekMinute(d),isHoliday(c,d)).peak;
+/* la v3.15g tenía «fin de semana»; ahora es la hora punta de la zona media (igual que OfferAnalyzer.isWeekend con la zona por defecto) */
+const isWeekend=(c,d)=>isPeak(c,Z_MID,d);
+P.boltIsPeak=isPeak;P.boltIsWeekend=isWeekend;P.boltPeakWhy=peakWhy;
 
 /* ---------- estado y guardado permanente ---------- */
-const B={cfg:defaults(),voice:true,vol:1,weekendNow:false,open:false,sim:{km:8.3,min:10,mult:'',prof:'auto',kind:'',zone:'0'},native:false,loaded:false,zoneLast:'',holOpen:null,base:'',slotEdit:null};
+const B={cfg:defaults(),voice:true,vol:1,weekendNow:false,open:false,panel:'',
+  sim:{c:{km:8.3,min:10,mult:'',zone:'1',per:'auto'},a:{km:13,min:20,mult:'',zone:'1',per:'auto',kind:'pickup'},d:{km:3,min:11,mult:'1.4',zone:'1',per:'auto'}},
+  native:false,loaded:false,zoneLast:'',holOpen:null,base:'',slotEdit:null,hour:null};
 const snap=()=>JSON.stringify(B.cfg)+'|'+B.voice+'|'+B.vol;B.base=snap();
 P.boltState=B;
 function mirrorToDb(cfgJson){
@@ -3815,6 +3859,7 @@ async function load(guard){
     if(o){B.cfg=norm(o.cfg);B.voice=o.voice!==false;B.vol=isN(o.vol)?o.vol:1}
     B.weekendNow=isWeekend(B.cfg,new Date());
   }
+  B.sim.c.zone=B.sim.d.zone=B.sim.a.zone=String(kindOfKey(B.cfg.zoneDef==='high'?'h':B.cfg.zoneDef==='low'?'l':'m'));
   B.loaded=true;B.base=snap();return true;
 }
 P.boltLoad=load;
@@ -3835,188 +3880,224 @@ async function persist(){
   return !same(sent,back);                       // true = algún valor se corrigió
 }
 
-/* ---------- pantalla ---------- */
+/* ---------- textos y piezas de la pantalla ---------- */
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const num=v=>{const s=String(v==null?'':v).trim().replace(',','.');if(s==='')return NaN;const n=Number(s);return Number.isFinite(n)?n:NaN};
 const show=v=>String(Math.round(v*1e6)/1e6);
+const es=v=>show(v).replace('.',',');      // para los textos (los campos de número llevan punto)
 const LIMC={base:[0,100],km:[0,20],min:[0,10],minFare:[0,200]};
-const LIMZ={adj:[-90,300],adjGood:[-90,300],mult:[0.1,10],realFrom:[1,10],from:[1,10],a1:[1,10],a2:[1,10],a3:[1,10],p1:[0,100],p2:[0,100],p3:[0,100]};
-const ZORD=['realFrom','from','a1','a2','a3'];
-const DAYS=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'],DAYS3=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+const LIMS={comm:[0,90],fine:[-50,100],airFee:[0,50],airFlatKm:[0,100],'short.km':[0,50],'short.from':[1,10],'short.lo':[0,20],'short.hi':[0,20]};
+const limOf=p=>{if(LIMS[p])return LIMS[p];const m=/^cards\.\w+\.(base|km|min|minFare)$/.exec(p);return m?LIMC[m[1]]:null};
+const DAYS=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'],D3=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'],D1=['L','M','X','J','V','S','D'];
 const p2=n=>String(n).padStart(2,'0');
 const hhmm=w=>p2(Math.floor((w%1440)/60))+':'+p2(w%60);
-const slotTxt=s=>DAYS[Math.floor(s.from/1440)]+' '+hhmm(s.from)+' → '+DAYS[Math.floor(s.to/1440)]+' '+hhmm(s.to);
+function daysTxt(m){
+  if(m===127)return 'Todos los días';
+  const runs=[];let i=0;
+  while(i<7){if(m&(1<<i)){let j=i;while(j+1<7&&(m&(1<<(j+1))))j++;runs.push(j>i?D3[i]+'–'+D3[j]:D3[i]);i=j+1}else i++}
+  return runs.join(', ');
+}
+const timeTxt=(a,b)=>a===0&&b===1440?'todo el día':hhmm(a)+' → '+(b===1440?'24:00':hhmm(b))+(b<=a?' (día siguiente)':'');
+function slotTxt(s){return daysTxt(s.d)+' · '+timeTxt(s.a,s.b)}
 const cell=(lab,id,val,path,opts)=>{opts=opts||{};return '<label class="bz-f"><span>'+lab+'</span><input id="'+id+'" type="number" inputmode="decimal" step="'+(opts.step||'0.01')+'" min="'+(opts.min!=null?opts.min:0)+'" value="'+esc(val)+'"'+(opts.on?' oninput="'+opts.on+'"':' data-p="'+path+'" oninput="boltIn(this)"')+(opts.dis?' disabled':'')+'></label>'};
-const chk=(lab,id,path,on,extra)=>'<label class="bz-f bz-chk'+(extra||'')+'"><input type="checkbox" id="'+id+'" data-p="'+path+'"'+(on?' checked':'')+' onchange="boltIn(this)"><span>'+lab+'</span></label>';
+const sw=(lab,sub,id,path,on)=>'<div class="bz-row"><div><b>'+lab+'</b>'+(sub?'<br><small>'+sub+'</small>':'')+'</div><input type="checkbox" id="'+id+'" data-p="'+path+'"'+(on?' checked':'')+' onchange="boltIn(this)" style="width:26px;height:26px;flex:none"></div>';
+const opt=(v,t,sel)=>'<option value="'+v+'"'+(sel?' selected':'')+'>'+t+'</option>';
+const sel=(id,path,opts,cur,on)=>'<select id="'+id+'"'+(path?' data-p="'+path+'" onchange="boltIn(this)"':' onchange="'+on+'"')+'>'+opts.map(o=>opt(o[0],o[1],o[0]===cur)).join('')+'</select>';
+const mt=v=>{let s=rhu(v,2).replace('.',',');if(s.endsWith('0'))s=s.slice(0,-1);return s};
+const num1=v=>{const s=rhu(v,1).replace('.',',');return s.endsWith(',0')?s.slice(0,-2):s};
+const pcs=v=>(v>1e-9?'+':v<-1e-9?'−':'')+num1(Math.abs(v))+' %';
 
-/* ---------- las cuatro tarjetas ---------- */
-const CARDS=[
-  ['nwd','Tarjeta normal','Entre semana','Todos los viajes menos el aeropuerto',0],
-  ['nwe','Tarjeta normal','Fin de semana','Todos los viajes menos el aeropuerto',0],
-  ['awd','Tarjeta del aeropuerto','Entre semana','Recogidas y viajes hacia el aeropuerto',1],
-  ['awe','Tarjeta del aeropuerto','Fin de semana','Recogidas y viajes hacia el aeropuerto',1]];
-function cardHtml(k,title,day,sub,air){
-  const c=B.cfg.cards[k],id=x=>'bz_c_'+k+'_'+x,p='cards.'+k+'.',we=k.charAt(2)==='e';
-  return '<div class="bz-t bz-card'+(air?' bz-air':'')+'" id="bz_card_'+k+'"><div class="bz-th"><b>'+title+'</b><span class="bz-day '+(we?'we':'wd')+'">'+day+'</span></div><small class="bz-cs">'+sub+'</small>'
+/* ---------- las mismas líneas de detalle que el aviso (Java: cardLine, zoneDemand, rangeLine, peakLine) ---------- */
+function cardLine(e){
+  const per=e.peakUsed?'hora punta':'valle';
+  if(e.airport==='pickup')return 'Aeropuerto (recogida) · tarjeta del aeropuerto · '+per;
+  const t='Tarjeta de zona '+ZN[e.zone]+' · '+per;
+  return e.airport==='dest'?'Aeropuerto (viaje hacia allí) · '+t:t;
+}
+function demandLine(e,om){
+  if(!(om>0))return 'Sin demanda en la oferta';
+  let s='Demanda ×'+mt(om)+' (de la oferta)';
+  if(Math.abs(e.fine)>1e-9)s+=' · ajuste fino '+pcs(e.fine);
+  return s;
+}
+const rangeLine=e=>'Viaje corto con demanda: el neto puede ir de '+money(e.netLo)+' a '+money(e.netHi)+' €';
+const peakLine=e=>e.weekend&&!e.peakUsed?'Ahora es hora punta: no sube tu precio'+(e.alt>=0?' (con tarifa de punta: neto '+money(e.alt)+' €)':''):'';
+P.boltZoneTxt={card:cardLine,demand:demandLine,range:rangeLine,peak:peakLine};
+
+/* ---------- apartado «Tarjetas de precios» ---------- */
+function cardHtml(k,title,tag){
+  const c=B.cfg.cards[k],id=x=>'bz_c_'+k+'_'+x,p='cards.'+k+'.',pk=k.charAt(1)==='p';
+  return '<div class="bz-t bz-card" id="bz_card_'+k+'"><div class="bz-th"><b>'+title+'</b><span class="bz-day '+(pk?'we':'wd')+'">'+tag+'</span></div>'
    +'<div class="bz-g">'+cell('Inicial (€)',id('base'),show(c.base),p+'base')+cell('Por km (€)',id('km'),show(c.km),p+'km')
    +cell('Por minuto (€)',id('min'),show(c.min),p+'min')+cell('Mínima (€)',id('minFare'),show(c.minFare),p+'minFare')+'</div></div>';
 }
-function cardsHtml(){
-  const c=B.cfg;
-  return '<div class="bz-sec" id="bz_cards"><b>💳 Tarjetas de precios</b><small>Cada tarjeta tiene sus 4 precios. La app usa la de <b>fin de semana</b> cuando la hora cae dentro de una de tus franjas (o es festivo) y la de <b>entre semana</b> el resto del tiempo.</small>'
-   +CARDS.filter(x=>!x[4]).map(x=>cardHtml.apply(null,x)).join('')
-   +'<div class="bz-sub-air"><b>✈ Aeropuerto</b></div>'
-   +chk('Usar la tarjeta del aeropuerto (recogidas y viajes hacia el aeropuerto) y restar la tasa','bz_airOn','airOn',c.airOn)
-   +'<div class="bz-g">'+cell('Tasa del aeropuerto (€)','bz_airFee',show(c.airFee),'airFee')+'<div></div></div>'
-   +CARDS.filter(x=>x[4]).map(x=>cardHtml.apply(null,x)).join('')
-   +'<div class="bz-hint">En el <b>aeropuerto</b> (una recogida en «parking P1 de la T1», «parking express T2» o «parking módulo D … T4», o un viaje hacia «Terminal 1–4», «Aeropuerto» o «Avenida de la Hispanidad») se usa la tarjeta del aeropuerto: <b>inicial + km × precio + minutos × precio</b>, pero nunca menos que la mínima. La <b>demanda multiplica todo</b> (la mínima también) y <b>no hay ajuste de zona</b>. Después se resta la tasa del bruto <b>antes</b> de la comisión de Bolt. '
-   +'Si no se detecta el aeropuerto, o desmarcas la casilla, se usa la tarjeta normal.</div>'
-   +'<div class="bz-btns"><button type="button" class="secondary" id="bz_cards_def" onclick="boltReset(\'cards\')">↺ Valores iniciales de las tarjetas</button></div></div>';
+const SETS=[['h','Zona alta'],['m','Zona media'],['l','Zona baja']];
+function pCards(){
+  return '<small>Cada zona tiene dos tarjetas: <b>valle</b> (el resto del tiempo) y <b>hora punta</b> (dentro de tus franjas). La zona es la de la <b>recogida</b>, nunca la del destino. '
+   +'La de hora punta solo sube el precio si lo activas en <b>General</b> («La hora punta sube lo que cobro»); apagado, el aviso calcula con la de valle y te dice lo que saldría con la de punta.</small>'
+   +SETS.map(s=>'<b class="bz-sub">📍 '+s[1]+'</b>'+cardHtml(s[0]+'v','Valle','Valle')+cardHtml(s[0]+'p','Hora punta','Punta')).join('')
+   +'<div class="bz-btns"><button type="button" class="secondary" id="bz_cards_def" onclick="boltReset(\'cards\')">↺ Valores iniciales de las 6 tarjetas</button></div>'
+   +testHtml('c','Escribe los km y minutos del viaje con pasajero y mira lo que estimaría la app con las tarjetas de arriba (sin guardar).');
 }
 
-/* ---------- franjas de fin de semana ---------- */
-function barSegs(d){        // tramos (en % del día) de las franjas activas que caen en el día d (0 = lunes)
+/* ---------- apartado «Aeropuerto» ---------- */
+function pAir(){
+  const c=B.cfg;
+  return sw('Usar la tarjeta del aeropuerto en las recogidas','Recogida en «parking P1 de la T1», «parking express T2», «parking módulo D … T4». Desmarcado: se usa la tarjeta de la zona.','bz_airOn','airOn',c.airOn)
+   +'<div class="bz-g">'+cell('Tasa del aeropuerto (€)','bz_airFee',show(c.airFee),'airFee')+cell('Mínima fija hasta (km)','bz_airFlatKm',show(c.airFlatKm),'airFlatKm',{step:'0.5'})+'</div>'
+   +cardHtml('av','Recogida en el aeropuerto','Valle')+cardHtml('ap','Recogida en el aeropuerto','Punta')
+   +'<div class="bz-hint">En una <b>recogida</b> en el aeropuerto: hasta los km indicados solo vale la <b>mínima</b> (precio fijo); a partir de ahí, inicial + km × precio + minutos × precio. '
+   +'La <b>demanda multiplica todo</b> (la mínima también). Los viajes <b>hacia</b> el aeropuerto (Terminal 1–4, «Aeropuerto…») usan la tarjeta de la zona de la recogida. '
+   +'En los dos casos se resta primero la <b>tasa</b> (el precio de Bolt ya la incluye) y sobre lo que queda se aplica la comisión. El barrio de Barajas o la Avenida de la Hispanidad no cuentan como aeropuerto.</div>'
+   +'<div class="bz-btns"><button type="button" class="secondary" id="bz_air_def" onclick="boltReset(\'air\')">↺ Valores iniciales del aeropuerto</button></div>'
+   +testHtml('a','Prueba una recogida en el aeropuerto o un viaje hacia allí con los valores de arriba (sin guardar).');
+}
+
+/* ---------- apartado «Horas punta y valle» ---------- */
+function barHtml(l){
+  const list=listOf(l);
+  let h='<div class="bz-wk" id="bz_wk_'+l+'"><div class="bz-wh"><span></span><span>0 h</span><span>6 h</span><span>12 h</span><span>18 h</span><span>24 h</span></div>';
+  for(let d=0;d<7;d++)h+='<div class="bz-wr"><span class="bz-wd">'+D3[d]+'</span><div class="bz-wb" id="bz_wk_'+l+d+'">'+barSegs(list,d).map(s=>'<i style="left:'+s[0].toFixed(2)+'%;width:'+s[1].toFixed(2)+'%"></i>').join('')+'</div></div>';
+  return h+'<div class="bz-wl"><span><i class="we"></i>Hora punta</span><span><i class="wd"></i>Valle</span></div></div>';
+}
+function barSegs(list,d){
   const out=[],a=d*1440,b=a+1440,add=(x,y)=>{const s=Math.max(x,a),e=Math.min(y,b);if(e>s)out.push([(s-a)/1440*100,(e-s)/1440*100])};
-  for(const s of B.cfg.slots){if(!s.on)continue;if(s.from<s.to)add(s.from,s.to);else{add(s.from,WEEK);add(0,s.to)}}
+  for(const s of list){if(!s.on)continue;const len=slotLen(s);for(let k=0;k<7;k++){if(!(s.d&(1<<k)))continue;const st=k*1440+s.a,en=st+len;add(st,en);if(en>WEEK)add(0,en-WEEK)}}
   return out;
 }
-function weekBarHtml(){
-  let h='<div class="bz-wk" id="bz_wk"><div class="bz-wh"><span></span><span>0 h</span><span>6 h</span><span>12 h</span><span>18 h</span><span>24 h</span></div>';
-  for(let d=0;d<7;d++)h+='<div class="bz-wr"><span class="bz-wd">'+DAYS3[d]+'</span><div class="bz-wb" id="bz_wk'+d+'">'+barSegs(d).map(s=>'<i style="left:'+s[0].toFixed(2)+'%;width:'+s[1].toFixed(2)+'%"></i>').join('')+'</div></div>';
-  return h+'<div class="bz-wl"><span><i class="we"></i>Fin de semana</span><span><i class="wd"></i>Entre semana</span></div></div>';
+const listOf=l=>l==='h'?B.cfg.slotsH:B.cfg.slots;
+function slotRowHtml(l,s,i){
+  const k='bz_sl_'+l+'_'+i;
+  return '<div class="bz-sl" id="'+k+'"><label class="bz-sw"><input type="checkbox" id="'+k+'_on" '+(s.on?'checked ':'')+'onchange="boltSlotOn(\''+l+'\','+i+',this)" aria-label="Franja activada"></label>'
+   +'<span class="bz-st" id="'+k+'_t">'+esc(slotTxt(s))+'</span>'
+   +'<button type="button" class="secondary" id="'+k+'_ed" onclick="boltSlotEdit(\''+l+'\','+i+')" aria-label="Cambiar la franja">✏️</button>'
+   +'<button type="button" class="secondary" id="'+k+'_del" onclick="boltSlotDel(\''+l+'\','+i+')" aria-label="Borrar la franja">🗑</button></div>';
 }
-function slotRowHtml(s,i){
-  return '<div class="bz-sl" id="bz_sl_'+i+'"><label class="bz-sw"><input type="checkbox" id="bz_sl_'+i+'_on" '+(s.on?'checked ':'')+'onchange="boltSlotOn('+i+',this)" aria-label="Franja activada"></label>'
-   +'<span class="bz-st" id="bz_sl_'+i+'_t">'+esc(slotTxt(s))+'</span>'
-   +'<button type="button" class="secondary" id="bz_sl_'+i+'_ed" onclick="boltSlotEdit('+i+')" aria-label="Cambiar la franja">✏️</button>'
-   +'<button type="button" class="secondary" id="bz_sl_'+i+'_del" onclick="boltSlotDel('+i+')" aria-label="Borrar la franja">🗑</button></div>';
-}
-function dayOpts(sel){return DAYS.map((n,i)=>'<option value="'+i+'"'+(i===sel?' selected':'')+'>'+n+'</option>').join('')}
 function slotEditorHtml(){
-  const e=B.slotEdit;if(e==null)return '';
-  const cur=e>=0&&B.cfg.slots[e]?B.cfg.slots[e]:{from:4*1440+18*60,to:6*1440+6*60};
-  return '<div class="bz-sled" id="bz_sl_edit"><b>'+(e>=0?'Cambiar la franja':'Añadir franja')+'</b>'
-   +'<div class="bz-g"><label class="bz-f"><span>Desde (día)</span><select id="bz_sl_d1">'+dayOpts(Math.floor(cur.from/1440))+'</select></label>'
-   +'<label class="bz-f"><span>Hora</span><input type="time" id="bz_sl_h1" value="'+hhmm(cur.from)+'"></label>'
-   +'<label class="bz-f"><span>Hasta (día)</span><select id="bz_sl_d2">'+dayOpts(Math.floor(cur.to/1440))+'</select></label>'
-   +'<label class="bz-f"><span>Hora</span><input type="time" id="bz_sl_h2" value="'+hhmm(cur.to)+'"></label></div>'
-   +'<div class="bz-hint">Si «hasta» es antes que «desde», la franja da la vuelta al domingo (por ejemplo de domingo 22:00 a lunes 06:00).</div>'
-   +'<div class="bz-err" id="bz_sl_err"></div>'
-   +'<div class="bz-zb"><button type="button" class="action" id="bz_sl_save" onclick="boltSlotSave()">Guardar franja</button><button type="button" class="secondary" id="bz_sl_cancel" onclick="boltSlotCancel()">Cancelar</button></div></div>';
+  const e=B.slotEdit;if(!e)return '';
+  let chips='';for(let d=0;d<7;d++)chips+='<button type="button" class="bz-chip'+(e.d&(1<<d)?' on':'')+'" id="bz_se_d'+d+'" onclick="boltSlotDay('+d+')" aria-pressed="'+(e.d&(1<<d)?'true':'false')+'" aria-label="'+DAYS[d]+'">'+D1[d]+'</button>';
+  return '<div class="bz-sled" id="bz_sl_edit"><b>'+(e.i>=0?'Cambiar la franja':'Añadir franja')+'</b>'
+   +'<div class="bz-days">'+chips+'</div>'
+   +'<div class="bz-g"><label class="bz-f"><span>Desde</span><input type="time" id="bz_se_h1" value="'+hhmm(e.a)+'"></label>'
+   +'<label class="bz-f"><span>Hasta</span><input type="time" id="bz_se_h2" value="'+(e.b===1440?'00:00':hhmm(e.b))+'"></label></div>'
+   +'<div class="bz-hint">00:00 → 00:00 es el día entero. Si «hasta» es antes que «desde», la franja acaba al día siguiente (por ejemplo jueves 17:00 → 02:00).</div>'
+   +'<div class="bz-err" id="bz_se_err"></div>'
+   +'<div class="bz-zb"><button type="button" class="action" id="bz_se_save" onclick="boltSlotSave()">Guardar franja</button><button type="button" class="secondary" id="bz_se_cancel" onclick="boltSlotCancel()">Cancelar</button></div></div>';
 }
-function slotNowHtml(){
-  const d=new Date(),wk=isWeekend(B.cfg,d),w=weekMinute(d);
-  const when=DAYS[Math.floor(w/1440)].toLowerCase()+' '+hhmm(w);
-  let why;
-  if(B.cfg.mode==='week')why='has elegido «Siempre entre semana»';else if(B.cfg.mode==='weekend')why='has elegido «Siempre fin de semana»';
-  else if(wk)why=(B.cfg.holidaysWe&&isHoliday(B.cfg,d))?'es festivo':'cae dentro de una franja';else why='no cae en ninguna franja';
-  return 'Ahora mismo: '+when+' → '+why+' → se usan las tarjetas de <b>'+(wk?'fin de semana':'entre semana')+'</b>.';
+function slotListHtml(l,title,sub){
+  const list=listOf(l),ed=B.slotEdit&&B.slotEdit.l===l;
+  return '<div class="bz-slist" id="bz_slist_'+l+'"><b class="bz-sub">'+title+'</b><small>'+sub+'</small>'+barHtml(l)
+   +'<div class="bz-sls" id="bz_sl_list_'+l+'">'+(list.length?list.map((s,i)=>slotRowHtml(l,s,i)).join(''):'<div class="bz-hint" id="bz_sl_none_'+l+'">No hay ninguna franja: siempre valle (salvo festivos).</div>')+'</div>'
+   +(ed?slotEditorHtml():'<div class="bz-zb"><button type="button" class="secondary" id="bz_sl_'+l+'_add" onclick="boltSlotAdd(\''+l+'\')"'+(list.length>=MAXS?' disabled':'')+'>➕ Añadir franja</button><button type="button" class="secondary" id="bz_sl_'+l+'_def" onclick="boltReset(\'slots'+l+'\')">↺ Franjas iniciales</button></div>')+'</div>';
 }
-function slotsBodyHtml(){
-  const sl=B.cfg.slots;
-  return weekBarHtml()
-   +'<div class="bz-sls" id="bz_sl_list">'+(sl.length?sl.map(slotRowHtml).join(''):'<div class="bz-hint" id="bz_sl_none">No hay ninguna franja: siempre se usan las tarjetas de entre semana (salvo festivos).</div>')+'</div>'
-   +(B.slotEdit==null?'<div class="bz-zb"><button type="button" class="secondary" id="bz_sl_add" onclick="boltSlotAdd()"'+(sl.length>=MAXS?' disabled':'')+'>➕ Añadir franja</button><button type="button" class="secondary" id="bz_sl_def" onclick="boltReset(\'slots\')">↺ Franjas iniciales</button></div>':slotEditorHtml())
-   +'<div class="bz-out" id="bz_sl_now">'+slotNowHtml()+'</div>';
+function peakNowHtml(){
+  const d=new Date(),w=weekMinute(d),hol=isHoliday(B.cfg,d),a=peakWhy(B.cfg,Z_MID,w,hol),b=peakWhy(B.cfg,Z_HIGH,w,hol);
+  return 'Ahora ('+DAYS[Math.floor(w/1440)].toLowerCase()+' '+hhmm(w)+'): zona media y baja → <b>'+(a.peak?'HORA PUNTA':'valle')+'</b> ('+a.why+') · zona alta → <b>'+(b.peak?'HORA PUNTA':'valle')+'</b> ('+b.why+'). '
+   +(B.cfg.peakApplies?'La tarjeta de punta SÍ sube el precio.':'La hora punta NO sube tu precio (se usa la tarjeta de valle y el aviso dice lo que saldría con la de punta).');
 }
-function slotsHtml(){
+function hourState(){if(!B.hour){const d=new Date(),w=weekMinute(d);B.hour={d:Math.floor(w/1440),t:hhmm(w),hol:false}}return B.hour}
+function hourHtml(){
+  const h=hourState();
+  return '<div class="bz-test" id="bz_test_h"><b class="bz-sub">🧪 Prueba de hora</b><small>Elige un día y una hora y mira si sería hora punta en cada zona.</small>'
+   +'<div class="bz-g"><label class="bz-f"><span>Día</span>'+sel('bz_ph_d','',DAYS.map((n,i)=>[String(i),n]),String(h.d),'boltHour()')+'</label>'
+   +'<label class="bz-f"><span>Hora</span><input type="time" id="bz_ph_t" value="'+h.t+'" oninput="boltHour()"></label>'
+   +'<label class="bz-f bz-chk"><input type="checkbox" id="bz_ph_h"'+(h.hol?' checked':'')+' onchange="boltHour()"><span>Es festivo</span></label></div>'
+   +'<div class="bz-out" id="bz_ph_out"></div></div>';
+}
+function pPeak(){
   const c=B.cfg;
-  return '<div class="bz-sec" id="bz_slots"><b>📅 Franjas de fin de semana</b><small>Una sola lista para todas las tarjetas. En estas franjas se usan los precios de fin de semana; fuera de ellas, los de entre semana. Lo decide la hora a la que llega la oferta, no el día del calendario.</small>'
-   +'<div id="bz_slots_body">'+slotsBodyHtml()+'</div>'
-   +chk('Los festivos cuentan como fin de semana (todo el día)','bz_holWe','holidaysWe',c.holidaysWe)
+  return '<small>La hora punta sale de estas franjas: dentro de una (o en un festivo) es punta y fuera es valle. Hay una lista para las zonas media y baja y otra para la alta. Si dos franjas se pisan no pasa nada.</small>'
+   +'<div class="bz-out" id="bz_pk_now">'+peakNowHtml()+'</div>'
+   +'<div id="bz_slots_body">'+slotListHtml('m','Zonas media y baja','Por defecto: lunes a viernes 07:00–10:00 y 17:00–20:00; sábados y domingos todo el día.')
+   +slotListHtml('h','Zona alta','Por defecto igual, pero por la mañana desde las 08:00 (visto el 29-10, sin confirmar).')+'</div>'
+   +sw('Los festivos cuentan como hora punta (todo el día)','','bz_holWe','holidaysWe',c.holidaysWe)
    +'<details id="bz_hol_det"'+(B.holOpen?' open':'')+'><summary class="bz-tsum"><b>🎌 Lista de festivos</b></summary>'
    +'<small>Fechas MM-DD (cada año) o AAAA-MM-DD, separadas por comas. Semana Santa y otros que cambian cada año, añádelos con el año.</small>'
-   +'<textarea id="bz_hol" rows="3" data-p="holidays" oninput="boltIn(this)">'+esc((c.holidays||[]).join(', '))+'</textarea></details></div>';
+   +'<textarea id="bz_hol" rows="3" data-p="holidays" oninput="boltIn(this)">'+esc((c.holidays||[]).join(', '))+'</textarea></details>'
+   +hourHtml();
 }
-function renderSlots(){const b=document.getElementById('bz_slots_body');if(b)b.innerHTML=slotsBodyHtml()}
-window.boltSlotOn=function(i,el){const s=B.cfg.slots[i];if(!s)return;s.on=!!el.checked;refreshDerived()};
-window.boltSlotEdit=function(i){if(i<0||i>=B.cfg.slots.length)return;B.slotEdit=i;renderSlots()};
-window.boltSlotAdd=function(){if(B.cfg.slots.length>=MAXS)return;B.slotEdit=-1;renderSlots()};
+function renderSlots(){const b=document.getElementById('bz_slots_body');if(b)b.innerHTML=slotListHtml('m','Zonas media y baja','Por defecto: lunes a viernes 07:00–10:00 y 17:00–20:00; sábados y domingos todo el día.')+slotListHtml('h','Zona alta','Por defecto igual, pero por la mañana desde las 08:00 (visto el 29-10, sin confirmar).');refreshDerived()}
+window.boltSlotOn=function(l,i,el){const s=listOf(l)[i];if(!s)return;s.on=!!el.checked;refreshDerived()};
+window.boltSlotEdit=function(l,i){const s=listOf(l)[i];if(!s)return;B.slotEdit={l,i,d:s.d,a:s.a,b:s.b};renderSlots()};
+window.boltSlotAdd=function(l){if(listOf(l).length>=MAXS)return;B.slotEdit={l,i:-1,d:31,a:420,b:600};renderSlots()};
 window.boltSlotCancel=function(){B.slotEdit=null;renderSlots()};
-window.boltSlotDel=function(i){
-  const s=B.cfg.slots[i];if(!s)return;
+window.boltSlotDay=function(d){
+  const e=B.slotEdit;if(!e)return;e.d^=(1<<d);
+  const b=document.getElementById('bz_se_d'+d);if(b){b.classList.toggle('on',!!(e.d&(1<<d)));b.setAttribute('aria-pressed',(e.d&(1<<d))?'true':'false')}
+};
+window.boltSlotDel=function(l,i){
+  const L=listOf(l),s=L[i];if(!s)return;
   if(!confirm('¿Borrar la franja «'+slotTxt(s)+'»?\n\nNo se guarda hasta que pulses «Guardar».'))return;
-  B.cfg.slots.splice(i,1);if(B.slotEdit!=null)B.slotEdit=null;renderSlots();refreshDerived();
+  L.splice(i,1);B.slotEdit=null;renderSlots();
 };
 function timeMin(v){const m=/^(\d{1,2}):(\d{2})$/.exec(String(v||'').trim());if(!m)return -1;const h=+m[1],mi=+m[2];return h<=23&&mi<=59?h*60+mi:-1}
 window.boltSlotSave=function(){
-  const g=id=>document.getElementById(id),err=g('bz_sl_err');
-  const t1=timeMin(g('bz_sl_h1')&&g('bz_sl_h1').value),t2=timeMin(g('bz_sl_h2')&&g('bz_sl_h2').value);
-  const d1=Number(g('bz_sl_d1').value),d2=Number(g('bz_sl_d2').value);
+  const g=id=>document.getElementById(id),err=g('bz_se_err'),e=B.slotEdit;if(!e||!err)return false;
+  const t1=timeMin(g('bz_se_h1')&&g('bz_se_h1').value),t2=timeMin(g('bz_se_h2')&&g('bz_se_h2').value);
+  if(!(e.d&127)){err.textContent='Elige al menos un día.';return false}
   if(t1<0||t2<0){err.textContent='Pon una hora válida en «desde» y en «hasta».';return false}
-  const from=d1*1440+t1,to=d2*1440+t2;
-  if(from===to){err.textContent='El principio y el final no pueden ser iguales.';return false}
-  const e=B.slotEdit;
-  if(e>=0&&B.cfg.slots[e]){B.cfg.slots[e].from=from;B.cfg.slots[e].to=to}
-  else{if(B.cfg.slots.length>=MAXS){err.textContent='Hay un máximo de '+MAXS+' franjas.';return false}B.cfg.slots.push({on:true,from,to})}
-  B.slotEdit=null;renderSlots();refreshDerived();return true;
+  let a=t1,b=t2;
+  if(t1===0&&t2===0)b=1440;else if(t2===0)b=1440;else if(t1===t2){err.textContent='El principio y el final no pueden ser iguales (00:00 → 00:00 es el día entero).';return false}
+  const L=listOf(e.l);
+  if(e.i>=0&&L[e.i]){L[e.i].d=e.d&127;L[e.i].a=a;L[e.i].b=b}
+  else{if(L.length>=MAXS){err.textContent='Hay un máximo de '+MAXS+' franjas.';return false}L.push({on:true,d:e.d&127,a,b})}
+  B.slotEdit=null;renderSlots();return true;
+};
+window.boltHour=function(){
+  const out=document.getElementById('bz_ph_out');if(!out)return;
+  const h=hourState(),g=id=>document.getElementById(id);
+  if(g('bz_ph_d'))h.d=Number(g('bz_ph_d').value);if(g('bz_ph_t')){const t=timeMin(g('bz_ph_t').value);if(t>=0)h.t=hhmm(t)}if(g('bz_ph_h'))h.hol=!!g('bz_ph_h').checked;
+  const w=h.d*1440+timeMin(h.t),a=peakWhy(B.cfg,Z_MID,w,h.hol),b=peakWhy(B.cfg,Z_HIGH,w,h.hol);
+  out.innerHTML='<div class="bz-line" id="bz_ph_m">Zona media y baja: <b>'+(a.peak?'HORA PUNTA':'valle')+'</b> ('+a.why+')</div>'
+   +'<div class="bz-line" id="bz_ph_a">Zona alta: <b>'+(b.peak?'HORA PUNTA':'valle')+'</b> ('+b.why+')</div>'
+   +'<div class="bz-line">'+(B.cfg.peakApplies?'La tarjeta de punta sube el precio.':'La hora punta no sube tu precio (Ajustes → General).')+'</div>';
 };
 
-/* ---------- ajuste por zona y demanda ---------- */
-const mt=v=>{let s=spoken(v,2);return s};
-const pc=v=>(v>1e-9?'+':v<-1e-9?'−':'')+spoken(Math.abs(v),2)+' %';
-function zoneRuleTxt(z){
-  return '<b>Fuera de zona buena</b> (M30, sur…): sin demanda o menos de ×'+mt(z.realFrom)+' → tarifa '+pc(z.adj)+'; de ×'+mt(z.realFrom)+' a menos de ×'+mt(z.from)+' → tarifa real (sin descuento y sin demanda); desde ×'+mt(z.from)+' → tarifa × demanda'
-   +' (desde ×'+mt(z.a1)+' sube '+mt(z.p1)+' %, desde ×'+mt(z.a2)+' sube '+mt(z.p2)+' %, desde ×'+mt(z.a3)+' sube '+mt(z.p3)+' %; cada escalón sustituye al anterior). '
-   +'<b>En zona buena</b>: tarifa '+pc(z.adjGood)+' × la demanda tal como salga, sin escalones.';
-}
+/* ---------- apartado «Zonas y mapa» ---------- */
 function zonesHtml(){
   const g=B.cfg.zone.zones;
-  if(!g.length)return '<div class="bz-hint" id="bz_z_none">Todavía no has dibujado ninguna zona buena: en todas partes se usa la tarifa de fuera de zona buena. Pulsa «Dibujar zona nueva» y ve poniendo puntos en el mapa.</div>';
+  if(!g.length)return '<div class="bz-hint" id="bz_z_none">Todavía no has dibujado ninguna zona: en todas partes se usa la zona por defecto. Pulsa «Dibujar zona nueva» y ve poniendo puntos en el mapa.</div>';
   return g.map((a,i)=>{const id=x=>'bz_z_a'+i+'_'+x;
     return '<div class="bz-ar" id="bz_z_ar'+i+'"><input type="text" class="bz-an" id="'+id('n')+'" maxlength="40" placeholder="Nombre de la zona" value="'+esc(a.n)+'" oninput="boltZoneName('+i+',this)">'
-     +'<div class="bz-az"><span class="bz-zc" id="'+id('c')+'">'+a.pts.length+' puntos</span><button type="button" class="secondary" id="'+id('ed')+'" onclick="boltMapEdit('+i+')">✏️ Editar en el mapa</button>'
+     +'<div class="bz-az"><select class="bz-kind k-'+a.k+'" id="'+id('k')+'" onchange="boltZoneKind('+i+',this)" aria-label="Tipo de zona">'+opt('h','Zona alta',a.k==='h')+opt('m','Zona media',a.k==='m')+opt('l','Zona baja',a.k==='l')+'</select>'
+     +'<span class="bz-zc" id="'+id('c')+'">'+a.pts.length+' puntos</span><button type="button" class="secondary" id="'+id('ed')+'" onclick="boltMapEdit('+i+')">✏️ Mapa</button>'
      +'<button type="button" class="secondary bz-adel" id="'+id('del')+'" onclick="boltZoneDel('+i+')" aria-label="Borrar la zona">🗑</button></div></div>'}).join('');
 }
 function zoneLastTxt(js){
   let o=null;try{o=js?JSON.parse(js):null}catch(e){}
   if(!o||!isN(o.t))return '';
   const ago=Math.max(0,Math.round((Date.now()-o.t)/60000)),when=ago<1?'hace menos de 1 min':ago<60?'hace '+ago+' min':'hace '+Math.round(ago/60)+' h';
-  return 'Última lectura real del lector de pantalla ('+when+'): '+(o.ok?(o.good?'zona buena: '+o.good:'fuera de zona buena')+' · ubicación de hace '+o.age+' s ('+o.prov+')':'sin ubicación ('+o.why+') → se usó el ajuste de fuera de zona buena');
+  const k=Math.max(0,ZW.indexOf(o.kind));
+  return 'Última lectura real del lector de pantalla ('+when+'): '+(o.ok?'zona '+ZN[k]+(o.src==='area'?(o.name?' ('+o.name+')':' (zona dibujada)'):o.src==='forced'?' (forzada en Ajustes)':' (fuera de tus zonas → por defecto)')+' · ubicación de hace '+o.age+' s ('+o.prov+')':'sin ubicación ('+o.why+') → zona '+ZN[k]+(o.src==='forced'?' (forzada en Ajustes)':' (por defecto)'));
 }
-function zoneHtml(){
-  const z=B.cfg.zone,c=B.cfg;
-  return '<div class="bz-sec bz-zone'+(z.on?'':' bz-off')+'" id="bz_zone"><b>📍 Ajuste por zona y demanda (con el GPS)</b>'
-   +'<div class="bz-row"><div><b>Ajustar los viajes normales según la zona y la demanda</b><br><small>La app mira dónde estás: en una zona buena usa un ajuste y en el resto (M30, sur…) otro. Solo para la tarjeta normal; el aeropuerto no lo usa. Apagado: tarjeta × demanda tal como salga.</small></div><input type="checkbox" id="bz_z_on" data-p="zone.on"'+(z.on?' checked':'')+' onchange="boltIn(this)" style="width:26px;height:26px;flex:none"></div>'
-   +'<div class="bz-hint" id="bz_z_rule">'+zoneRuleTxt(z)+'</div>'
-   +'<div class="bz-g">'+cell('Fuera de zona buena: ajuste (%)','bz_z_adj',show(z.adj),'zone.adj',{min:-90,step:'1'})+cell('En zona buena: ajuste (%)','bz_z_adjGood',show(z.adjGood),'zone.adjGood',{min:-90,step:'1'})
-   +cell('Demanda si la oferta no la trae (×)','bz_z_mult',show(z.mult),'zone.mult',{min:0.1,step:'0.05'})+'<div></div>'
-   +chk('Usar el multiplicador que muestre la oferta (×1,4…) en lugar del de arriba','bz_offerMult','offerMult',c.offerMult)+'</div>'
-   +'<b class="bz-sub">Demanda de la oferta (fuera de zona buena)</b>'
-   +'<div class="bz-g">'+cell('Se acaba el descuento desde ×','bz_z_realFrom',show(z.realFrom),'zone.realFrom',{min:1,step:'0.05'})+cell('Se aplica la demanda desde ×','bz_z_from',show(z.from),'zone.from',{min:1,step:'0.05'})
-   +cell('Escalón 1: desde ×','bz_z_a1',show(z.a1),'zone.a1',{min:1,step:'0.05'})+cell('… sube (%)','bz_z_p1',show(z.p1),'zone.p1',{step:'1'})
-   +cell('Escalón 2: desde ×','bz_z_a2',show(z.a2),'zone.a2',{min:1,step:'0.05'})+cell('… sube (%)','bz_z_p2',show(z.p2),'zone.p2',{step:'1'})
-   +cell('Escalón 3: desde ×','bz_z_a3',show(z.a3),'zone.a3',{min:1,step:'0.05'})+cell('… sube (%)','bz_z_p3',show(z.p3),'zone.p3',{step:'1'})+'</div>'
-   +'<div class="bz-err" id="bz_z_ordmsg"></div>'
-   +'<b class="bz-sub">Zonas buenas</b><div class="bz-hint">Cada zona es un polígono que dibujas tú, punto a punto, sobre el mapa (así sigues el contorno real: una urbanización, un polígono, el aeropuerto…). Todo lo que quede dentro cuenta como zona buena. Se detectan con la ubicación del móvil.</div>'
-   +'<div id="bz_z_list">'+zonesHtml()+'</div>'
+function pZones(){
+  const c=B.cfg;
+  return '<small>Cada zona es un polígono que dibujas sobre el mapa y que marcas como <b>alta</b>, <b>media</b> o <b>baja</b>. La zona de una oferta es la de donde <b>recoges</b> (tu ubicación al llegar la oferta), nunca la del destino. Si caes en varias zonas manda la alta, luego la media y luego la baja. Fuera de todas vale la zona por defecto.</small>'
+   +'<div class="bz-g">'
+   +'<label class="bz-f bz-w"><span>Zona por defecto (fuera de mis zonas)</span>'+sel('bz_zoneDef','zoneDef',[['low','Baja'],['mid','Media'],['high','Alta']],c.zoneDef)+'</label>'
+   +'<label class="bz-f bz-w"><span>Forzar la zona</span>'+sel('bz_zoneForce','zoneForce',[['auto','Automática (según mi ubicación)'],['high','Siempre zona alta'],['mid','Siempre zona media'],['low','Siempre zona baja']],c.zoneForce)+'</label></div>'
+   +'<div class="bz-hint" id="bz_z_force">'+forceTxt()+'</div>'
+   +'<b class="bz-sub">Mis zonas</b><div id="bz_z_list">'+zonesHtml()+'</div>'
    +'<div class="bz-zb"><button type="button" class="action" id="bz_z_map" onclick="boltMap(\'draw\')">🗺 Dibujar zona nueva</button>'
    +'<button type="button" class="secondary" id="bz_z_where" onclick="boltWhere()">📍 Probar ubicación</button>'
-   +'<button type="button" class="secondary" id="bz_z_clear" onclick="boltReset(\'areas\')">🗑 Quitar todas las zonas</button>'
-   +'<button type="button" class="secondary" id="bz_z_defz" onclick="boltReset(\'zone\')">↺ Valores iniciales del ajuste (las zonas se quedan)</button></div>'
-   +'<div class="bz-out" id="bz_z_loc">'+esc(zoneLastTxt(B.zoneLast)||'Pulsa «Probar ubicación» para ver dónde cree la app que estás.')+'</div>'
-   +'<div class="bz-hint">Si el móvil no da la ubicación (sin permiso o sin datos recientes), se usa el ajuste de fuera de zona buena.</div></div>';
+   +'<button type="button" class="secondary" id="bz_z_clear" onclick="boltReset(\'areas\')">🗑 Quitar todas las zonas</button></div>'
+   +'<div class="bz-out" id="bz_z_loc">'+esc(zoneLastTxt(B.zoneLast)||'Pulsa «Probar ubicación» para ver en qué zona cree la app que estás.')+'</div>'
+   +'<div class="bz-hint">Si el móvil no da la ubicación (sin permiso o sin datos recientes), se usa la zona por defecto y el aviso lo dice.</div>';
 }
-function zoneCheck(){
-  const z=B.cfg.zone,v=ZORD.map(k=>z[k]);let okOrd=true;
-  for(let i=1;i<v.length;i++)if(!(v[i]>=v[i-1]))okOrd=false;
-  ZORD.forEach((k,i)=>{const el=document.getElementById('bz_z_'+k);if(!el)return;const wrong=!okOrd&&((i>0&&v[i]<v[i-1])||(i<v.length-1&&v[i+1]<v[i]));bad(el,wrong||errors.has(el.id))});
-  okOrd?errors.delete('zord'):errors.add('zord');
-  const m=document.getElementById('bz_z_ordmsg');if(m)m.textContent=okOrd?'':'Los umbrales tienen que ir de menor a mayor: «se acaba el descuento» ≤ «se aplica la demanda» ≤ escalón 1 ≤ escalón 2 ≤ escalón 3.';
-  const r=document.getElementById('bz_z_rule');if(r)r.innerHTML=zoneRuleTxt(z);
-}
+const forceTxt=()=>B.cfg.zoneForce==='auto'?'La zona se decide por tu ubicación y tus zonas dibujadas.':'⚠ Zona forzada: todas las ofertas se calculan como zona '+ZN[ZW.indexOf(B.cfg.zoneForce)]+' hasta que vuelvas a «Automática». No es solo para un viaje.';
 window.boltZoneName=function(i,el){const a=B.cfg.zone.zones[i];if(!a)return;a.n=areaName(el.value);if(P.zmap&&P.zmap.open)P.zmap.redraw()};
-function renderZones(){const l=document.getElementById('bz_z_list');if(l)l.innerHTML=zonesHtml();boltSim()}
+window.boltZoneKind=function(i,el){const a=B.cfg.zone.zones[i];if(!a)return;a.k=kindKey(el.value,a.k);el.className='bz-kind k-'+a.k;if(P.zmap&&P.zmap.open){P.zmap.panel();P.zmap.redraw()}refreshDerived()};
+function renderZones(){const l=document.getElementById('bz_z_list');if(l)l.innerHTML=zonesHtml();refreshDerived()}
 window.boltZoneDel=function(i){
   const g=B.cfg.zone.zones;if(i<0||i>=g.length)return;
   if(!confirm('¿Borrar la zona «'+(g[i].n||'sin nombre')+'»?\n\nNo se guarda hasta que pulses «Guardar».'))return;
   g.splice(i,1);if(P.zmap&&P.zmap.open){P.zmap.sel=-1;P.zmap.vsel=-1;P.zmap.panel();P.zmap.redraw()}renderZones();
 };
 function newZoneName(){const g=B.cfg.zone.zones;let n=g.length+1;while(g.some(a=>a.n==='Zona '+n))n++;return 'Zona '+n}
-function addZone(pts,name){
+function addZone(pts,name,kind){
   const g=B.cfg.zone.zones;if(g.length>=MAXZ){alert('Hay un máximo de '+MAXZ+' zonas.');return -1}
   if(!Array.isArray(pts)||pts.length<3)return -1;
-  g.push({n:areaName(name||newZoneName()),pts:pts.slice(0,MAXPT).map(p=>[Math.round(p[0]*1e6)/1e6,Math.round(p[1]*1e6)/1e6])});renderZones();return g.length-1;
+  g.push({n:areaName(name||newZoneName()),k:kindKey(kind,'h'),pts:pts.slice(0,MAXPT).map(p=>[Math.round(p[0]*1e6)/1e6,Math.round(p[1]*1e6)/1e6])});renderZones();return g.length-1;
 }
 P.boltAddZone=addZone;
 /* ubicación: primero la del navegador/WebView; si no, la última que tiene el sistema (la lee el código nativo) */
@@ -4031,62 +4112,113 @@ async function myPos(){
   const n=await nativeFix();if(n&&n.ok)return {lat:n.lat,lon:n.lon,acc:-1,old:n.age};
   return {err:(g&&g.err)||'sin ubicación'};
 }
+const zoneDesc=r=>'ZONA '+ZN[r.kind].toUpperCase()+(r.src==='forced'?' (forzada en Ajustes)':r.src==='area'?(r.name?': '+r.name:' (zona dibujada)'):' (fuera de tus zonas → zona por defecto)');
 window.boltWhere=async function(){
   const out=document.getElementById('bz_z_loc');if(!out)return;
   out.textContent='Buscando tu ubicación…';
   const lines=[];
   const g=await getPos(8000);
-  if(g&&!g.err){const n=goodAreaAt(B.cfg.zone,g.lat,g.lon);lines.push('📍 Ahora (GPS): '+show(Math.round(g.lat*1e5)/1e5)+', '+show(Math.round(g.lon*1e5)/1e5)+(g.acc>0?' (±'+Math.round(g.acc)+' m)':'')+' → '+(n!==null?'ZONA BUENA'+(n?': '+n:''):'fuera de zona buena'))}
-  else lines.push('📍 Ahora (GPS): sin ubicación ('+g.err+')');
+  if(g&&!g.err){const r=resolveZone(B.cfg,{lat:g.lat,lon:g.lon});lines.push('📍 Ahora (GPS): '+show(Math.round(g.lat*1e5)/1e5)+', '+show(Math.round(g.lon*1e5)/1e5)+(g.acc>0?' (±'+Math.round(g.acc)+' m)':'')+' → '+zoneDesc(r))}
+  else lines.push('📍 Ahora (GPS): sin ubicación ('+g.err+') → '+zoneDesc(resolveZone(B.cfg,null)));
   const sr=SR();
   if(sr){
     const n=await nativeFix();
-    if(n)lines.push('🔧 Lo que ve el lector de pantalla: '+(n.ok?'ubicación de hace '+n.age+' s ('+n.prov+') → '+(n.good?'ZONA BUENA: '+n.good:'fuera de zona buena'):'sin ubicación ('+n.why+') → usaría el ajuste de fuera de zona buena'));
+    if(n){const k=Math.max(0,ZW.indexOf(n.kind));lines.push('🔧 Lo que ve el lector de pantalla: '+(n.ok?'ubicación de hace '+n.age+' s ('+n.prov+') → ':'sin ubicación ('+n.why+') → ')+zoneDesc({kind:k,src:n.src,name:n.name}))}
     else lines.push('🔧 Lo que ve el lector de pantalla: no se pudo consultar');
     try{const d=await sr.getBolt();if(d&&typeof d.zoneLast==='string')B.zoneLast=d.zoneLast}catch(e){}
     const l=zoneLastTxt(B.zoneLast);if(l)lines.push(l);
   }
   out.innerHTML=lines.map(esc).join('<br>');
 };
-const pctSign=v=>(v>1e-9?'+':v<-1e-9?'−':'')+spoken(Math.abs(v),1)+' %';
-function zoneLine(e){const zero=Math.abs(e.adj)<1e-9;return e.zone===2?'Zona buena · tarifa '+(zero?'normal':pctSign(e.adj)):'Fuera de zona buena · tarifa '+(zero?'real':pctSign(e.adj))}
-function zoneDemand(e,om){
-  if(!(om>0))return e.mult>1+1e-9?'Demanda ×'+mt(e.mult)+' (a mano)':'Sin demanda en la oferta';
-  if(!e.fromOffer)return 'Demanda ×'+mt(om)+' de la oferta: ignorada (lo tienes desactivado)';
-  let s='Demanda ×'+mt(om)+' (de la oferta)';
-  if(e.zone===1){if(Math.abs(e.eff-1)<1e-9)s+=': no se aplica (solo desde ×'+mt(e.hi)+')';else if(e.eff>om+1e-9)s+=' +'+spoken(Math.round((e.eff/om-1)*1000)/10,1)+' % = ×'+mt(e.eff)}
-  return s;
+
+/* ---------- apartado «Demanda y viajes cortos» ---------- */
+function pDem(){
+  const c=B.cfg,s=c.short;
+  return '<small>La <b>demanda</b> (×1,2, ×1,4…) se lee siempre de la oferta y multiplica todo el precio estimado, mínima incluida, desde la primera décima. No hay interruptor.</small>'
+   +'<div class="bz-g">'+cell('Ajuste fino de la demanda (%)','bz_fine',show(c.fine),'fine',{step:'0.5',min:-50})+'<div></div></div>'
+   +'<div class="bz-hint">Súmale o réstale un porcentaje al precio cuando hay demanda (0 = nada). Útil si ves que Bolt paga siempre un poco más o menos que la cuenta.</div>'
+   +'<b class="bz-sub">Viajes cortos con demanda</b>'
+   +'<div class="bz-hint">En los viajes cortos con demanda, Bolt sube el inicial de forma que no se puede predecir. En vez de un solo número la app da un <b>rango de neto</b> (el aviso y la voz dicen «entre … y …»; el veredicto usa el punto medio). El rango sale de sumar a la tarjeta entre «sube desde» y «sube hasta» euros antes de multiplicar por la demanda.</div>'
+   +'<div class="bz-g">'+cell('Corto: menos de (km)','bz_sh_km',show(s.km),'short.km',{step:'0.5'})+cell('Con demanda desde (×)','bz_sh_from',show(s.from),'short.from',{step:'0.05',min:1})
+   +cell('El inicial sube desde (€)','bz_sh_lo',show(s.lo),'short.lo',{step:'0.25'})+cell('El inicial sube hasta (€)','bz_sh_hi',show(s.hi),'short.hi',{step:'0.25'})+'</div>'
+   +'<div class="bz-err" id="bz_sh_msg"></div>'
+   +'<div class="bz-btns"><button type="button" class="secondary" id="bz_dem_def" onclick="boltReset(\'dem\')">↺ Valores iniciales de demanda</button></div>'
+   +testHtml('d','Prueba un viaje corto con demanda (por ejemplo 3 km, 11 min, ×1,4) y mira el rango.');
 }
-const cardTxt=e=>(e.airport==='pickup'?'Aeropuerto (recogida)':e.airport==='dest'?'Aeropuerto (viaje hacia allí)':'Tarjeta normal')+' · '+(e.weekend?'fin de semana':'entre semana');
-P.boltZoneTxt={line:zoneLine,demand:zoneDemand,card:cardTxt};
-function simHtml(){
-  const k=B.sim.kind;
-  return '<div class="bz-sec"><b>🧮 Simulador (para contrastar con viajes reales)</b><small>Escribe los km y minutos del viaje con pasajero y mira qué estimaría la app con los valores de arriba.</small>'
-   +'<div class="bz-g">'+cell('Km del viaje','bz_sKm',show(B.sim.km),'',{step:'0.1',on:'boltSim()'})+cell('Minutos del viaje','bz_sMin',show(B.sim.min),'',{step:'1',on:'boltSim()'})
-   +cell('Demanda de la oferta (opcional)','bz_sMult',B.sim.mult,'',{step:'0.05',on:'boltSim()'})
-   +'<label class="bz-f"><span>Tarjeta</span><select id="bz_sProf" onchange="boltSim()"><option value="auto"'+(B.sim.prof==='auto'?' selected':'')+'>Ahora (según tus franjas)</option><option value="wd"'+(B.sim.prof==='wd'?' selected':'')+'>Entre semana</option><option value="we"'+(B.sim.prof==='we'?' selected':'')+'>Fin de semana</option></select></label>'
-   +'<label class="bz-f bz-w"><span>Tipo de viaje</span><select id="bz_sKind" onchange="boltSim()"><option value=""'+(k===''?' selected':'')+'>Normal (fuera del aeropuerto)</option><option value="pickup"'+(k==='pickup'?' selected':'')+'>Recogida en el aeropuerto</option><option value="dest"'+(k==='dest'?' selected':'')+'>Viaje hacia el aeropuerto</option></select></label>'
-   +'<label class="bz-f bz-w"><span>Ubicación (ajuste por zona)</span><select id="bz_sGood" onchange="boltSim()"><option value="0"'+(B.sim.zone!=='1'?' selected':'')+'>Fuera de zona buena (M30, sur…)</option><option value="1"'+(B.sim.zone==='1'?' selected':'')+'>En zona buena</option></select></label></div>'
-   +'<div id="bz_sOut" class="bz-out"></div></div>';
+function shortCheck(){
+  const s=B.cfg.short,ok=s.lo<=s.hi;
+  ['bz_sh_lo','bz_sh_hi'].forEach(id=>{const el=document.getElementById(id);if(el)bad(el,!ok||errors.has(id))});
+  ok?errors.delete('sord'):errors.add('sord');
+  const m=document.getElementById('bz_sh_msg');if(m)m.textContent=ok?'':'«Sube desde» no puede ser mayor que «sube hasta».';
+}
+
+/* ---------- apartado «General» y «Voz» ---------- */
+function pGen(){
+  const c=B.cfg;
+  return sw('Estimar el precio de Bolt','Solo cuando la oferta no lo muestra.','bz_on','on',c.on)
+   +'<div class="bz-g"><label class="bz-f bz-w"><span>Qué hora usar</span>'+sel('bz_mode','mode',[['auto','Automático por mis franjas'],['week','Siempre valle'],['weekend','Siempre hora punta']],c.mode)+'</label>'
+   +cell('Comisión de Bolt (%)','bz_comm',show(c.comm),'comm',{step:'0.5'})+'<div></div></div>'
+   +sw('La hora punta sube lo que cobro','Apagado (lo recomendado por ahora): en hora punta se calcula con la tarjeta de valle y el aviso te dice lo que saldría con la de punta. Enciéndelo solo si ves que Bolt te paga la tarifa de punta.','bz_peakApplies','peakApplies',c.peakApplies)
+   +sw('Redondear el bruto a 5 céntimos','Bolt cobra al cliente en múltiplos de 5 céntimos. El neto nunca se redondea.','bz_round5','round5',c.round5)
+   +'<div class="bz-hint" id="bz_today"></div>'
+   +'<div class="bz-btns"><button type="button" class="secondary" id="bz_all_def" onclick="boltReset(\'all\')">↺ Valores iniciales de todo</button></div>';
+}
+function pVoice(){
+  return sw('Leer en voz alta la estimación','«Bolt. Viaje de 8,3 kilómetros y 10 minutos. Bruto estimado… Neto estimado…»','bz_voice','#voice',B.voice)
+   +'<label class="bz-f"><span>Volumen de la voz</span><input type="range" id="bz_vol" min="0.1" max="1" step="0.1" value="'+B.vol+'" data-p="#vol" oninput="boltIn(this)"></label>'
+   +'<div class="bz-out bz-voice" id="bz_voice_ex"></div>'
+   +'<div class="bz-btns"><button type="button" class="secondary" id="bz_test_voice" onclick="boltTestVoice()">🔊 Probar aviso de Bolt</button></div>';
+}
+
+/* ---------- prueba que hay dentro de cada apartado ---------- */
+function testHtml(p,note){
+  const s=B.sim[p],id=x=>'bz_t'+p+'_'+x,on="boltSim('"+p+"')";
+  return '<div class="bz-test" id="bz_test_'+p+'"><b class="bz-sub">🧪 Prueba</b><small>'+note+'</small><div class="bz-g">'
+   +cell('Km del viaje',id('km'),show(s.km),'',{step:'0.1',on})+cell('Minutos del viaje',id('min'),show(s.min),'',{step:'1',on})
+   +cell('Demanda de la oferta (×, opcional)',id('mult'),s.mult,'',{step:'0.1',on})
+   +(p==='a'?'<label class="bz-f"><span>Tipo de viaje</span>'+sel(id('kind'),'',[['pickup','Recogida en el aeropuerto'],['dest','Viaje hacia el aeropuerto']],s.kind,on)+'</label>':'')
+   +'<label class="bz-f"><span>'+(p==='a'?'Zona de la recogida (solo cuenta hacia el aeropuerto)':'Zona de la recogida')+'</span>'+sel(id('zone'),'',[['2','Zona alta'],['1','Zona media'],['0','Zona baja']],s.zone,on)+'</label>'
+   +'<label class="bz-f"><span>Hora</span>'+sel(id('per'),'',[['auto','Ahora (según mis franjas)'],['v','Valle'],['p','Hora punta']],s.per,on)+'</label></div>'
+   +'<div id="'+id('out')+'" class="bz-out"></div></div>';
+}
+window.boltSim=function(p){
+  if(!p){['c','a','d'].forEach(window.boltSim);return}
+  const out=document.getElementById('bz_t'+p+'_out');if(!out)return;
+  const g=x=>{const e=document.getElementById('bz_t'+p+'_'+x);return e?e.value:null};
+  const s=B.sim[p],km=num(g('km')),min=num(g('min')),mv=g('mult');
+  if(g('zone')!=null)s.zone=g('zone');if(g('per')!=null)s.per=g('per');if(g('kind')!=null)s.kind=g('kind');if(mv!=null)s.mult=mv;
+  if(Number.isFinite(km))s.km=km;if(Number.isFinite(min))s.min=min;
+  if(!(km>=0)||!(min>=0)){out.innerHTML='<span class="bz-warn">Escribe los km y los minutos del viaje con pasajero.</span>';return}
+  const zk=Math.max(0,Math.min(2,Number(s.zone)|0)),om=num(mv),omv=Number.isFinite(om)&&om>0?om:-1;
+  const peak=s.per==='p'?true:s.per==='v'?false:isPeak(B.cfg,zk,new Date());
+  const e=estimate(B.cfg,peak,km,min,omv,p==='a'?s.kind:'',zk),id=x=>'bz_t'+p+'_'+x;
+  const rg=e.range&&e.netHi>e.netLo+1e-9;
+  out.innerHTML='<div class="bz-big"><span>NETO ESTIMADO'+(rg?' · entre '+money(e.netLo)+' y '+money(e.netHi)+' €':'')+'</span><b id="'+id('net')+'">'+money(e.net)+' €</b></div>'
+   +'<div class="bz-line">Bruto estimado: <b id="'+id('gross')+'">'+money(e.gross)+' €</b>'+(e.minApplied?' (tarifa mínima)':'')+(e.fee>0?' − Tasa del aeropuerto: <b id="'+id('fee')+'">'+money(e.fee)+' €</b> = <b id="'+id('after')+'">'+money(Math.max(0,e.gross-e.fee))+' €</b> (la tasa se resta antes de la comisión)':'')+' · Comisión ('+es(B.cfg.comm)+' %): <b id="'+id('comm')+'">'+money(e.comm)+' €</b></div>'
+   +'<div class="bz-line" id="'+id('card')+'">'+esc(cardLine(e))+'</div>'
+   +'<div class="bz-line" id="'+id('zone2')+'">Zona '+ZN[zk]+' (elegida en la prueba)</div>'
+   +'<div class="bz-line" id="'+id('dem')+'">'+esc(demandLine(e,omv))+'</div>'
+   +(e.range?'<div class="bz-line" id="'+id('range')+'">'+esc(rangeLine(e))+'</div>':'')
+   +(peakLine(e)?'<div class="bz-line bz-warn" id="'+id('peak')+'">'+esc(peakLine(e))+'</div>':'')
+   +(p==='a'&&!B.cfg.airOn?'<div class="bz-line bz-warn">El aeropuerto está desactivado: se usa la tarjeta de la zona.</div>':'')
+   +'<div class="bz-line bz-voice" id="'+id('voice')+'">🔊 «'+esc(voiceText(e,km,min))+'»</div>';
+};
+
+/* ---------- el cuerpo: apartados desplegables (se abre uno y se cierran los demás) ---------- */
+function panel(id,icon,title,body){
+  return '<details class="bz-pn" id="bz_pn_'+id+'" data-pn="'+id+'"'+(B.panel===id?' open':'')+'><summary><b>'+icon+' '+title+'</b><small id="bz_pn_'+id+'_s"></small></summary>'
+   +'<div class="bz-pb" id="bz_pb_'+id+'">'+body+'<div class="bz-btns"><button type="button" class="action" id="bz_save_'+id+'" onclick="boltSave()">✔ Guardar</button></div></div></details>';
 }
 function bodyHtml(){
-  const c=B.cfg;
-  return '<div class="bz-note">Cuando la oferta de Bolt <b>no muestra el precio</b>, la app lo <b>estima</b> con estas tarjetas (según el tipo de viaje, las franjas de fin de semana y tu ubicación) y te dice el bruto, la comisión y el <b>neto estimado</b> (en pantalla y por voz). '
-   +'<b>Son estimaciones nuestras con viajes reales, no tarifas oficiales de Bolt</b>: si ves que Bolt paga más o menos, corrígelas aquí. Si la oferta sí trae el precio, se usa ese y no se estima nada.</div>'
-   +'<div class="bz-row"><div><b>Estimar el precio de Bolt</b><br><small>Solo cuando la oferta no lo muestra.</small></div><input type="checkbox" id="bz_on" data-p="on"'+(c.on?' checked':'')+' onchange="boltIn(this)" style="width:26px;height:26px;flex:none"></div>'
-   +'<div class="bz-g">'
-   +'<label class="bz-f bz-w"><span>Qué tarjetas usar</span><select id="bz_mode" data-p="mode" onchange="boltIn(this)"><option value="auto"'+(c.mode==='auto'?' selected':'')+'>Automático por mis franjas</option><option value="week"'+(c.mode==='week'?' selected':'')+'>Siempre las de entre semana</option><option value="weekend"'+(c.mode==='weekend'?' selected':'')+'>Siempre las de fin de semana</option></select></label>'
-   +cell('Comisión de Bolt (%)','bz_comm',show(c.comm),'comm',{step:'0.5'})+'<div></div></div>'
-   +'<div class="bz-hint" id="bz_today"></div>'
-   +cardsHtml()
-   +slotsHtml()
-   +zoneHtml()
-   +simHtml()
-   +'<div class="bz-sec"><b>🔊 Aviso por voz</b><div class="bz-row"><div><b>Leer en voz alta la estimación</b><br><small>«Bolt. Viaje de 8,3 kilómetros y 10 minutos. Bruto estimado… Neto estimado…»</small></div><input type="checkbox" id="bz_voice" onchange="boltIn(this)" data-p="#voice"'+(B.voice?' checked':'')+' style="width:26px;height:26px;flex:none"></div>'
-   +'<label class="bz-f"><span>Volumen de la voz</span><input type="range" id="bz_vol" min="0.1" max="1" step="0.1" value="'+B.vol+'" data-p="#vol" oninput="boltIn(this)"></label></div>'
-   +'<div class="bz-btns"><button type="button" class="action" onclick="boltSave()">✔ Guardar estimación de Bolt</button>'
-   +'<button type="button" class="secondary" onclick="boltTestVoice()">🔊 Probar aviso de Bolt</button>'
-   +'<button type="button" class="secondary" id="bz_all_def" onclick="boltReset(\'all\')">↺ Valores iniciales de todo</button></div>'
+  return '<div class="bz-note">Cuando la oferta de Bolt <b>no muestra el precio</b>, la app lo <b>estima</b> con estas tarjetas (según la zona de la recogida, la hora y la demanda de la oferta) y te dice el bruto, la comisión y el <b>neto estimado</b> (en pantalla y por voz). '
+   +'<b>Son estimaciones nuestras con viajes reales, no tarifas oficiales de Bolt</b>: si ves que Bolt paga más o menos, corrígelas aquí. Si la oferta sí trae el precio, se usa ese y no se estima nada. Abre un apartado: los demás se cierran.</div>'
+   +panel('gen','⚙️','General',pGen())
+   +panel('cards','💳','Tarjetas de precios',pCards())
+   +panel('air','✈️','Aeropuerto',pAir())
+   +panel('peak','🕒','Horas punta y valle',pPeak())
+   +panel('zones','📍','Zonas y mapa',pZones())
+   +panel('dem','📈','Demanda y viajes cortos',pDem())
+   +panel('voice','🔊','Voz',pVoice())
    +'<div id="bz_err" class="bz-err"></div>';
 }
 function render(){
@@ -4095,19 +4227,40 @@ function render(){
   const d=document.getElementById('bz_det');d.addEventListener('toggle',()=>{B.open=d.open});
   afterBody();
 }
-function afterBody(){const t=document.getElementById('bz_hol_det');if(t&&!t._z){t._z=1;t.addEventListener('toggle',()=>{B.holOpen=t.open})}refreshDerived()}
+function afterBody(){
+  const t=document.getElementById('bz_hol_det');if(t&&!t._z){t._z=1;t.addEventListener('toggle',()=>{B.holOpen=t.open})}
+  const all=[...document.querySelectorAll('#bz_body details.bz-pn')];
+  all.forEach(d=>{if(d._z)return;d._z=1;d.addEventListener('toggle',()=>{
+    if(d.open){B.panel=d.getAttribute('data-pn');all.forEach(o=>{if(o!==d&&o.open)o.open=false});if(d.id==='bz_pn_voice')refreshDerived()}
+    else if(B.panel===d.getAttribute('data-pn'))B.panel='';
+  })});
+  refreshDerived();
+  window.boltHour();
+}
 function reloadBody(){errors.clear();B.slotEdit=null;const b=document.getElementById('bz_body');if(b)b.innerHTML=bodyHtml();afterBody()}
 function refreshDerived(){
-  const c=B.cfg,e=document.getElementById('bz_sum');
+  const c=B.cfg,e=document.getElementById('bz_sum'),set=(id,t)=>{const x=document.getElementById(id);if(x)x.textContent=t},h=(id,t)=>{const x=document.getElementById(id);if(x)x.innerHTML=t};
   B.weekendNow=isWeekend(c,new Date());
-  if(e)e.textContent=(c.on?'Activada':'Desactivada')+' · 4 tarjetas por franjas · '+(c.zone.on?'ajuste por zona (GPS)':'sin ajuste de zona')+' · comisión '+show(c.comm)+' %';
-  const zb=document.getElementById('bz_zone');if(zb)zb.classList.toggle('bz-off',!c.zone.on);
-  const t=document.getElementById('bz_today');
-  if(t)t.textContent='Ahora se usarían las tarjetas de '+(B.weekendNow?'fin de semana':'entre semana')+'.';
-  for(let d=0;d<7;d++){const bar=document.getElementById('bz_wk'+d);if(bar)bar.innerHTML=barSegs(d).map(s=>'<i style="left:'+s[0].toFixed(2)+'%;width:'+s[1].toFixed(2)+'%"></i>').join('')}
-  for(let i=0;i<c.slots.length;i++){const x=document.getElementById('bz_sl_'+i+'_t');if(x)x.textContent=slotTxt(c.slots[i])}
-  const sn=document.getElementById('bz_sl_now');if(sn)sn.innerHTML=slotNowHtml();
-  boltSim();
+  const nz=c.zone.zones.length,fz=c.zoneForce==='auto'?'':' · ZONA FORZADA: '+ZN[ZW.indexOf(c.zoneForce)];
+  if(e)e.textContent=(c.on?'Activada':'Desactivada')+' · zona baja/media/alta × valle/punta · '+(c.peakApplies?'la punta sube el precio':'la punta no sube el precio')+fz+' · comisión '+es(c.comm)+' %';
+  set('bz_pn_gen_s',(c.on?'Activada':'Desactivada')+' · comisión '+es(c.comm)+' % · '+(c.peakApplies?'la punta sube el precio':'la punta no sube el precio'));
+  set('bz_pn_cards_s','6 tarjetas: zona alta, media y baja × valle y punta');
+  set('bz_pn_air_s',(c.airOn?'Activado':'Desactivado')+' · tasa '+es(c.airFee)+' € · mínima fija hasta '+es(c.airFlatKm)+' km');
+  const d=new Date(),w=weekMinute(d),hol=isHoliday(c,d),pm=peakWhy(c,Z_MID,w,hol).peak,ph=peakWhy(c,Z_HIGH,w,hol).peak;
+  set('bz_pn_peak_s','Ahora: media/baja '+(pm?'PUNTA':'valle')+' · alta '+(ph?'PUNTA':'valle'));
+  set('bz_pn_zones_s',(nz===0?'Sin zonas dibujadas':nz+(nz===1?' zona dibujada':' zonas dibujadas'))+' · '+(c.zoneForce==='auto'?'automática':'FORZADA: '+ZN[ZW.indexOf(c.zoneForce)])+' · por defecto: '+ZN[ZW.indexOf(c.zoneDef)]);
+  set('bz_pn_dem_s','ajuste fino '+pcs(c.fine).replace(/^\s*/,'')+' · cortos: menos de '+es(c.short.km)+' km desde ×'+es(c.short.from));
+  set('bz_pn_voice_s',B.voice?'Con voz':'Sin voz');
+  const t=document.getElementById('bz_today');if(t)t.textContent='Ahora mismo: zona media/baja → '+(pm?'hora punta':'valle')+' · zona alta → '+(ph?'hora punta':'valle')+'.';
+  h('bz_pk_now',peakNowHtml());
+  const f=document.getElementById('bz_z_force');if(f)f.textContent=forceTxt();
+  ['m','h'].forEach(l=>{
+    for(let k=0;k<7;k++){const bar=document.getElementById('bz_wk_'+l+k);if(bar)bar.innerHTML=barSegs(listOf(l),k).map(s=>'<i style="left:'+s[0].toFixed(2)+'%;width:'+s[1].toFixed(2)+'%"></i>').join('')}
+    listOf(l).forEach((s,i)=>{const x=document.getElementById('bz_sl_'+l+'_'+i+'_t');if(x)x.textContent=slotTxt(s)});
+  });
+  const vx=document.getElementById('bz_voice_ex');
+  if(vx){const ee=estimate(c,false,8.3,10,-1,'',Z_MID);vx.textContent='🔊 «'+voiceText(ee,8.3,10)+'»'}
+  window.boltSim();window.boltHour();
 }
 function getPath(o,p){return p.split('.').reduce((a,k)=>a&&a[k],o)}
 function setPath(o,p,v){const ks=p.split('.'),l=ks.pop();const t=ks.reduce((a,k)=>a[k],o);t[l]=v}
@@ -4115,80 +4268,62 @@ function bad(el,on){el.classList.toggle('bz-bad',!!on)}
 const errors=new Set();
 window.boltIn=function(el){
   const p=el.getAttribute('data-p');if(p==null)return;
-  if(p==='#voice'){B.voice=el.checked;return}
+  if(p==='#voice'){B.voice=el.checked;refreshDerived();return}
   if(p==='#vol'){B.vol=num(el.value)||1;return}
-  if(el.type==='checkbox'){setPath(B.cfg,p,el.checked);if(p==='on'||p==='zone.on'||p==='holidaysWe')refreshDerived();else boltSim();return}
-  if(p==='mode'){B.cfg.mode=el.value;refreshDerived();return}
+  if(el.type==='checkbox'){setPath(B.cfg,p,el.checked);refreshDerived();return}
+  if(el.tagName==='SELECT'){setPath(B.cfg,p,el.value);refreshDerived();return}
   if(p==='holidays'){
     const items=el.value.split(/[\s,;]+/).filter(Boolean);const okAll=items.every(x=>/^(\d{4}-\d{2}-\d{2}|\d{2}-\d{2})$/.test(x));
     bad(el,!okAll);okAll?errors.delete(el.id):errors.add(el.id);
     if(okAll){B.cfg.holidays=[...new Set(items)];refreshDerived()}
     return;
   }
-  const v=num(el.value);
-  const key=p.split('.').pop();
-  const isZ=/^zone\./.test(p);
-  const lim=isZ?LIMZ[key]:/^cards\./.test(p)?LIMC[key]:p==='airFee'?[0,50]:p==='comm'?[0,90]:null;
+  const v=num(el.value),lim=limOf(p);
   const okv=Number.isFinite(v)&&(!lim||(v>=lim[0]&&v<=lim[1]));
   bad(el,!okv);okv?errors.delete(el.id):errors.add(el.id);
   if(!okv)return;
   setPath(B.cfg,p,v);
-  if(isZ){zoneCheck();boltSim();return}
+  if(/^short\./.test(p))shortCheck();
   refreshDerived();
-};
-window.boltSim=function(){
-  const out=document.getElementById('bz_sOut');if(!out)return;
-  const g=id=>{const e=document.getElementById(id);return e?num(e.value):NaN};
-  const km=g('bz_sKm'),min=g('bz_sMin');let om=g('bz_sMult');const sp=document.getElementById('bz_sProf'),sk=document.getElementById('bz_sKind');
-  if(sp)B.sim.prof=sp.value;if(sk)B.sim.kind=sk.value;
-  B.sim.km=Number.isFinite(km)?km:B.sim.km;B.sim.min=Number.isFinite(min)?min:B.sim.min;
-  const e0=document.getElementById('bz_sMult');B.sim.mult=e0?e0.value:'';
-  if(!(km>=0)||!(min>=0)){out.innerHTML='<span class="bz-warn">Escribe los km y los minutos del viaje con pasajero.</span>';return}
-  const sg=document.getElementById('bz_sGood');if(sg)B.sim.zone=sg.value;
-  const wk=B.sim.prof==='we'?true:B.sim.prof==='wd'?false:isWeekend(B.cfg,new Date());
-  const omv=Number.isFinite(om)&&om>0?om:-1,gz=B.sim.zone==='1';
-  const e=estimate(B.cfg,wk,km,min,omv,B.sim.kind,gz);
-  out.innerHTML='<div class="bz-big"><span>NETO ESTIMADO</span><b id="bz_sNet">'+money(e.net)+' €</b></div>'
-   +'<div class="bz-line">Bruto estimado: <b id="bz_sGross">'+money(e.gross)+' €</b>'+(e.minApplied?' (tarifa mínima)':'')+(e.fee>0?' − Tasa del aeropuerto: <b id="bz_sFee">'+money(e.fee)+' €</b> = <b id="bz_sAfter">'+money(Math.max(0,e.gross-e.fee))+' €</b> (la tasa se resta antes de la comisión)':'')+' · Comisión ('+show(B.cfg.comm)+' %): <b id="bz_sComm">'+money(e.comm)+' €</b></div>'
-   +'<div class="bz-line" id="bz_sCard">'+esc(cardTxt(e))+'</div>'
-   +'<div class="bz-line">'+(e.zone>0?esc(zoneLine(e))+' · ':'')+esc(zoneDemand(e,omv))+'</div>'
-   +'<div class="bz-line bz-voice">🔊 «'+esc(voiceText(e,km,min))+'»</div>';
 };
 window.boltSave=async function(silent){
   const err=document.getElementById('bz_err');
-  zoneCheck();
-  if(errors.size){if(err)err.textContent='Revisa los campos marcados en rojo: hay valores fuera de rango o umbrales que no van creciendo.';if(!silent)alert('Revisa los campos marcados en rojo.');return false}
+  shortCheck();
+  if(errors.size){if(err)err.textContent='Revisa los campos marcados en rojo: hay valores fuera de rango.';if(!silent)alert('Revisa los campos marcados en rojo.');return false}
   if(err)err.textContent='';
   let fixed=false;
   try{fixed=await persist()}catch(e){alert('No se pudo guardar la estimación de Bolt.');return false}
-  if(fixed){const b=document.getElementById('bz_body');if(b)b.innerHTML=bodyHtml();afterBody();alert('Algún valor no era válido y se ha corregido. Revísalo antes de seguir.');return true}
+  if(fixed){reloadBody();alert('Algún valor no era válido y se ha corregido. Revísalo antes de seguir.');return true}
   refreshDerived();
   if(!silent&&P.toastOk)P.toastOk('✅ Estimación de Bolt guardada');
   return true;
 };
 window.boltReset=function(which){
   const d=defaults();
-  const msg=which==='all'?'¿Volver a los valores iniciales de TODA la estimación de Bolt (tarjetas, franjas, ajuste por zona, comisión y festivos)?\n\nTambién se quitarán las zonas buenas que hayas dibujado. No se guarda hasta que pulses «Guardar».'
-    :which==='zone'?'¿Volver a los valores iniciales del ajuste por zona y demanda (porcentajes y escalones)?\n\nLas zonas que hayas dibujado se quedan. No se guarda hasta que pulses «Guardar».'
-    :which==='areas'?'¿Quitar TODAS las zonas buenas que hayas dibujado?\n\nNo se guarda hasta que pulses «Guardar».'
-    :which==='slots'?'¿Volver a las franjas iniciales (viernes 18:00 → domingo 06:00)?\n\nNo se guarda hasta que pulses «Guardar».'
-    :'¿Volver a los valores iniciales de las cuatro tarjetas, el aeropuerto y la tasa?\n\nNo se guarda hasta que pulses «Guardar».';
+  const msg=which==='all'?'¿Volver a los valores iniciales de TODA la estimación de Bolt (tarjetas, franjas, demanda, aeropuerto, comisión y festivos)?\n\nTambién se quitarán las zonas que hayas dibujado. No se guarda hasta que pulses «Guardar».'
+    :which==='areas'?'¿Quitar TODAS las zonas que hayas dibujado?\n\nNo se guarda hasta que pulses «Guardar».'
+    :which==='slotsm'?'¿Volver a las franjas iniciales de las zonas media y baja (lunes a viernes 07–10 y 17–20, sábado y domingo todo el día)?\n\nNo se guarda hasta que pulses «Guardar».'
+    :which==='slotsh'?'¿Volver a las franjas iniciales de la zona alta?\n\nNo se guarda hasta que pulses «Guardar».'
+    :which==='air'?'¿Volver a los valores iniciales del aeropuerto (tarjetas, tasa y mínima fija)?\n\nNo se guarda hasta que pulses «Guardar».'
+    :which==='dem'?'¿Volver a los valores iniciales de la demanda y los viajes cortos?\n\nNo se guarda hasta que pulses «Guardar».'
+    :'¿Volver a los valores iniciales de las seis tarjetas de zona?\n\nNo se guarda hasta que pulses «Guardar».';
   if(!confirm(msg))return;
   if(which==='all'){B.cfg=d}
-  else if(which==='zone'){const keep=B.cfg.zone.zones;B.cfg.zone=d.zone;B.cfg.zone.zones=keep;B.cfg.offerMult=d.offerMult}
   else if(which==='areas'){B.cfg.zone.zones=[];if(P.zmap){P.zmap.sel=-1;P.zmap.vsel=-1;P.zmap.draft=null}}
-  else if(which==='slots'){B.cfg.slots=d.slots}
-  else{B.cfg.cards=d.cards;B.cfg.airOn=d.airOn;B.cfg.airFee=d.airFee}
-  reloadBody();refreshDerived();if(P.zmap&&P.zmap.open){P.zmap.panel();P.zmap.redraw()}
+  else if(which==='slotsm'){B.cfg.slots=d.slots}
+  else if(which==='slotsh'){B.cfg.slotsH=d.slotsH}
+  else if(which==='air'){B.cfg.cards.av=d.cards.av;B.cfg.cards.ap=d.cards.ap;B.cfg.airOn=d.airOn;B.cfg.airFee=d.airFee;B.cfg.airFlatKm=d.airFlatKm}
+  else if(which==='dem'){B.cfg.fine=d.fine;B.cfg.short=d.short}
+  else{for(const k of ['lv','lp','mv','mp','hv','hp'])B.cfg.cards[k]=d.cards[k]}
+  reloadBody();if(P.zmap&&P.zmap.open){P.zmap.panel();P.zmap.redraw()}
 };
 window.boltTestVoice=async function(){
   const ok=await window.boltSave(true);if(ok===false)return;
   const sr=SR();if(!sr){alert('Esta prueba solo funciona en el móvil, con la app instalada.');return}
   try{await sr.testBolt();if(P.toastOk)P.toastOk('Mira y escucha el aviso 👆')}catch(e){alert('Activa primero el lector de pantalla (Accesibilidad).')}
 };
-
-/* ---------- mapa para dibujar las zonas buenas ----------
-   Mapa propio y sencillo (sin librerías): arrastras para moverte, ＋/－ o pellizcar para acercar. «Dibujar zona nueva»: tocas el mapa para ir poniendo puntos
+/* ---------- mapa para dibujar las zonas (altas, medias y bajas) ----------
+   Mapa propio y sencillo (sin librerías): arrastras para moverte, ＋/－ o pellizcar para acercar. «Dibujar zona nueva»: eliges si es alta, media o baja, tocas el mapa para ir poniendo puntos
    alrededor de la zona y la cierras tocando el punto 1 (verde) o con «Cerrar zona». Tocando una zona: arrastras sus puntos blancos para moverlos, tocas un punto
    para elegirlo y borrarlo, tocas el círculo pequeño del medio de un lado para añadir un punto, o borras la zona entera. Una zona no puede cruzarse consigo misma.
    Las IMÁGENES del mapa se descargan de internet (OpenStreetMap, y si no responde CARTO o Esri); sin internet se ven igualmente las zonas sobre un fondo liso y se pueden editar. */
@@ -4197,7 +4332,7 @@ const TILE_SRC=[
   {n:'CARTO',u:'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',a:'© OpenStreetMap · © CARTO'},
   {n:'Esri',u:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',a:'© Esri'}];
 const TS=256,ZMIN=8,ZMAX=18;
-const M={open:false,lat:40.4168,lon:-3.7038,z:11,w:0,h:0,sel:-1,vsel:-1,mode:'view',draft:null,bad:false,me:null,src:0,ok:0,err:0,tiles:new Map(),el:null,gone:false,wt:0};
+const M={newKind:'h',open:false,lat:40.4168,lon:-3.7038,z:11,w:0,h:0,sel:-1,vsel:-1,mode:'view',draft:null,bad:false,me:null,src:0,ok:0,err:0,tiles:new Map(),el:null,gone:false,wt:0};
 P.zmap=M;
 const wx=(lon,z)=>(lon+180)/360*TS*Math.pow(2,z);
 const wy=(lat,z)=>{const s=Math.sin(Math.max(-85.0511,Math.min(85.0511,lat))*Math.PI/180);return (0.5-Math.log((1+s)/(1-s))/(4*Math.PI))*TS*Math.pow(2,z)};
@@ -4263,7 +4398,7 @@ function mapDrawSvg(){
   const g=B.cfg.zone.zones;let h='';
   g.forEach((a,i)=>{
     const sel=i===M.sel&&M.mode!=='draw';
-    h+='<polygon class="zm-p'+(sel?' sel':'')+(sel&&M.bad?' bad':'')+'" data-i="'+i+'" points="'+polyStr(a.pts)+'"/>';
+    h+='<polygon class="zm-p k-'+(a.k||'h')+(sel?' sel':'')+(sel&&M.bad?' bad':'')+'" data-i="'+i+'" points="'+polyStr(a.pts)+'"/>';
     let la=0,lo=0;for(const p of a.pts){la+=p[0];lo+=p[1]}
     const c=M.toScreen(la/a.pts.length,lo/a.pts.length);
     h+='<text class="zm-t" x="'+c.x.toFixed(1)+'" y="'+(c.y+4).toFixed(1)+'">'+esc(a.n||'(sin nombre)')+'</text>';
@@ -4309,20 +4444,24 @@ function mapPanel(){
     const n=M.draft?M.draft.length:0;
     b.innerHTML='<div class="zm-row"><b id="zm_dn">Zona nueva · '+n+(n===1?' punto':' puntos')+'</b></div>'
      +'<div class="zm-row">'+btn('zm_undo','↩ Deshacer punto','',n===0)+btn('zm_close','✔ Cerrar zona','zm-ok',n<3)+btn('zm_cancel','Cancelar','')+'</div>'
+     +'<div class="zm-row zm-kinds"><span>Tipo:</span>'+btn('zm_nk_h','Alta',M.newKind==='h'?'zm-ok':'')+btn('zm_nk_m','Media',M.newKind==='m'?'zm-ok':'')+btn('zm_nk_l','Baja',M.newKind==='l'?'zm-ok':'')+'</div>'
      +'<div class="zm-help">Toca el mapa para ir poniendo puntos alrededor de la zona (arrastra para mover el mapa). Para terminar, toca el punto 1 (el verde) o «Cerrar zona». Hacen falta al menos 3 puntos.</div>';
+    ['h','m','l'].forEach(k=>{M.el.bot.querySelector('#zm_nk_'+k).onclick=()=>{M.newKind=k;mapPanel()}});
     M.el.bot.querySelector('#zm_undo').onclick=mapUndo;M.el.bot.querySelector('#zm_close').onclick=mapClose;M.el.bot.querySelector('#zm_cancel').onclick=mapCancel;
   }else if(a){
     b.innerHTML='<div class="zm-row"><input id="zm_name" type="text" maxlength="40" placeholder="Nombre de la zona" value="'+esc(a.n)+'">'+btn('zm_del','🗑 Borrar zona','')+'</div>'
+     +'<div class="zm-row zm-kinds"><span>Tipo:</span>'+btn('zm_k_h','Alta',a.k==='h'?'zm-ok':'')+btn('zm_k_m','Media',a.k==='m'?'zm-ok':'')+btn('zm_k_l','Baja',a.k==='l'?'zm-ok':'')+'</div>'
      +'<div class="zm-row">'+btn('zm_vdel','✖ Borrar punto','',!(M.vsel>=0&&a.pts.length>3))+btn('zm_draw','✏️ Dibujar otra zona','')+btn('zm_me','📍 Mi ubicación','')+'</div>'
      +'<div class="zm-help">Arrastra un punto blanco para moverlo. Toca un punto para elegirlo y bórralo con «Borrar punto» (mínimo 3). Toca el círculo pequeño del medio de un lado para añadir un punto. Toca un sitio vacío para dejar de editar.</div>';
     const nm=b.querySelector('#zm_name');nm.oninput=()=>{a.n=areaName(nm.value);M.redraw();const l=document.getElementById('bz_z_a'+M.sel+'_n');if(l)l.value=a.n};
     b.querySelector('#zm_del').onclick=()=>{window.boltZoneDel(M.sel)};
+    ['h','m','l'].forEach(k=>{b.querySelector('#zm_k_'+k).onclick=()=>{a.k=k;const l=document.getElementById('bz_z_a'+M.sel+'_k');if(l){l.value=k;l.className='bz-kind k-'+k}mapPanel();M.redraw();refreshDerived()}});
     b.querySelector('#zm_vdel').onclick=mapVertexDel;
     b.querySelector('#zm_draw').onclick=()=>mapStartDraw();
     b.querySelector('#zm_me').onclick=mapLocate;
   }else{
     b.innerHTML='<div class="zm-row">'+btn('zm_draw','✏️ Dibujar zona nueva','zm-ok')+btn('zm_me','📍 Mi ubicación','')+'</div>'
-     +'<div class="zm-help">'+(g.length?'Toca una zona para cambiarla o borrarla. ':'Todavía no hay zonas. ')+'«Dibujar zona nueva» te deja ir poniendo puntos alrededor de la zona. Las zonas buenas usan el ajuste de zona buena.</div>';
+     +'<div class="zm-help">'+(g.length?'Toca una zona para cambiarla o borrarla. ':'Todavía no hay zonas. ')+'«Dibujar zona nueva» te deja ir poniendo puntos alrededor de la zona. El color dice el tipo: verde alta, ámbar media, gris baja.</div>';
     b.querySelector('#zm_draw').onclick=()=>mapStartDraw();
     b.querySelector('#zm_me').onclick=mapLocate;
   }
@@ -4334,7 +4473,7 @@ function mapCancel(){M.draft=null;M.mode='view';mapWarn('');mapPanel();M.redraw(
 function mapClose(){
   const d=M.draft;if(!d||d.length<3)return false;
   if(crosses(d,true)){mapWarn('Esa zona se cruzaría consigo misma: deshaz el último punto o ponlo en otro sitio.');return false}
-  const i=addZone(d);if(i<0)return false;
+  const i=addZone(d,null,M.newKind);if(i<0)return false;
   M.draft=null;M.mode='view';mapWarn('');M.select(i,-1);return true;
 }
 function mapVertexDel(){
@@ -4456,8 +4595,8 @@ M.close=function(force){
 window.boltMap=function(mode,idx){
   if(M.open){if(mode==='draw')mapStartDraw();else if(typeof idx==='number'&&B.cfg.zone.zones[idx]){M.mode='view';M.draft=null;M.fit(idx);M.select(idx,-1)}return}
   try{
-    const o=document.createElement('div');o.id='zmap';o.className='zm';o.setAttribute('role','dialog');o.setAttribute('aria-label','Mapa de zonas buenas');
-    o.innerHTML='<div class="zm-top"><b>🗺 Zonas buenas</b><span class="zm-info" id="zm_info"></span><span class="zm-sp"></span><button type="button" id="zm_in" aria-label="Acercar">＋</button><button type="button" id="zm_out" aria-label="Alejar">－</button><button type="button" class="zm-done" id="zm_done">✔ Listo</button></div>'
+    const o=document.createElement('div');o.id='zmap';o.className='zm';o.setAttribute('role','dialog');o.setAttribute('aria-label','Mapa de zonas');
+    o.innerHTML='<div class="zm-top"><b>🗺 Zonas</b><span class="zm-info" id="zm_info"></span><span class="zm-sp"></span><button type="button" id="zm_in" aria-label="Acercar">＋</button><button type="button" id="zm_out" aria-label="Alejar">－</button><button type="button" class="zm-done" id="zm_done">✔ Listo</button></div>'
      +'<div class="zm-map" id="zm_map"><div class="zm-tiles" id="zm_tiles"></div><svg class="zm-svg" id="zm_svg" xmlns="http://www.w3.org/2000/svg"></svg><div class="zm-msg" id="zm_msg"></div><div class="zm-warn" id="zm_warn"></div><div class="zm-attr" id="zm_attr"></div></div>'
      +'<div class="zm-bot" id="zm_bot"></div>';
     document.body.appendChild(o);
@@ -4492,7 +4631,7 @@ if(typeof _rr==='function')window.renderRent=async function(){
         render();
       }
     }
-  }catch(e){console.warn('v3.14 bolt',e)}
+  }catch(e){console.warn('v3.15 bolt',e)}
   return r;
 };
 // «Guardar parámetros» de la pantalla guarda también la estimación de Bolt
@@ -4506,9 +4645,9 @@ if(typeof _rs==='function')window.rentSave=async function(){
 // textos de ayuda
 try{
   const e=jEntry('rentabilidad');
-  if(e)e[4]='Es un aviso que salta arriba cuando te llega una oferta de Bolt, Uber o Cabify. Cada dato (€/hora, €/km y distancia de recogida) sale con su color: verde si cumple tu objetivo, naranja si se queda un poco corto y rojo si está lejos. Arriba del todo: ACEPTAR si todo está bien, RECHAZAR si algo está muy mal, y A VALORAR si está justo. Se activa en Ajustes → Rentabilidad de viajes. La oferta de Bolt no muestra el precio: la app lo ESTIMA con tus tarjetas de precios (cuatro: normal y aeropuerto, cada una para entre semana y para fin de semana; la de fin de semana se usa en las franjas que tú defines) y te dice bruto, comisión y NETO estimados, en pantalla y por voz. Son estimaciones tuyas, no tarifas oficiales de Bolt: los valores se corrigen en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt. En Uber la app lee una captura de la pantalla (dentro del móvil, sin guardarla). Solo avisa: no pulsa nada por ti.';
-  J_KB.push(['boltzonas','📍','Zonas buenas de Bolt','zona buena^8,zonas buenas^8,dibujar zona^8,poligono^7,mapa zonas^8,marcar zonas^7,zona bolt^6,descuento bolt^5,8 por ciento^4,m30 bolt^5,sur bolt^4,demanda desde 1,4^6,ubicacion bolt^5,probar ubicacion^6,mover punto^6,borrar punto^6,borrar zona^6,ajuste por zona^7,gps bolt^6','El ajuste por zona corrige el precio estimado de Bolt según dónde estés (la app mira la ubicación del móvil), solo en los viajes normales: el aeropuerto no lo usa. Fuera de zona buena (M30, sur…): sin demanda o con menos de ×1,2 → tarifa −8 %; de ×1,2 a ×1,3 → tarifa real; desde ×1,4 → tarifa × demanda, y desde ×1,5 sube un 5 %, desde ×2 un 8 % y desde ×2,5 un 10 % (cada escalón sustituye al anterior). En zona buena → tarifa +12 % × la demanda tal como salga (el 12 % se puede cambiar, también a 0). Las zonas buenas las dibujas tú como polígonos: Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt → «Dibujar zona nueva». Tocas el mapa para ir poniendo puntos alrededor de la zona (arrastras para mover el mapa, ＋/－ o pellizcar para acercar) y la cierras tocando el punto 1 (el verde) o con «Cerrar zona». Para cambiar una zona la tocas: arrastras un punto blanco para moverlo, tocas un punto y «Borrar punto» (mínimo 3), tocas el círculo pequeño del medio de un lado para añadir un punto, o «Borrar zona». Una zona no puede cruzarse consigo misma. Al principio no hay ninguna zona. «Probar ubicación» dice dónde cree la app que estás y qué ve el lector de pantalla. Si el móvil no da la ubicación (sin permiso o sin datos recientes) se usa el ajuste de fuera de zona buena y el aviso lo dice. Las imágenes del mapa necesitan internet; sin internet las zonas se ven igual sobre un fondo liso. Son estimaciones, no tarifas oficiales de Bolt.']);
-  J_KB.push(['boltestimacion','💶','Precio estimado de Bolt','tarjetas bolt^7,tarjeta aeropuerto^7,tarjeta normal^7,franjas^8,franja fin de semana^8,fin de semana bolt^6,entre semana bolt^6,aeropuerto bolt^6,tasa aeropuerto^6,precio bolt^6,estimar bolt^7,estimacion bolt^7,neto bolt^6,neto estimado^7,bolt no muestra el precio^8,tarifa bolt^5,comision bolt^5,bruto estimado^6,voz bolt^5,demanda^4,festivos bolt^5,minima aeropuerto^6','Bolt no enseña el precio en la oferta, así que la app lo estima con cuatro tarjetas de precios que editas en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt: tarjeta normal y tarjeta del aeropuerto, cada una para entre semana y para fin de semana, con su inicial, su precio por km, su precio por minuto y su mínima. Al principio la normal es 2,10 + 0,77 €/km + 0,15 €/min (mínima 6,75 €) y la del aeropuerto 2,89 + 0,82 €/km + 0,15 €/min (mínima 13,50 €). Qué tarjetas se usan lo deciden las franjas de fin de semana que tú defines (una sola lista para las dos: por defecto de viernes 18:00 a domingo 06:00; puedes añadir, cambiar y borrar franjas); los festivos cuentan como fin de semana todo el día. Manda la hora a la que llega la oferta, no el día del calendario: si cae en una franja se usan los precios de fin de semana aunque sea lunes. Bruto = inicial + km × precio + minutos × precio, nunca menos que la mínima; le quita la comisión (25 % al principio) y te da el NETO estimado, en pantalla y por voz. El aeropuerto (recogida en «parking P1 de la T1», «parking express T2», «parking módulo D … T4», o viaje hacia «Terminal 1–4», «Aeropuerto» o «Avenida de la Hispanidad») usa la tarjeta del aeropuerto: la demanda multiplica todo, incluida la mínima, no lleva ajuste de zona, y SIEMPRE se resta primero la tasa de 2,57 € (el precio de Bolt ya la incluye) y sobre lo que queda se aplica la comisión. Por ejemplo, 13 km y 20 min entre semana sin demanda: 2,89 + 13 × 0,82 + 20 × 0,15 = 16,55 €; menos la tasa 2,57 € = 13,98 €; comisión 25 % = 3,50 €; neto 10,49 €. Son estimaciones, no tarifas oficiales: todos los valores se cambian en esa pantalla, donde también hay un simulador para contrastarlas con viajes reales.']);
+  if(e)e[4]='Es un aviso que salta arriba cuando te llega una oferta de Bolt, Uber o Cabify. Cada dato (€/hora, €/km y distancia de recogida) sale con su color: verde si cumple tu objetivo, naranja si se queda un poco corto y rojo si está lejos. Arriba del todo: ACEPTAR si todo está bien, RECHAZAR si algo está muy mal, y A VALORAR si está justo. Se activa en Ajustes → Rentabilidad de viajes. La oferta de Bolt no muestra el precio: la app lo ESTIMA con tus tarjetas de precios (por zona de la recogida —alta, media o baja—, por hora —valle o punta— y con la demanda que trae la oferta) y te dice bruto, comisión y NETO estimados, en pantalla y por voz. Son estimaciones tuyas, no tarifas oficiales de Bolt: los valores se corrigen en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt, que está dividida en apartados (General, Tarjetas, Aeropuerto, Horas punta y valle, Zonas y mapa, Demanda y viajes cortos, Voz), cada uno con su prueba. En Uber la app lee una captura de la pantalla (dentro del móvil, sin guardarla). Solo avisa: no pulsa nada por ti.';
+  J_KB.push(['boltzonas','📍','Zonas de Bolt (alta, media y baja)','zona alta^8,zona media^8,zona baja^8,zonas bolt^7,dibujar zona^8,poligono^7,mapa zonas^8,marcar zonas^7,forzar zona^8,zona forzada^8,zona por defecto^7,probar ubicacion^6,mover punto^6,borrar punto^6,borrar zona^6,gps bolt^6,recogida zona^6,zona de la recogida^7','El precio estimado de Bolt depende de la ZONA donde RECOGES (tu ubicación cuando llega la oferta), nunca de la del destino. Hay tres tipos: zona alta (donde Bolt paga más), media y baja, y cada una tiene su tarjeta de valle y de hora punta. Las zonas las dibujas tú como polígonos en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt → Zonas y mapa → «Dibujar zona nueva»: eliges el tipo (alta, media o baja), tocas el mapa para ir poniendo puntos alrededor de la zona (arrastras para mover el mapa, ＋/－ o pellizcar para acercar) y la cierras tocando el punto 1 (el verde) o con «Cerrar zona». En el mapa el color dice el tipo: verde alta, ámbar media y gris baja. Para cambiar una zona la tocas: arrastras un punto blanco para moverlo, tocas un punto y «Borrar punto» (mínimo 3), tocas el círculo pequeño del medio de un lado para añadir un punto, cambias el tipo con los botones Alta/Media/Baja o «Borrar zona». Una zona no puede cruzarse consigo misma. Si caes en varias zonas manda la alta, luego la media y luego la baja. Fuera de todas vale la «zona por defecto» (media al principio, se puede cambiar). «Forzar la zona» hace que TODAS las ofertas se calculen con esa zona hasta que vuelvas a «Automática» (no es solo para un viaje; el resumen avisa en mayúsculas mientras esté forzada). «Probar ubicación» dice en qué zona cree la app que estás y qué ve el lector de pantalla. Si el móvil no da la ubicación (sin permiso o sin datos recientes) se usa la zona por defecto y el aviso lo dice. No hay detección por código postal ni por la dirección de la recogida: solo el GPS del móvil. Las imágenes del mapa necesitan internet; sin internet las zonas se ven igual sobre un fondo liso. Son estimaciones, no tarifas oficiales de Bolt.']);
+  J_KB.push(['boltestimacion','💶','Precio estimado de Bolt','tarjetas bolt^7,tarjeta aeropuerto^7,tarjeta zona^7,valle punta^8,hora punta^8,horas punta^8,franjas^8,franja hora punta^8,aeropuerto bolt^6,tasa aeropuerto^6,precio bolt^6,estimar bolt^7,estimacion bolt^7,neto bolt^6,neto estimado^7,bolt no muestra el precio^8,tarifa bolt^5,comision bolt^5,bruto estimado^6,voz bolt^5,demanda^5,ajuste fino^6,viajes cortos^7,rango neto^7,festivos bolt^5,minima aeropuerto^6,redondeo 5 centimos^6','Bolt no enseña el precio en la oferta, así que la app lo estima con ocho tarjetas de precios que editas en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt: zona alta, media y baja, cada una de valle y de hora punta, más las dos del aeropuerto (valle y punta), con su inicial, su precio por km, su precio por minuto y su mínima. La zona es la de la RECOGIDA. Al principio, por ejemplo, la zona media en valle es 2,10 + 0,77 €/km + 0,15 €/min (mínima 6,75 €) y la alta en valle 2,39 + 0,85 + 0,16 (mínima 6,70 €). La DEMANDA que muestra la oferta (×1,2, ×1,4…) se lee siempre y multiplica todo, incluida la mínima, desde la primera décima. El bruto se redondea a 5 céntimos (como hace Bolt) y el neto no. HORA PUNTA: sale de tus franjas (una lista para las zonas media y baja y otra para la alta; al principio lunes a viernes de 07 a 10 y de 17 a 20, sábados y domingos todo el día; la alta empieza a las 08:00 por la mañana, sin confirmar; los festivos cuentan como punta). Por defecto la tarjeta de punta NO sube el precio («La hora punta sube lo que cobro», en General): en los viajes largos que hemos comparado, Bolt pagó la tarifa de valle aunque fuera hora punta; con la casilla apagada la app calcula con la de valle y el aviso añade «Ahora es hora punta: no sube tu precio (con tarifa de punta: neto X €)». Si ves que Bolt sí te paga la de punta, enciéndela. VIAJES CORTOS (menos de 6 km) con demanda desde ×1,2: el inicial real sube de forma impredecible, así que el aviso y la voz dan un RANGO de neto («entre … y …») y el veredicto usa el punto medio. Hay un ajuste fino de la demanda (en %, 0 al principio). AEROPUERTO: las recogidas (parking P1 de la T1, parking express T2, parking módulo D … T4) usan la tarjeta del aeropuerto y, hasta 11 km, solo vale la mínima (13,50 €); los viajes HACIA el aeropuerto (Terminal 1–4, «Aeropuerto…») usan la tarjeta de la zona; el barrio de Barajas o la Avenida de la Hispanidad no cuentan. En los dos se resta primero la tasa de 2,57 € (el precio de Bolt ya la incluye) y sobre lo que queda se aplica la comisión (25 % al principio). Ejemplo: recogida en el aeropuerto de 13 km y 20 min sin demanda: 2,89 + 13 × 0,82 + 20 × 0,15 = 16,55 €; menos la tasa 2,57 € = 13,98 €; comisión 25 % = 3,50 €; neto 10,49 €. Son estimaciones, no tarifas oficiales: todos los valores se cambian en esa pantalla, donde cada apartado tiene una prueba para contrastarlos con viajes reales.']);
 }catch(e){}
 // al abrir: si el teléfono perdió los ajustes de Bolt y la cuenta los tiene, se recuperan; y la cuenta guarda una copia
 setTimeout(async()=>{
@@ -4673,8 +4812,18 @@ function restructureRent(){
     (est||save).insertAdjacentElement('afterend',dg);
   }else if(est)est.insertAdjacentElement('afterend',dg);
   else panel.appendChild(dg);
-  initBubble();initThr();
+  initBubble();initThr();accordion();
 }
+/* v3.15h: acordeón — al abrir un apartado de Rentabilidad se cierran los demás (también «Estimación del precio de Bolt») */
+function accordion(){
+  const root=document.querySelector('#content');if(!root)return;
+  const all=()=>[...root.querySelectorAll('details[data-rt], #bz_det')];
+  all().forEach(d=>{
+    if(d._acc)return;d._acc=1;
+    d.addEventListener('toggle',()=>{if(!d.open)return;all().forEach(o=>{if(o!==d&&o.open)o.open=false})});
+  });
+}
+P.rentAccordion=accordion;
 P.restructureRent=restructureRent;
 const _rr=window.renderRent;
 if(typeof _rr==='function')window.renderRent=async function(){
@@ -4686,7 +4835,7 @@ if(typeof _rr==='function')window.renderRent=async function(){
 /* ---------- ayuda ---------- */
 try{
   const e=jEntry('rentabilidad');
-  if(e)e[4]=String(e[4]).replace('Se activa en Ajustes → Rentabilidad de viajes.','Se activa en Ajustes → Rentabilidad de viajes (es una opción propia, con desplegables: objetivos, burbuja flotante, semáforos, estimación de Bolt, opciones avanzadas, estado de la lectura y diagnóstico).');
+  if(e)e[4]=String(e[4]).replace('Se activa en Ajustes → Rentabilidad de viajes.','Se activa en Ajustes → Rentabilidad de viajes (es una opción propia, con desplegables (al abrir uno se cierran los demás): objetivos, burbuja flotante, semáforos, estimación de Bolt, opciones avanzadas, estado de la lectura y diagnóstico).');
 }catch(e){}
 })();
 
@@ -5081,6 +5230,33 @@ html.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite .header::before{displ
 /* v3.15g · propina sumada en la lista de viajes: la línea «🎁 27,25 € + 2,00 € propina» debajo del importe (el diseño de la lista oculta los <small>, por eso es un span propio) */
 .trip .orig .tipsum{display:block!important;color:#18c987!important;font-size:9px!important;font-weight:700;line-height:1.2!important;white-space:normal!important;margin-top:1px;text-align:inherit}
 @media(max-width:360px){.trip .orig .tipsum{font-size:8px!important}}
+
+/* ---- v3.15h · apartados desplegables de la estimación de Bolt (se abre uno y se cierran los demás), zonas altas/medias/bajas y franjas por días ---- */
+#boltBox .bz-pn{margin:10px 0;border:1px solid #ffffff2a;border-radius:16px;background:#ffffff0a;padding:10px 12px}
+#boltBox .bz-pn[open]{border-color:#3b82f688;background:#ffffff10}
+#boltBox .bz-pn>summary{padding-top:2px;padding-bottom:2px;line-height:1.3}
+#boltBox .bz-pn>summary b{font-size:15px}
+#boltBox .bz-pn>summary small{display:block;margin-top:2px;font-size:12px;color:#7aa2ff;font-weight:600}
+#boltBox .bz-pb{margin-top:10px}
+#boltBox .bz-pb>small{display:block;margin:2px 0 8px;color:#9fb4c8;font-weight:500;line-height:1.4}
+#boltBox .bz-pb .bz-btns{margin-top:14px}
+#boltBox .bz-test{margin:16px 0 4px;padding:10px;border:1px dashed #22c55e66;border-radius:14px;background:#22c55e0d}
+#boltBox .bz-test>small{display:block;margin:2px 0 8px;color:#9fb4c8;font-weight:500}
+#boltBox .bz-sub{display:block;margin:14px 0 4px;color:#cfe3f5}
+#boltBox .bz-slist{margin:14px 0;padding-top:6px;border-top:1px solid #ffffff1c}
+#boltBox .bz-slist>small{display:block;margin:2px 0 6px;color:#9fb4c8;font-weight:500}
+#boltBox .bz-days{display:flex;gap:6px;margin:8px 0;flex-wrap:wrap}
+#boltBox .bz-chip{min-width:40px;height:40px;border-radius:12px;border:1px solid #ffffff33;background:#ffffff12;color:inherit;font-size:15px;font-weight:800}
+#boltBox .bz-chip.on{background:#f59e0b;border-color:#fbbf24;color:#1c1203}
+#boltBox select.bz-kind{flex:1;min-width:110px;padding:9px 10px;border-radius:12px;font-size:14px;font-weight:700}
+#boltBox select.bz-kind.k-h{border-color:#16a34a}
+#boltBox select.bz-kind.k-m{border-color:#d97706}
+#boltBox select.bz-kind.k-l{border-color:#64748b}
+.zm-p.k-m{fill:rgba(245,158,11,.28);stroke:#b45309}
+.zm-p.k-l{fill:rgba(148,163,184,.32);stroke:#64748b}
+.zm-p.sel{fill:rgba(37,99,235,.22);stroke:#1d4ed8;stroke-width:3.5}
+.zm-p.bad{fill:rgba(239,68,68,.28);stroke:#dc2626}
+.zm-kinds span{font-size:12px;color:#9fb4c8;font-weight:700}
 
 </style>
 </body></html><style>

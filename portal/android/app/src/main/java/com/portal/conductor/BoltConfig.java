@@ -110,6 +110,10 @@ public class BoltConfig {
         return c;
     }
 
+    private static boolean sameCard(OfferAnalyzer.Card a, double base, double km, double min, double minFare) {
+        return Math.abs(a.base - base) < 1e-9 && Math.abs(a.perKm - km) < 1e-9 && Math.abs(a.perMin - min) < 1e-9 && Math.abs(a.minFare - minFare) < 1e-9;
+    }
+
     /** Nombre de zona: sin caracteres de control, recortado y de hasta 40 caracteres. */
     private static String areaName(Object o) {
         if (!(o instanceof String)) return "";
@@ -117,23 +121,29 @@ public class BoltConfig {
         return s.length() > 40 ? s.substring(0, 40).trim() : s;
     }
 
-    /** Ajuste por zona y demanda (v3.15f/g). Cualquier dato ausente o no valido vuelve a su valor inicial. */
+    private static int kindOf(Object o, int def) {
+        if ("h".equals(o)) return OfferAnalyzer.Z_HIGH;
+        if ("m".equals(o)) return OfferAnalyzer.Z_MID;
+        if ("l".equals(o)) return OfferAnalyzer.Z_LOW;
+        return def;
+    }
+
+    private static String kindKey(int k) { return k == OfferAnalyzer.Z_HIGH ? "h" : (k == OfferAnalyzer.Z_LOW ? "l" : "m"); }
+
+    private static int kindWord(Object o, int def) {
+        if ("high".equals(o)) return OfferAnalyzer.Z_HIGH;
+        if ("mid".equals(o)) return OfferAnalyzer.Z_MID;
+        if ("low".equals(o)) return OfferAnalyzer.Z_LOW;
+        return def;
+    }
+
+    private static String kindWordKey(int k) { return k == OfferAnalyzer.Z_HIGH ? "high" : (k == OfferAnalyzer.Z_LOW ? "low" : "mid"); }
+
+    /** Zonas dibujadas: poligonos [latitud, longitud] con su tipo (k: h alta, m media, l baja; las de la v3.15g no traen tipo y eran zonas buenas = altas). */
     private static OfferAnalyzer.Zone zone(Object o, OfferAnalyzer.Zone def) {
         Map<String, Object> m = map(o);
         OfferAnalyzer.Zone z = def.copy();
         if (m == null) return z;
-        z.on = bool(m.get("on"), def.on);
-        z.adj = dbl(m.get("adj"), def.adj, -90, 300);
-        z.adjGood = dbl(m.get("adjGood"), def.adjGood, -90, 300);
-        z.mult = dbl(m.get("mult"), def.mult, 0.1, 10);
-        double rf = dbl(m.get("realFrom"), def.realFrom, 1, 10), df = dbl(m.get("from"), def.dFrom, 1, 10);
-        double a1 = dbl(m.get("a1"), def.dA1, 1, 10), a2 = dbl(m.get("a2"), def.dA2, 1, 10), a3 = dbl(m.get("a3"), def.dA3, 1, 10);
-        if (rf <= df && df <= a1 && a1 <= a2 && a2 <= a3) { z.realFrom = rf; z.dFrom = df; z.dA1 = a1; z.dA2 = a2; z.dA3 = a3; }
-        else { z.realFrom = def.realFrom; z.dFrom = def.dFrom; z.dA1 = def.dA1; z.dA2 = def.dA2; z.dA3 = def.dA3; }
-        z.dP1 = dbl(m.get("p1"), def.dP1, 0, 100);
-        z.dP2 = dbl(m.get("p2"), def.dP2, 0, 100);
-        z.dP3 = dbl(m.get("p3"), def.dP3, 0, 100);
-        // zonas buenas: poligonos [latitud, longitud]. Los ajustes de la v3.15f traian circulos en "good": se ignoran (el mapa empieza vacio).
         if (m.get("zones") instanceof List) {
             List<OfferAnalyzer.Area> l = new ArrayList<OfferAnalyzer.Area>();
             for (Object a : (List<?>) m.get("zones")) {
@@ -147,25 +157,27 @@ public class BoltConfig {
                     if (lat == 999 || lon == 999) continue;
                     pts.add(new double[]{lat, lon});
                 }
-                if (pts.size() >= 3) l.add(new OfferAnalyzer.Area(areaName(am.get("n")), pts));
+                if (pts.size() >= 3) l.add(new OfferAnalyzer.Area(areaName(am.get("n")), kindOf(am.get("k"), OfferAnalyzer.Z_HIGH), pts));
             }
             z.good = l;
         }
         return z;
     }
 
-    private static final int MAX_ZONES = 40, MAX_PTS = 200, MAX_SLOTS = 20;
+    private static final int MAX_ZONES = 40, MAX_PTS = 200, MAX_SLOTS = 30;
 
-    /** Franjas de fin de semana: [{on, from, to}] con minutos desde el lunes 00:00 (enteros 0..10079, distintos). Lo no valido se descarta. */
+    /** Franjas de hora punta: [{on, d (dias, bit 0 = lunes), a (desde, minutos del dia), b (hasta)}]. Lo no valido se descarta; las de la v3.15g (con from/to) no valen y se sustituyen por las de fabrica. */
     private static List<OfferAnalyzer.Slot> slots(Object o, List<OfferAnalyzer.Slot> def) {
         if (!(o instanceof List)) return def;
         List<OfferAnalyzer.Slot> l = new ArrayList<OfferAnalyzer.Slot>();
         for (Object x : (List<?>) o) {
             Map<String, Object> sm = map(x);
-            if (sm == null || l.size() >= MAX_SLOTS) continue;
-            double f = dbl(sm.get("from"), -1, 0, OfferAnalyzer.WEEK_MIN - 1), t = dbl(sm.get("to"), -1, 0, OfferAnalyzer.WEEK_MIN - 1);
-            if (f < 0 || t < 0 || f != Math.floor(f) || t != Math.floor(t) || f == t) continue;
-            OfferAnalyzer.Slot s = new OfferAnalyzer.Slot((int) f, (int) t);
+            if (sm == null) continue;
+            if (sm.containsKey("from") || sm.containsKey("to")) return def;       // formato de la v3.15g: se vuelve a las franjas de fabrica
+            if (l.size() >= MAX_SLOTS) continue;
+            double d = dbl(sm.get("d"), -1, 1, 127), a = dbl(sm.get("a"), -1, 0, 1439), b = dbl(sm.get("b"), -1, 1, 1440);
+            if (d < 0 || a < 0 || b < 0 || d != Math.floor(d) || a != Math.floor(a) || b != Math.floor(b) || a == b) continue;
+            OfferAnalyzer.Slot s = new OfferAnalyzer.Slot((int) d, (int) a, (int) b);
             s.on = bool(sm.get("on"), true);
             l.add(s);
         }
@@ -183,28 +195,36 @@ public class BoltConfig {
             Object md = m.get("mode");
             if (md instanceof String && ("auto".equals(md) || "week".equals(md) || "weekend".equals(md))) c.mode = (String) md;
             c.comm = dbl(m.get("comm"), c.comm, 0, 90);
-            Map<String, Object> zm = map(m.get("zone")), wdm = map(m.get("wd"));        // wd / zone.base...: ajustes de la v3.15 / v3.15f (se aprovechan algunos valores)
-            Map<String, Object> airm = wdm == null ? null : map(wdm.get("air"));
-            Object om = m.get("offerMult");
-            if (!(om instanceof Boolean) && wdm != null) om = wdm.get("offerMult");
-            c.offerMult = bool(om, c.offerMult);
-            Object ao = m.get("airOn");
-            if (!(ao instanceof Boolean) && airm != null) ao = airm.get("on");
-            c.airOn = bool(ao, c.airOn);
-            Object af = m.get("airFee");
-            if (!(af instanceof Double) && airm != null) af = airm.get("fee");
-            c.airFee = dbl(af, c.airFee, 0, 50);
+            c.peakApplies = bool(m.get("peakApplies"), c.peakApplies);
+            c.round5 = bool(m.get("round5"), c.round5);
+            c.fine = dbl(m.get("fine"), c.fine, -50, 100);
+            Object zf = m.get("zoneForce");
+            if (zf instanceof String && ("auto".equals(zf) || "low".equals(zf) || "mid".equals(zf) || "high".equals(zf))) c.zoneForce = (String) zf;
+            c.zoneDef = kindWord(m.get("zoneDef"), c.zoneDef);
+            Map<String, Object> sh = map(m.get("short"));
+            if (sh != null) {
+                double sk = dbl(sh.get("km"), c.shortKm, 0, 50), sf = dbl(sh.get("from"), c.shortFrom, 1, 10);
+                double lo = dbl(sh.get("lo"), c.bumpLo, 0, 20), hi = dbl(sh.get("hi"), c.bumpHi, 0, 20);
+                c.shortKm = sk; c.shortFrom = sf;
+                if (lo <= hi) { c.bumpLo = lo; c.bumpHi = hi; }
+            }
+            c.airOn = bool(m.get("airOn"), c.airOn);
+            c.airFee = dbl(m.get("airFee"), c.airFee, 0, 50);
+            c.airFlatKm = dbl(m.get("airFlatKm"), c.airFlatKm, 0, 100);
             c.holidaysWe = bool(m.get("holidaysWe"), c.holidaysWe);
             c.slots = slots(m.get("slots"), c.slots);
+            c.slotsH = slots(m.get("slotsH"), c.slotsH);
             Map<String, Object> cm = map(m.get("cards"));
             if (cm != null) {
-                c.nWd = card(cm.get("nwd"), c.nWd);
-                c.nWe = card(cm.get("nwe"), c.nWe);
-                c.aWd = card(cm.get("awd"), c.aWd);
-                c.aWe = card(cm.get("awe"), c.aWe);
-            } else if (zm != null) {                                 // la v3.15f tenia una sola tarjeta normal para todos los dias
-                c.nWd = card(zm, c.nWd);
-                c.nWe = c.nWd.copy();
+                c.lowV = card(cm.get("lv"), c.lowV); c.lowP = card(cm.get("lp"), c.lowP);
+                c.midV = card(cm.get("mv"), c.midV); c.midP = card(cm.get("mp"), c.midP);
+                c.highV = card(cm.get("hv"), c.highV); c.highP = card(cm.get("hp"), c.highP);
+                c.airV = card(cm.get("av"), c.airV); c.airP = card(cm.get("ap"), c.airP);
+                // v3.15g: tarjetas normal / aeropuerto x entre semana / fin de semana. Solo se aprovecha lo que el conductor habia cambiado de fabrica.
+                if (cm.get("nwd") != null) { OfferAnalyzer.Card x = card(cm.get("nwd"), c.midV); if (!sameCard(x, 2.10, 0.77, 0.15, 6.75)) c.midV = x; }
+                if (cm.get("nwe") != null) { OfferAnalyzer.Card x = card(cm.get("nwe"), c.midP); if (!sameCard(x, 2.10, 0.77, 0.15, 6.75)) c.midP = x; }
+                if (cm.get("awd") != null) { OfferAnalyzer.Card x = card(cm.get("awd"), c.airV); if (!sameCard(x, 2.89, 0.82, 0.15, 13.5)) c.airV = x; }
+                if (cm.get("awe") != null) { OfferAnalyzer.Card x = card(cm.get("awe"), c.airP); if (!sameCard(x, 2.89, 0.82, 0.15, 13.5)) c.airP = x; }
             }
             if (m.get("holidays") instanceof List) {
                 List<String> h = new ArrayList<String>();
@@ -242,16 +262,12 @@ public class BoltConfig {
     }
 
     private static String zoneJson(OfferAnalyzer.Zone z) {
-        StringBuilder b = new StringBuilder("{");
-        b.append("\"on\":").append(z.on).append(",\"adj\":").append(n(z.adj)).append(",\"adjGood\":").append(n(z.adjGood)).append(",\"mult\":").append(n(z.mult))
-         .append(",\"realFrom\":").append(n(z.realFrom)).append(",\"from\":").append(n(z.dFrom))
-         .append(",\"a1\":").append(n(z.dA1)).append(",\"p1\":").append(n(z.dP1)).append(",\"a2\":").append(n(z.dA2)).append(",\"p2\":").append(n(z.dP2))
-         .append(",\"a3\":").append(n(z.dA3)).append(",\"p3\":").append(n(z.dP3)).append(",\"zones\":[");
+        StringBuilder b = new StringBuilder("{\"zones\":[");
         boolean first = true;
         if (z.good != null) for (OfferAnalyzer.Area a : z.good) {
             if (a == null || a.pts == null || a.pts.size() < 3) continue;
             if (!first) b.append(',');
-            b.append("{\"n\":").append(q(a.name == null ? "" : a.name)).append(",\"pts\":[");
+            b.append("{\"n\":").append(q(a.name == null ? "" : a.name)).append(",\"k\":\"").append(kindKey(a.kind)).append("\",\"pts\":[");
             for (int i = 0; i < a.pts.size(); i++) {
                 if (i > 0) b.append(',');
                 b.append('[').append(n(a.pts.get(i)[0])).append(',').append(n(a.pts.get(i)[1])).append(']');
@@ -262,10 +278,25 @@ public class BoltConfig {
         return b.append("]}").toString();
     }
 
+    private static void slotsJson(StringBuilder b, List<OfferAnalyzer.Slot> l) {
+        b.append('[');
+        boolean first = true;
+        if (l != null) for (OfferAnalyzer.Slot s : l) {
+            if (s == null) continue;
+            if (!first) b.append(',');
+            b.append("{\"on\":").append(s.on).append(",\"d\":").append(s.days).append(",\"a\":").append(s.a).append(",\"b\":").append(s.b).append('}');
+            first = false;
+        }
+        b.append(']');
+    }
+
     public static String toJson(OfferAnalyzer.BoltCfg c) {
         StringBuilder b = new StringBuilder("{");
         b.append("\"on\":").append(c.on).append(",\"mode\":\"").append(c.mode).append("\",\"comm\":").append(n(c.comm));
-        b.append(",\"offerMult\":").append(c.offerMult).append(",\"airOn\":").append(c.airOn).append(",\"airFee\":").append(n(c.airFee));
+        b.append(",\"peakApplies\":").append(c.peakApplies).append(",\"round5\":").append(c.round5).append(",\"fine\":").append(n(c.fine));
+        b.append(",\"zoneForce\":\"").append(c.zoneForce).append("\",\"zoneDef\":\"").append(kindWordKey(c.zoneDef)).append('"');
+        b.append(",\"short\":{\"km\":").append(n(c.shortKm)).append(",\"from\":").append(n(c.shortFrom)).append(",\"lo\":").append(n(c.bumpLo)).append(",\"hi\":").append(n(c.bumpHi)).append('}');
+        b.append(",\"airOn\":").append(c.airOn).append(",\"airFee\":").append(n(c.airFee)).append(",\"airFlatKm\":").append(n(c.airFlatKm));
         b.append(",\"holidaysWe\":").append(c.holidaysWe).append(",\"holidays\":[");
         boolean first = true;
         if (c.holidays != null) for (String h : c.holidays) {
@@ -274,16 +305,14 @@ public class BoltConfig {
             b.append('"').append(h).append('"');
             first = false;
         }
-        b.append("],\"slots\":[");
-        first = true;
-        if (c.slots != null) for (OfferAnalyzer.Slot s : c.slots) {
-            if (s == null) continue;
-            if (!first) b.append(',');
-            b.append("{\"on\":").append(s.on).append(",\"from\":").append(s.from).append(",\"to\":").append(s.to).append('}');
-            first = false;
-        }
-        b.append("],\"cards\":{\"nwd\":").append(cardJson(c.nWd)).append(",\"nwe\":").append(cardJson(c.nWe))
-         .append(",\"awd\":").append(cardJson(c.aWd)).append(",\"awe\":").append(cardJson(c.aWe))
+        b.append("],\"slots\":");
+        slotsJson(b, c.slots);
+        b.append(",\"slotsH\":");
+        slotsJson(b, c.slotsH);
+        b.append(",\"cards\":{\"lv\":").append(cardJson(c.lowV)).append(",\"lp\":").append(cardJson(c.lowP))
+         .append(",\"mv\":").append(cardJson(c.midV)).append(",\"mp\":").append(cardJson(c.midP))
+         .append(",\"hv\":").append(cardJson(c.highV)).append(",\"hp\":").append(cardJson(c.highP))
+         .append(",\"av\":").append(cardJson(c.airV)).append(",\"ap\":").append(cardJson(c.airP))
          .append("},\"zone\":").append(zoneJson(c.zone)).append('}');
         return b.toString();
     }

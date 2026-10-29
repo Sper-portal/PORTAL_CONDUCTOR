@@ -180,10 +180,7 @@ public class ScreenReaderPlugin extends Plugin {
         long now = System.currentTimeMillis();
         ZoneLocator.reset();
         ZoneLocator.Fix f = ZoneLocator.lastFix(getContext(), now);
-        if (f != null) {
-            String n = OfferAnalyzer.goodAreaAt(c.zone, f.lat, f.lon);
-            if (n != null) { c.goodZone = true; c.goodName = n; }
-        }
+        ZoneLocator.resolve(c, f);
         JSObject r = new JSObject();
         r.put("zone", ZoneLocator.json(f, c, now));
         call.resolve(r);

@@ -768,7 +768,7 @@ public class ScreenReaderService extends AccessibilityService {
         String js = getSharedPreferences("portal", Context.MODE_PRIVATE).getString("bolt_cfg", "");
         if (js == null) js = "";
         if (boltCfgCache == null || !js.equals(boltJsonCache)) { boltCfgCache = BoltConfig.parse(js); boltJsonCache = js; }
-        try { ZoneLocator.apply(this, boltCfgCache, System.currentTimeMillis()); } catch (Exception e) { boltCfgCache.goodZone = false; boltCfgCache.goodName = ""; }   // zona buena segun el GPS (si falla: fuera de zona buena)
+        try { ZoneLocator.apply(this, boltCfgCache, System.currentTimeMillis()); } catch (Exception e) { boltCfgCache.zoneKind = boltCfgCache.zoneDef; boltCfgCache.zoneName = ""; boltCfgCache.zoneSrc = "default"; }   // zona de la recogida segun el GPS (si falla: la zona por defecto)
         return boltCfgCache;
     }
 
@@ -857,30 +857,40 @@ public class ScreenReaderService extends AccessibilityService {
 
     private static String pct(double v) { return (v > 1e-9 ? "+" : (v < -1e-9 ? "\u2212" : "")) + num1(Math.abs(v)) + " %"; }
 
-    /** linea de la tarifa por zona del aviso: en que zona esta y que ajuste se ha aplicado */
+    /** linea de la zona de la recogida del aviso: cual es y de donde sale (zona dibujada, forzada en Ajustes o la de por defecto) */
     static String zoneLine(OfferAnalyzer.Result r) {
-        boolean zero = Math.abs(r.estAdj) < 1e-9;
-        if (r.estZone == 2) return "Zona buena" + (r.estArea != null && r.estArea.length() > 0 ? " (" + r.estArea + ")" : "") + " \u00B7 tarifa " + (zero ? "normal" : pct(r.estAdj));
+        String z = "Zona " + OfferAnalyzer.zoneName(r.estZone);
+        if ("forced".equals(r.estZoneSrc)) return z + " (forzada en Ajustes)";
+        if ("area".equals(r.estZoneSrc)) return z + (r.estArea != null && r.estArea.length() > 0 ? " (" + r.estArea + ")" : "");
         String w = ZoneLocator.why();
-        return "Fuera de zona buena" + (w.length() > 0 ? " (" + w + ")" : "") + " \u00B7 tarifa " + (zero ? "real" : pct(r.estAdj));
+        return z + " (" + (w.length() > 0 ? w + " \u2192 zona por defecto" : "fuera de tus zonas dibujadas") + ")";
     }
 
-    /** linea de la tarjeta usada: normal o aeropuerto, entre semana o fin de semana (lo decide la franja que has definido, no el dia del calendario) */
+    /** linea de la tarjeta usada: la del aeropuerto (recogidas) o la de la zona de la recogida, de valle o de hora punta */
     static String cardLine(OfferAnalyzer.Result r) {
-        String t = "pickup".equals(r.estAirport) ? "Aeropuerto (recogida)" : ("dest".equals(r.estAirport) ? "Aeropuerto (viaje hacia all\u00ed)" : "Tarjeta normal");
-        return t + " \u00B7 " + (r.estWeekend ? "fin de semana" : "entre semana");
+        String per = r.estPeakUsed ? "hora punta" : "valle";
+        if ("pickup".equals(r.estAirport)) return "Aeropuerto (recogida) \u00B7 tarjeta del aeropuerto \u00B7 " + per;
+        String t = "Tarjeta de zona " + OfferAnalyzer.zoneName(r.estZone) + " \u00B7 " + per;
+        return "dest".equals(r.estAirport) ? "Aeropuerto (viaje hacia all\u00ED) \u00B7 " + t : t;
     }
 
-    /** linea de la demanda en modo zona: cuanto marca la oferta y cuanto se aplica de verdad */
+    /** linea de la demanda: la que muestra la oferta (siempre se aplica), con el ajuste fino si lo hay */
     static String zoneDemand(OfferAnalyzer.Result r) {
-        if (r.estOfferMult <= 0) return r.estMult > 1.0 + 1e-9 ? "Demanda \u00D7" + multTxt(r.estMult) + " (a mano)" : "Sin demanda en la oferta";
-        if (!r.estFromOffer) return "Demanda \u00D7" + multTxt(r.estOfferMult) + " de la oferta: ignorada (lo tienes desactivado en Ajustes)";
+        if (r.estOfferMult <= 0) return "Sin demanda en la oferta";
         String s = "Demanda \u00D7" + multTxt(r.estOfferMult) + " (de la oferta)";
-        if (r.estZone == 1) {
-            if (Math.abs(r.estEff - 1.0) < 1e-9) s += ": no se aplica (solo desde \u00D7" + multTxt(r.estHi) + ")";
-            else if (r.estEff > r.estOfferMult + 1e-9) s += " +" + num1(Math.round((r.estEff / r.estOfferMult - 1) * 1000) / 10.0) + " % = \u00D7" + multTxt(r.estEff);
-        }
+        if (Math.abs(r.estFine) > 1e-9) s += " \u00B7 ajuste fino " + pct(r.estFine);
         return s;
+    }
+
+    /** viaje corto con demanda: el inicial real de Bolt sube de forma impredecible, asi que se da un rango de neto */
+    static String rangeLine(OfferAnalyzer.Result r) {
+        return "Viaje corto con demanda: el neto puede ir de " + OfferAnalyzer.money(r.estNetLo) + " a " + OfferAnalyzer.money(r.estNetHi) + " \u20AC";
+    }
+
+    /** hora punta ahora pero la tarifa de punta no sube tu precio (Ajustes): se dice lo que saldria si contara */
+    static String peakLine(OfferAnalyzer.Result r) {
+        if (r.estWeekend && !r.estPeakUsed) return "Ahora es hora punta: no sube tu precio" + (r.estAlt >= 0 ? " (con tarifa de punta: neto " + OfferAnalyzer.money(r.estAlt) + " \u20AC)" : "");
+        return "";
     }
 
     private void showEstimateAlert(OfferAnalyzer.Result r) {
@@ -930,7 +940,7 @@ public class ScreenReaderService extends AccessibilityService {
             nb.setStroke((int) (2 * d), col);
             aNetBox.setBackground(nb);
             aNetBox.setPadding((int) (10 * d), (int) (4 * d), (int) (10 * d), (int) (6 * d));
-            aNetLbl.setText("NETO ESTIMADO");
+            aNetLbl.setText(r.estRange && r.estNetHi > r.estNetLo + 1e-9 ? "NETO ESTIMADO \u00B7 entre " + OfferAnalyzer.money(r.estNetLo) + " y " + OfferAnalyzer.money(r.estNetHi) + " \u20AC" : "NETO ESTIMADO");
             aNetVal.setText(OfferAnalyzer.money(r.estNet) + " \u20ac");
             aNetBox.setVisibility(View.VISIBLE);
             aMain.setTextSize(15);
@@ -940,8 +950,10 @@ public class ScreenReaderService extends AccessibilityService {
             StringBuilder dt = new StringBuilder();
             dt.append("Viaje con pasajero: ").append((int) Math.round(r.tripMin)).append(" min (").append(num1(r.tripKm)).append(" km)\n");
             dt.append(cardLine(r)).append("\n");
-            if (r.estZone > 0) dt.append(zoneLine(r)).append("\n");
+            if (!"pickup".equals(r.estAirport)) dt.append(zoneLine(r)).append("\n");   // la recogida en el aeropuerto usa su propia tarjeta: la zona no pinta nada
             dt.append(zoneDemand(r)).append("\n");
+            if (r.estRange) dt.append(rangeLine(r)).append("\n");
+            if (peakLine(r).length() > 0) dt.append(peakLine(r)).append("\n");
             if (r.estMinApplied) dt.append("Se aplic\u00f3 la tarifa m\u00ednima estimada\n");
             if (r.pickupKm > 0 || r.pickupMin > 0) {
                 dt.append("Recogida (no cuenta en el precio): ");
