@@ -413,7 +413,7 @@ function splitHourRecordByCalendarDay(record){
     const piece={...record,id:index===0?record.id:`${record.id||'hour'}_day_${dateKey(cursor)}_${index}`,date:dateKey(cursor),start:cursor.toISOString(),end:pieceEnd.toISOString()};
     pieces.push(piece);cursor=pieceEnd;index++;
   }
-  return pieces.length?pieces:[record];
+  return pieces.length?splitRecordKm(pieces,record):[record];
 }
 function normalizeHourRecordsByDay(){
   const original=Array.isArray(db.hours)?db.hours:[];let changed=false;const normalized=[];
@@ -957,19 +957,121 @@ function totalMinutesForDay(k){
   }
   return total;
 }
-function priorityMinutesForDay(k){return sessionsForDay(k).reduce((sum,h)=>sum+priorityMinutesForSession(h.start,h.end),0)}
+function priorityMinutesForDay(k){return sessionsForDay(k).filter(isBoltRec).reduce((sum,h)=>sum+priorityMinutesForSession(h.start,h.end),0)}
+/*v318-apps*/
+// ===== v3.18 · jornada: Bolt / otras apps =====
+// Cada tramo de horas lleva «app» ('bolt' por defecto; los tramos de antes cuentan como Bolt) y, si hubo GPS, «km».
+// La jornada en curso lleva «marks»: cada cambio de app con su hora y los km del GPS en ese momento.
+function isBoltRec(h){return !!h&&h.app!=='other'}
+/*v321-prio*/
+// v3.21 · aplicacion prioritaria: Bolt (por defecto), Uber o Cabify. Solo cambia el NOMBRE con el que se ve el bloque principal; por dentro sigue siendo el mismo (los tramos de antes cuentan como prioritaria).
+function prioName(){let n='Bolt';try{n=(db&&db.settings&&db.settings.prioApp)||'Bolt'}catch(e){}return n==='Uber'||n==='Cabify'?n:'Bolt'}
+function setPrioApp(n){
+  n=(n==='Uber'||n==='Cabify')?n:'Bolt';
+  if(!db.settings)db.settings={};
+  if(prioName()===n&&db.settings.prioApp===n)return;
+  db.settings.prioApp=n;save();renderControl();
+}
+function prioPickHtml(){
+  return `<div style="margin-top:10px"><small style="display:block;color:#9fb4c8;font-weight:700;margin-bottom:5px">Aplicación prioritaria (la del bloque principal):</small><select id="prioApp" onchange="setPrioApp(this.value)" style="width:100%;padding:11px;border-radius:12px;background:#08243b;color:#eaf6ff;border:1px solid #299dff66;font-size:15px;font-weight:700">${['Bolt','Uber','Cabify'].map(n=>`<option value="${n}"${n===prioName()?' selected':''}>${n}</option>`).join('')}</select><small style="display:block;color:#9fb4c8;margin-top:5px">Si la cambias, las horas que ya tenías como prioritarias pasan a llamarse así.</small></div>`;
+}
+function appLabel(x){return x&&x.app==='other'?'Otras apps':prioName()}
+function r1km(v){return Math.round((Number(v)||0)*10)/10}
+function kmTxt(v){return r1km(v).toLocaleString('es-ES')+' km'}
+function activeAppSegments(a,endIso){
+  if(!a||!a.start)return [];
+  const end=endIso||new Date().toISOString();
+  let marks=Array.isArray(a.marks)?a.marks.filter(m=>m&&m.t&&Number.isFinite(new Date(m.t).getTime())):[];
+  if(!marks.length)marks=[{t:a.start,app:a.app==='other'?'other':'bolt',km:0}];
+  const live=Math.max(0,Number(a.liveKm)||0),out=[];let prev=new Date(a.start).getTime();
+  for(let i=0;i<marks.length;i++){
+    const m=marks[i],n=marks[i+1];
+    const t0=Math.max(prev,new Date(m.t).getTime());
+    const t1=n?Math.max(t0,new Date(n.t).getTime()):Math.max(t0,new Date(end).getTime());
+    const k0=Math.max(0,Number(m.km)||0),k1=n?Math.max(0,Number(n.km)||0):live;
+    out.push({start:new Date(t0).toISOString(),end:new Date(t1).toISOString(),app:m.app==='other'?'other':'bolt',km:r1km(k1>=k0?k1-k0:k1)});
+    prev=t1;
+  }
+  return out;
+}
+function currentWorkApp(){
+  const a=db.activeSession;
+  if(a){const s=activeAppSegments(a);if(s.length)return s[s.length-1].app}
+  try{return localStorage.getItem('pdc_work_app')==='other'?'other':'bolt'}catch(e){return 'bolt'}
+}
+function setWorkApp(app){
+  app=app==='other'?'other':'bolt';
+  const a=db.activeSession;
+  if(a){
+    if(currentWorkApp()===app)return;
+    const base=Array.isArray(a.marks)&&a.marks.length?a.marks.slice():[{t:a.start,app:'bolt',km:0}];
+    base.push({t:new Date().toISOString(),app,km:Math.max(0,Number(a.liveKm)||0)});
+    a.marks=base;save();
+  }
+  try{localStorage.setItem('pdc_work_app',app)}catch(e){}
+  renderControl();
+}
+function activeAppMinutes(k,app){
+  const a=currentSession();if(!a||!a.start)return 0;
+  const ds=new Date(k+'T00:00:00').getTime(),de=ds+86400000,now=Date.now();let t=0;
+  for(const sg of activeAppSegments(a,new Date(now).toISOString())){
+    if(sg.app!==app)continue;
+    t+=Math.max(0,Math.min(new Date(sg.end).getTime(),de)-Math.max(new Date(sg.start).getTime(),ds))/60000;
+  }
+  return t;
+}
+function boltMinutesForDay(k){return sessionsForDay(k).filter(isBoltRec).reduce((s,h)=>s+sessionMinutes(h),0)+activeAppMinutes(k,'bolt')}
+function otherMinutesForDay(k){return sessionsForDay(k).filter(h=>!isBoltRec(h)).reduce((s,h)=>s+sessionMinutes(h),0)+activeAppMinutes(k,'other')}
+function appKmForDay(k,app){
+  let km=0;
+  for(const h of (db.hours||[])){if(h.date===k&&(h.app==='other')===(app==='other'))km+=Number(h.km)||0}
+  const a=currentSession();
+  if(a&&k===today()&&(a.gpsDay||dateKey(a.start))===k){for(const sg of activeAppSegments(a)){if(sg.app===app)km+=sg.km}}
+  return r1km(km);
+}
+function splitRecordKm(pieces,record){
+  const tot=Number(record&&record.km)||0;
+  if(!(tot>0)||pieces.length<2)return pieces;
+  const mins=pieces.map(p=>Math.max(0,sessionMinutes(p))),sum=mins.reduce((a,b)=>a+b,0);
+  if(!(sum>0))return pieces;
+  let used=0;
+  return pieces.map((p,i)=>{const v=i===pieces.length-1?r1km(tot-used):r1km(tot*mins[i]/sum);used=r1km(used+v);return {...p,km:v}});
+}
+function flipHourApp(id){
+  const h=(db.hours||[]).find(x=>String(x.id)===String(id));if(!h)return;
+  h.app=h.app==='other'?'bolt':'other';save();renderControl();
+}
+function appSwitchHtml(){
+  const cur=currentWorkApp(),act=!!currentSession();
+  return `<div class="appsw"><small>Ahora trabajo con${act?'':' (al iniciar la jornada)'}:</small><div class="sg"><button type="button" class="${cur==='bolt'?'on':''}" onclick="setWorkApp('bolt')">${prioName()}</button><button type="button" class="${cur==='other'?'on o':''}" onclick="setWorkApp('other')">Otras apps</button></div>${prioPickHtml()}</div>`;
+}
+function kmLineHtml(v){return v>0?`<small>${kmTxt(v)} (GPS)</small>`:''}
+function daySplitHtml(k){
+  const all=totalMinutesForDay(k),b=boltMinutesForDay(k),o=Math.max(0,all-b),kb=appKmForDay(k,'bolt'),ko=appKmForDay(k,'other'),kt=kilometersForDay(k);
+  const note=all>0&&kb<=0&&ko<=0?'<div class="note">Los km de '+prioName()+' y de otras apps se cuentan con el GPS encendido durante la jornada.</div>':'';
+  return `<div class="appblk">🔵 Todas las apps (${prioName()} + otras)</div><div class="summary-grid control-circles"><div class="metric"><small>Total de horas · todas</small><b>${hoursText(all)}</b></div><div class="metric"><small>Km del día</small><b>${kt===null||kt===undefined?'—':kmTxt(kt)}</b></div><div class="metric"><small>${prioName()}</small><b>${hoursText(b)}</b>${kmLineHtml(kb)}</div><div class="metric"><small>Otras apps</small><b>${hoursText(o)}</b>${kmLineHtml(ko)}</div></div>${note}`;
+}
+function allBlockHtml(x){
+  return `<div class="appblk">🔵 Todas las apps (${prioName()} + otras)</div><div class="summary-grid control-circles"><div class="metric"><small>Total · todas</small><b>${hoursText(x.all)}</b></div><div class="metric"><small>${prioName()}</small><b>${hoursText(x.total)}</b>${kmLineHtml(x.kmBolt)}</div><div class="metric"><small>Otras apps</small><b>${hoursText(x.other)}</b>${kmLineHtml(x.kmOther)}</div></div>`;
+}
+
 function hoursText(min){const total=Math.max(0,Math.round(Number(min)||0));const h=Math.floor(total/60),m=total%60;return `${h} h ${String(m).padStart(2,'0')} min`}
 function currentSession(){return db.activeSession||null}
 function toggleSession(){
   if(!db.activeSession){
-    db.activeSession={start:new Date().toISOString(),date:today()};
+    const ap=currentWorkApp(),now=new Date().toISOString();
+    db.activeSession={start:now,date:today(),app:ap,marks:[{t:now,app:ap,km:0}]};
     selectedDay=today();save();renderControl();return;
   }
-  const start=db.activeSession.start,end=new Date().toISOString(),k=dateKey(start);
-  if(sessionMinutes({start,end})>0){
-    const record={id:'hour_'+Date.now()+'_'+Math.random().toString(36).slice(2),date:k,start,end};
-    db.hours.push(...splitHourRecordByCalendarDay(record));
+  const a=db.activeSession,end=new Date().toISOString();
+  for(const sg of activeAppSegments(a,end)){
+    if(sessionMinutes({start:sg.start,end:sg.end})>0){
+      const record={id:'hour_'+Date.now()+'_'+Math.random().toString(36).slice(2),date:dateKey(sg.start),start:sg.start,end:sg.end,app:sg.app};
+      if(sg.km>0)record.km=sg.km;
+      db.hours.push(...splitHourRecordByCalendarDay(record));
+    }
   }
+  try{localStorage.setItem('pdc_work_app','bolt')}catch(e){}
   db.activeSession=null;selectedDay=today();save();renderControl();
 }
 function startOfToday(){const d=new Date();d.setHours(0,0,0,0);return d}
@@ -977,10 +1079,10 @@ function changeDay(n){let d=new Date(selectedDay+'T12:00:00');d.setDate(d.getDat
 function changeFuelDay(n){let d=new Date(fuelSelected+'T12:00:00');d.setDate(d.getDate()+n);let min=new Date(today()+'T12:00:00');min.setMonth(min.getMonth()-18);const max=new Date(today()+'T12:00:00');if(d>max)d=max;if(d<min)d=min;fuelSelected=dateKey(d);renderControl()}
 function changeControlWeek(n){controlWeek=Math.max(-78,Math.min(0,controlWeek+n));renderControl()}
 function monthBounds(offset=0){const now=new Date();const first=new Date(now.getFullYear(),now.getMonth()+offset,1,12);const last=new Date(now.getFullYear(),now.getMonth()+offset+1,0,12);return [first,last]}
-function monthlyHours(offset=0){const [first,last]=monthBounds(offset);let total=0,pri=0,days=0;for(let d=new Date(first);d<=last;d.setDate(d.getDate()+1)){const k=dateKey(d),mins=totalMinutesForDay(k);if(mins>0)days++;total+=mins;pri+=priorityMinutesForDay(k)}return {total,pri,non:Math.max(0,total-pri),days,first,last}}
+function monthlyHours(offset=0){const [first,last]=monthBounds(offset);let all=0,bolt=0,pri=0,days=0,kb=0,ko=0;for(let d=new Date(first);d<=last;d.setDate(d.getDate()+1)){const k=dateKey(d),a=totalMinutesForDay(k),b=boltMinutesForDay(k);if(a>0)days++;all+=a;bolt+=b;pri+=priorityMinutesForDay(k);kb+=appKmForDay(k,'bolt');ko+=appKmForDay(k,'other')}return {total:bolt,pri,non:Math.max(0,bolt-pri),all,other:Math.max(0,all-bolt),kmBolt:r1km(kb),kmOther:r1km(ko),days,first,last}}
 function changeControlMonth(n){controlMonth=Math.max(-17,Math.min(0,controlMonth+n));renderControl()}
 function weekBounds(offset){let d=new Date(today()+'T12:00:00'),day=d.getDay()||7;let mon=new Date(d);mon.setDate(d.getDate()-day+1+offset*7);let sun=new Date(mon);sun.setDate(mon.getDate()+6);return [mon,sun]}
-function weeklyHours(offset=0){let [mon,sun]=weekBounds(offset),total=0,pri=0;for(let i=0;i<7;i++){let x=new Date(mon);x.setDate(mon.getDate()+i);let k=dateKey(x);total+=totalMinutesForDay(k);pri+=priorityMinutesForDay(k)}return {total,pri,non:Math.max(0,total-pri),remain:Math.max(0,db.settings.goal*60-total),mon,sun}}
+function weeklyHours(offset=0){let [mon,sun]=weekBounds(offset),all=0,bolt=0,pri=0,kb=0,ko=0;for(let i=0;i<7;i++){let x=new Date(mon);x.setDate(mon.getDate()+i);let k=dateKey(x);all+=totalMinutesForDay(k);bolt+=boltMinutesForDay(k);pri+=priorityMinutesForDay(k);kb+=appKmForDay(k,'bolt');ko+=appKmForDay(k,'other')}return {total:bolt,pri,non:Math.max(0,bolt-pri),all,other:Math.max(0,all-bolt),kmBolt:r1km(kb),kmOther:r1km(ko),remain:Math.max(0,db.settings.goal*60-bolt),mon,sun}}
 function normalizeZeroHourRecord(k){const before=(db.hours||[]).length;db.hours=(db.hours||[]).filter(h=>{if(h.date!==k||!h.start||!h.end)return true;return sessionMinutes(h)>0});if(db.hours.length!==before)saveLocalOnly();}
 function ensureFuelEntries(){
   db.fuelEntries=db.fuelEntries||{};
@@ -1048,7 +1150,7 @@ function fuelMonthSummaryHtml(){
 }
 function hourSegmentsHtml(k,items){
   if(!items.length)return '<div class="note">Todavía no hay tramos guardados para este día.</div>';
-  return `<div class="hour-segments" style="margin-top:12px"><b>Tramos guardados · ${items.length}</b>${items.map((x,i)=>{const st=new Date(x.start).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),en=new Date(x.end).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});return `<div class="trip" style="grid-template-columns:1fr auto auto;gap:8px"><span><b>Tramo ${i+1}</b><small style="display:block;color:#94a3b8">${st} – ${en} · ${hoursText(sessionMinutes(x))}</small></span><button class="action" onclick="editHourSegment('${x.id}')">✏️ Editar</button><button class="trash" onclick="deleteHourSegment('${x.id}')">🗑️</button></div>`}).join('')}</div>`;
+  return `<div class="hour-segments" style="margin-top:12px"><b>Tramos guardados · ${items.length}</b>${items.map((x,i)=>{const st=new Date(x.start).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),en=new Date(x.end).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});return `<div class="trip" style="grid-template-columns:1fr auto auto auto;gap:8px"><span><b>Tramo ${i+1}</b><small style="display:block;color:#94a3b8">${st} – ${en} · ${hoursText(sessionMinutes(x))} · ${appLabel(x)}${Number(x.km)>0?' · '+kmTxt(x.km):''}</small></span><button class="action" onclick="flipHourApp('${x.id}')">${x.app==='other'?'🔵':'🟢'}</button><button class="action" onclick="editHourSegment('${x.id}')">✏️ Editar</button><button class="trash" onclick="deleteHourSegment('${x.id}')">🗑️</button></div>`}).join('')}</div>`;
 }
 function editHourSegment(id){const h=(db.hours||[]).find(x=>String(x.id)===String(id));if(!h)return;editingHourId=id;selectedDay=h.date;document.querySelector('#start').value=new Date(h.start).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});document.querySelector('#end').value=new Date(h.end).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});const b=document.querySelector('#saveHoursBtn');if(b)b.textContent='Guardar cambios del tramo';const c=document.querySelector('#cancelHourEdit');if(c)c.style.display='block';}
 function cancelHourEdit(){editingHourId=null;renderControl()}
@@ -1057,14 +1159,14 @@ function renderControl(){
   ensureFuelEntries();
   normalizeZeroHourRecord(selectedDay);
   let k=selectedDay,daySessions=sessionsForDay(k),h=daySessions[daySessions.length-1],active=currentSession(),w=weeklyHours(controlWeek),m=monthlyHours(controlMonth);
-  let dayTotal=totalMinutesForDay(k),dayPri=priorityMinutesForDay(k),dayNon=Math.max(0,dayTotal-dayPri);
+  let dayTotal=boltMinutesForDay(k),dayPri=priorityMinutesForDay(k),dayNon=Math.max(0,dayTotal-dayPri);
   let button=active?`<button class="toggle running" onclick="toggleSession()">■ Finalizar jornada · ${new Date(active.start).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}</button>`:`<button class="toggle" onclick="toggleSession()">▶ Iniciar jornada</button>`;
-  document.querySelector('#content').innerHTML=`<section class="panel"><div class="section-title">Control Horario · Diario</div><div class="navrow"><button class="back" onclick="changeDay(-1)">‹</button><b>${fmtDate(k)}</b><button class="back" onclick="changeDay(1)">›</button></div>${button}<div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(dayPri)}</b></div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(dayNon)}</b></div><div class="metric control-metric control-total"><small>Total de horas</small><b>${hoursText(dayTotal)}</b></div><div class="metric"><small>Estado</small><b>${active?'EN CURSO':'Finalizada'}</b></div></div><div class="note">Cada inicio y finalización se guarda como un tramo independiente. Tramos registrados hoy: <b>${daySessions.length}</b>. El total diario suma todos los tramos.</div><div class="row" style="margin-top:10px"><input type="time" id="start" value="00:00"><input type="time" id="end" value="00:00"></div><button id="saveHoursBtn" class="action" style="width:100%;margin-top:8px" onclick="saveHoursManual()">Añadir tramo manual</button><button id="cancelHourEdit" class="back" style="display:none;width:100%;margin-top:6px" onclick="cancelHourEdit()">Cancelar edición</button>${hourSegmentsHtml(k,daySessions)}</section>
-  <section class="panel"><div class="section-title">Resumen semanal</div><div class="navrow"><button class="back" onclick="changeControlWeek(-1)">‹</button><b>Semanal · ${fmtDate(dateKey(w.mon))} → ${fmtDate(dateKey(w.sun))}</b><button class="back" onclick="changeControlWeek(1)">›</button></div><div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(w.pri)}</b></div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(w.non)}</b></div><div class="metric control-metric control-total"><small>Total semanal</small><b>${hoursText(w.total)}</b></div><div class="metric"><small>Faltan para ${db.settings.goal} h</small><b>${hoursText(w.remain)}</b></div></div>${weekTable(w.mon)}</section>
-  <section class="panel"><div class="section-title">Resumen mensual</div><div class="navrow"><button class="back" onclick="changeControlMonth(-1)">‹</button><b>${m.first.toLocaleDateString('es-ES',{month:'long',year:'numeric'})}</b><button class="back" onclick="changeControlMonth(1)">›</button></div><div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(m.pri)}</b></div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(m.non)}</b></div><div class="metric control-metric control-total"><small>Total mensual</small><b>${hoursText(m.total)}</b></div><div class="metric"><small>Días trabajados</small><b>${m.days}</b></div></div></section><div class="futuristic fuel-panel" style="margin-top:12px;padding:12px;border-radius:22px"><button class="action" style="width:100%" onclick="toggleFuelPanel()">⛽ Gasolina / odómetro · ${fuelPanelOpen?'▲ Ocultar':'▼ Mostrar'}</button>${fuelPanelOpen?`<div class="fuel-panel-content"><div class="section-title" style="font-size:15px">⛽ Gasolina</div><div class="navrow"><button class="back" onclick="changeFuelDay(-1)">‹</button><b>${fmtDate(fuelSelected)}</b><button class="back" onclick="changeFuelDay(1)">›</button></div>${(()=>{const o=dayOdometer(fuelSelected),km=kilometersForDay(fuelSelected),dayTotal=fact(fuelSelected);return `<div class="odometer-box"><div class="section-title" style="font-size:14px;margin:0">🚘 Odómetro de jornada (opcional)</div><div class="odo-fields"><div><label for="odoStart">Inicio (km)</label><input id="odoStart" type="number" min="0" step="1" inputmode="numeric" placeholder="Km inicial" value="${o.start!==''?o.start:''}"></div><div><label for="odoEnd">Final (km)</label><input id="odoEnd" type="number" min="0" step="1" inputmode="numeric" placeholder="Km final" value="${o.end!==''?o.end:''}"></div></div><button class="action" style="width:100%;margin-top:8px" onclick="saveOdometer('${fuelSelected}')">Guardar kilómetros</button><div class="odometer-result"><div class="odo-line"><span>Kilómetros recorridos</span><b>${km===null?'—':km+' km'}</b></div><div class="odo-line"><span>Facturación por km</span><b>${km>0?euro(dayTotal/km)+'/km':'—'}</b></div></div></div>`})()}<div class="row"><input type="number" step="0.01" id="fuel" value="" placeholder="Añadir importe €" inputmode="decimal" onfocus="this.select()"><button class="action" onclick="saveFuel()">Añadir gasolina</button></div><button class="action fuel-summary-btn" style="width:100%;margin-top:10px" onclick="toggleFuelSummary()">${fuelSummaryOpen?'▲ Ocultar resumen':'📋 Ver resumen de gasolina'}</button>${fuelSummaryOpen?`<div class="fuel-summary" style="margin-top:12px"><div class="note">Acumulado del día: <b>${euro(db.fuel[fuelSelected]||0)}</b> · El resumen se organiza por meses.</div><div style="margin-top:12px"><b>Cargas de ${fmtDate(fuelSelected)}</b>${fuelEntriesHtml(fuelSelected)}</div>${fuelMonthSummaryHtml()}</div>`:''}</div>`:''}</div>` }
-function saveHoursManual(){let st=document.querySelector('#start').value,en=document.querySelector('#end').value;if(!st||!en||st==='00:00'&&en==='00:00'){alert('Introduce la hora de inicio y finalización del tramo.');return}if(st===en){alert('La hora de inicio y finalización no pueden ser iguales.');return}let a=new Date(selectedDay+'T'+st+':00'),b=new Date(selectedDay+'T'+en+':00');if(b<a)b.setDate(b.getDate()+1);if(editingHourId!==null){const h=(db.hours||[]).find(x=>String(x.id)===String(editingHourId));if(h){db.hours=db.hours.filter(x=>String(x.id)!==String(editingHourId));const rec={...h,date:selectedDay,start:a.toISOString(),end:b.toISOString(),manual:true};db.hours.push(...splitHourRecordByCalendarDay(rec));}editingHourId=null;}else{const rec={id:'hour_manual_'+Date.now()+'_'+Math.random().toString(36).slice(2),date:selectedDay,start:a.toISOString(),end:b.toISOString(),manual:true};db.hours.push(...splitHourRecordByCalendarDay(rec));}save();renderControl()}
+  document.querySelector('#content').innerHTML=`<section class="panel"><div class="section-title">Control Horario · Diario</div><div class="navrow"><button class="back" onclick="changeDay(-1)">‹</button><b>${fmtDate(k)}</b><button class="back" onclick="changeDay(1)">›</button></div>${button}${appSwitchHtml()}<div class="appblk">🟢 Solo ${prioName()}</div><div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(dayPri)}</b></div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(dayNon)}</b></div><div class="metric control-metric control-total"><small>Total de horas</small><b>${hoursText(dayTotal)}</b></div><div class="metric"><small>Estado</small><b>${active?'EN CURSO':'Finalizada'}</b></div></div>${daySplitHtml(k)}<div class="note">Cada inicio y finalización se guarda como un tramo independiente. Tramos registrados hoy: <b>${daySessions.length}</b>. El total diario suma todos los tramos.</div><div class="row" style="margin-top:10px"><input type="time" id="start" value="00:00"><input type="time" id="end" value="00:00"></div><button id="saveHoursBtn" class="action" style="width:100%;margin-top:8px" onclick="saveHoursManual()">Añadir tramo manual</button><button id="cancelHourEdit" class="back" style="display:none;width:100%;margin-top:6px" onclick="cancelHourEdit()">Cancelar edición</button>${hourSegmentsHtml(k,daySessions)}</section>
+  <section class="panel"><div class="section-title">Resumen semanal</div><div class="navrow"><button class="back" onclick="changeControlWeek(-1)">‹</button><b>Semanal · ${fmtDate(dateKey(w.mon))} → ${fmtDate(dateKey(w.sun))}</b><button class="back" onclick="changeControlWeek(1)">›</button></div><div class="appblk">🟢 Solo ${prioName()}</div><div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(w.pri)}</b></div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(w.non)}</b></div><div class="metric control-metric control-total"><small>Total semanal</small><b>${hoursText(w.total)}</b></div><div class="metric"><small>Faltan para ${db.settings.goal} h</small><b>${hoursText(w.remain)}</b></div></div>${allBlockHtml(w)}${weekTable(w.mon)}</section>
+  <section class="panel"><div class="section-title">Resumen mensual</div><div class="navrow"><button class="back" onclick="changeControlMonth(-1)">‹</button><b>${m.first.toLocaleDateString('es-ES',{month:'long',year:'numeric'})}</b><button class="back" onclick="changeControlMonth(1)">›</button></div><div class="appblk">🟢 Solo ${prioName()}</div><div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(m.pri)}</b></div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(m.non)}</b></div><div class="metric control-metric control-total"><small>Total mensual</small><b>${hoursText(m.total)}</b></div><div class="metric"><small>Días trabajados</small><b>${m.days}</b></div></div>${allBlockHtml(m)}</section><div class="futuristic fuel-panel" style="margin-top:12px;padding:12px;border-radius:22px"><button class="action" style="width:100%" onclick="toggleFuelPanel()">⛽ Gasolina / odómetro · ${fuelPanelOpen?'▲ Ocultar':'▼ Mostrar'}</button>${fuelPanelOpen?`<div class="fuel-panel-content"><div class="section-title" style="font-size:15px">⛽ Gasolina</div><div class="navrow"><button class="back" onclick="changeFuelDay(-1)">‹</button><b>${fmtDate(fuelSelected)}</b><button class="back" onclick="changeFuelDay(1)">›</button></div>${(()=>{const o=dayOdometer(fuelSelected),km=kilometersForDay(fuelSelected),dayTotal=fact(fuelSelected);return `<div class="odometer-box"><div class="section-title" style="font-size:14px;margin:0">🚘 Odómetro de jornada (opcional)</div><div class="odo-fields"><div><label for="odoStart">Inicio (km)</label><input id="odoStart" type="number" min="0" step="1" inputmode="numeric" placeholder="Km inicial" value="${o.start!==''?o.start:''}"></div><div><label for="odoEnd">Final (km)</label><input id="odoEnd" type="number" min="0" step="1" inputmode="numeric" placeholder="Km final" value="${o.end!==''?o.end:''}"></div></div><button class="action" style="width:100%;margin-top:8px" onclick="saveOdometer('${fuelSelected}')">Guardar kilómetros</button><div class="odometer-result"><div class="odo-line"><span>Kilómetros recorridos</span><b>${km===null?'—':km+' km'}</b></div><div class="odo-line"><span>Facturación por km</span><b>${km>0?euro(dayTotal/km)+'/km':'—'}</b></div></div></div>`})()}<div class="row"><input type="number" step="0.01" id="fuel" value="" placeholder="Añadir importe €" inputmode="decimal" onfocus="this.select()"><button class="action" onclick="saveFuel()">Añadir gasolina</button></div><button class="action fuel-summary-btn" style="width:100%;margin-top:10px" onclick="toggleFuelSummary()">${fuelSummaryOpen?'▲ Ocultar resumen':'📋 Ver resumen de gasolina'}</button>${fuelSummaryOpen?`<div class="fuel-summary" style="margin-top:12px"><div class="note">Acumulado del día: <b>${euro(db.fuel[fuelSelected]||0)}</b> · El resumen se organiza por meses.</div><div style="margin-top:12px"><b>Cargas de ${fmtDate(fuelSelected)}</b>${fuelEntriesHtml(fuelSelected)}</div>${fuelMonthSummaryHtml()}</div>`:''}</div>`:''}</div>` }
+function saveHoursManual(){let st=document.querySelector('#start').value,en=document.querySelector('#end').value;if(!st||!en||st==='00:00'&&en==='00:00'){alert('Introduce la hora de inicio y finalización del tramo.');return}if(st===en){alert('La hora de inicio y finalización no pueden ser iguales.');return}let a=new Date(selectedDay+'T'+st+':00'),b=new Date(selectedDay+'T'+en+':00');if(b<a)b.setDate(b.getDate()+1);if(editingHourId!==null){const h=(db.hours||[]).find(x=>String(x.id)===String(editingHourId));if(h){db.hours=db.hours.filter(x=>String(x.id)!==String(editingHourId));const rec={...h,date:selectedDay,start:a.toISOString(),end:b.toISOString(),manual:true};db.hours.push(...splitHourRecordByCalendarDay(rec));}editingHourId=null;}else{const rec={id:'hour_manual_'+Date.now()+'_'+Math.random().toString(36).slice(2),date:selectedDay,app:currentWorkApp(),start:a.toISOString(),end:b.toISOString(),manual:true};db.hours.push(...splitHourRecordByCalendarDay(rec));}save();renderControl()}
 function saveFuel(){const v=Number(String(document.querySelector('#fuel').value||'').replace(',','.'))||0;if(v<=0)return;ensureFuelEntries();db.fuelEntries[fuelSelected]=fuelEntriesForDay(fuelSelected);db.fuelEntries[fuelSelected].push({id:Date.now()+Math.random(),amount:Number(v.toFixed(2))});recalcFuelDay(fuelSelected);save();renderControl()}
-function weekTable(mon){let rows='';for(let i=0;i<7;i++){let x=new Date(mon);x.setDate(mon.getDate()+i);let k=dateKey(x),t=totalMinutesForDay(k),p=priorityMinutesForDay(k);rows+=`<tr><td>${fmtDate(k)}</td><td>${hoursText(p)}</td><td>${hoursText(Math.max(0,t-p))}</td><td>${hoursText(t)}</td></tr>`}return `<table><tr><th>Día</th><th>Prior.</th><th>No prior.</th><th>Total</th></tr>${rows}</table>`}
+function weekTable(mon){let rows='';for(let i=0;i<7;i++){let x=new Date(mon);x.setDate(mon.getDate()+i);let k=dateKey(x),t=boltMinutesForDay(k),p=priorityMinutesForDay(k),all=totalMinutesForDay(k);rows+=`<tr><td>${fmtDate(k)}</td><td>${hoursText(p)}</td><td>${hoursText(Math.max(0,t-p))}</td><td>${hoursText(t)}</td><td>${hoursText(all)}</td></tr>`}return `<table><tr><th>Día</th><th>Prior.</th><th>No prior.</th><th>${prioName()}</th><th>Todas</th></tr>${rows}</table>`}
 function billingDay(k){
   let ts=dayTrips(k), auto={Bolt:0,Uber:0,Cabify:0,Privados:0},tipsByPlatform={Bolt:0,Uber:0,Cabify:0,Privados:0};
   ts.forEach(t=>{auto[t.platform]=(auto[t.platform]||0)+(Number(t.net)||0);tipsByPlatform[t.platform]=(tipsByPlatform[t.platform]||0)+Math.max(0,Number(t.tip)||0)});
@@ -3678,7 +3780,7 @@ const defaults=()=>({on:true,mode:'auto',comm:25,peakApplies:false,round5:true,f
   short:{km:6,from:1.2,lo:0,hi:2.5},airOn:true,airFee:2.57,airFlatKm:11,holidaysWe:true,holidays:HOLS(),slots:slotsM(),slotsH:slotsHi(),
   cards:{lv:CARD(2.02,0.79,0.13,6.30),lp:CARD(3.03,0.80,0.16,8.85),mv:CARD(2.10,0.77,0.15,6.75),mp:CARD(2.68,0.84,0.20,7.65),
          hv:CARD(2.39,0.85,0.16,6.70),hp:CARD(3.56,0.91,0.21,8.35),av:CARD(2.89,0.82,0.15,13.50),ap:CARD(2.89,0.82,0.15,13.50)},
-  zone:{zones:[]}});
+  zone:{zones:[],postal:{h:'28023 28033 28034 28035 28042 28043 28049 28050 28055 28100 28108 28109 28220 28221 28222 28223 28224 28230 28231 28232 28250 28701 28702 28703 28760 28761 28762'.split(' '),m:'28001 28002 28003 28004 28005 28006 28007 28008 28009 28010 28012 28013 28014 28015 28016 28020 28028 28029 28036 28039 28045'.split(' '),l:'28022 28037 28801 28802 28803 28804 28805 28806 28807 28821 28822 28823 28830 28850 28018 28019 28021 28025 28026 28030 28031 28032 28038 28041 28044 28047 28054 28901 28902 28903 28904 28905 28906 28907 28911 28912 28913 28914 28915 28916 28917 28918 28919 28921 28922 28923 28924 28925 28931 28932 28933 28934 28935 28936 28937 28938 28940 28941 28942 28943 28944 28945 28946 28947 28980 28981 28982 28983 28984 28300 28311 28312 28320 28341 28342 28343'.split(' ')}}});
 P.boltDefaults=defaults;
 const clone=o=>JSON.parse(JSON.stringify(o));
 const isN=v=>typeof v==='number'&&Number.isFinite(v);
@@ -3697,6 +3799,9 @@ function normZone(o,d){const z=clone(d);if(!isObj(o))return z;
         const lat=rng(p[0],999,-90,90),lon=rng(p[1],999,-180,180);if(lat===999||lon===999)continue;pts.push([lat,lon])}
       if(pts.length>=3)l.push({n:areaName(a.n),k:kindKey(a.k,'h'),pts})}
     z.zones=l}
+  /*v320-cp*/
+  if(isObj(o.postal)){const pl=(v,dd)=>{if(!Array.isArray(v))return dd;const r=[];for(const x of v){if(typeof x!=='string')continue;const s=x.trim();if(/^\d{5}$/.test(s)&&r.indexOf(s)<0&&r.length<400)r.push(s)}return r};
+    z.postal={h:pl(o.postal.h,z.postal.h),m:pl(o.postal.m,z.postal.m),l:pl(o.postal.l,z.postal.l)}}
   return z}
 /* franjas de hora punta {on,d,a,b}: d = días (bit 0 lunes … bit 6 domingo), a = desde y b = hasta (minutos del día); las de la v3.15g (from/to) no valen y vuelven a las de fábrica */
 function normSlots(o,d){if(!Array.isArray(o))return d;const l=[];
@@ -3839,6 +3944,21 @@ P.boltState=B;
 function mirrorToDb(cfgJson){
   try{db.settings.boltCfg=cfgJson;db.settings.boltVoice=B.voice;db.settings.boltVol=B.vol}catch(e){}
 }
+/*v319-m30*/
+/* v3.19 · la zona «M-30 (aprox.)» (todo lo de dentro de la M-30 = zona media) viene ya dibujada, UNA sola vez. Se puede editar o borrar como cualquier otra y no vuelve a salir. */
+const M30_NAME='M-30 (aprox.)';
+const M30_PTS=[[40.4870,-3.6900],[40.4850,-3.6780],[40.4780,-3.6700],[40.4680,-3.6640],[40.4560,-3.6580],[40.4450,-3.6520],[40.4340,-3.6480],[40.4240,-3.6480],[40.4150,-3.6540],[40.4060,-3.6620],[40.3990,-3.6700],[40.3940,-3.6790],[40.3880,-3.6890],[40.3860,-3.6990],[40.3870,-3.7080],[40.3930,-3.7160],[40.4020,-3.7215],[40.4120,-3.7225],[40.4220,-3.7235],[40.4320,-3.7250],[40.4420,-3.7290],[40.4520,-3.7310],[40.4610,-3.7280],[40.4690,-3.7190],[40.4760,-3.7110],[40.4820,-3.7020]];
+function m30Done(){let d=false;try{d=localStorage.getItem('pdc_m30')==='1'}catch(e){}try{if(db&&db.settings&&db.settings.m30Seeded)d=true}catch(e){}return d}
+function m30Mark(){try{localStorage.setItem('pdc_m30','1')}catch(e){}try{db.settings.m30Seeded=true;P.saveNow()}catch(e){}}
+function seedM30(){
+  try{
+    if(m30Done())return false;
+    const z=B.cfg&&B.cfg.zone&&B.cfg.zone.zones;if(!Array.isArray(z))return false;
+    if(z.some(a=>a&&a.n===M30_NAME)||z.length>=MAXZ){m30Mark();return false}
+    z.unshift({n:M30_NAME,k:'m',pts:M30_PTS.map(p=>[p[0],p[1]])});
+    return true;
+  }catch(e){return false}
+}
 async function load(guard){
   const sr=SR();B.native=!!sr;let d=null;
   if(sr){try{d=await sr.getBolt()}catch(e){d=null}}
@@ -3861,9 +3981,13 @@ async function load(guard){
     B.weekendNow=isWeekend(B.cfg,new Date());
   }
   B.sim.c.zone=B.sim.d.zone=B.sim.a.zone=String(kindOfKey(B.cfg.zoneDef==='high'?'h':B.cfg.zoneDef==='low'?'l':'m'));
-  B.loaded=true;B.base=snap();return true;
+  const m30=seedM30();
+  B.loaded=true;B.base=snap();
+  if(m30)setTimeout(()=>{try{persist().then(m30Mark).catch(()=>{})}catch(e){}},0);
+  return true;
 }
 P.boltLoad=load;
+setTimeout(()=>{try{load(true).catch(()=>{})}catch(e){}},3500);
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 async function persist(){
   const sent=clone(B.cfg),json=JSON.stringify(sent);let back=sent;
@@ -4064,6 +4188,18 @@ function zonesHtml(){
      +'<span class="bz-zc" id="'+id('c')+'">'+a.pts.length+' puntos</span><button type="button" class="secondary" id="'+id('ed')+'" onclick="boltMapEdit('+i+')">✏️ Mapa</button>'
      +'<button type="button" class="secondary bz-adel" id="'+id('del')+'" onclick="boltZoneDel('+i+')" aria-label="Borrar la zona">🗑</button></div></div>'}).join('');
 }
+/* v3.20 · códigos postales de la recogida: tres listas (alta, media, baja) */
+function postalParse(txt){const ok=[],bad=[];for(const t of String(txt==null?'':txt).split(/[\s,;]+/)){if(!t)continue;if(/^\d{5}$/.test(t)){if(ok.indexOf(t)<0)ok.push(t)}else bad.push(t)}return {ok,bad}}
+function postalBox(k,label){const l=B.cfg.zone.postal[k];
+  return '<label class="bz-f bz-w"><span>'+label+' · <b id="bz_cp_n_'+k+'">'+l.length+'</b> códigos</span><textarea id="bz_cp_'+k+'" rows="2" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="numeric" oninput="boltPostal(\''+k+'\',this)">'+esc(l.join(' '))+'</textarea></label>'}
+function postalMsg(){
+  const out=[],seen={};
+  for(const k of ['h','m','l']){const el=document.getElementById('bz_cp_'+k);if(!el)continue;const r=postalParse(el.value);
+    if(r.bad.length)out.push('No vale: '+r.bad.slice(0,5).join(', ')+(r.bad.length>5?'…':'')+' (tienen que ser 5 cifras; se ignoran).');
+    for(const c of r.ok){if(seen[c]&&seen[c]!==k)out.push('El '+c+' está en dos listas: manda la más alta.');seen[c]=seen[c]||k}}
+  const m=document.getElementById('bz_cp_msg');if(m)m.textContent=Array.from(new Set(out)).slice(0,4).join(' ');
+}
+window.boltPostal=function(k,el){if(!B.cfg.zone.postal||!(k in B.cfg.zone.postal))return;const r=postalParse(el.value);B.cfg.zone.postal[k]=r.ok.slice(0,400);const n=document.getElementById('bz_cp_n_'+k);if(n)n.textContent=r.ok.length;postalMsg();refreshDerived()};
 function zoneLastTxt(js){
   let o=null;try{o=js?JSON.parse(js):null}catch(e){}
   if(!o||!isN(o.t))return '';
@@ -4083,7 +4219,11 @@ function pZones(){
    +'<button type="button" class="secondary" id="bz_z_where" onclick="boltWhere()">📍 Probar ubicación</button>'
    +'<button type="button" class="secondary" id="bz_z_clear" onclick="boltReset(\'areas\')">🗑 Quitar todas las zonas</button></div>'
    +'<div class="bz-out" id="bz_z_loc">'+esc(zoneLastTxt(B.zoneLast)||'Pulsa «Probar ubicación» para ver en qué zona cree la app que estás.')+'</div>'
-   +'<div class="bz-hint">Si el móvil no da la ubicación (sin permiso o sin datos recientes), se usa la zona por defecto y el aviso lo dice.</div>';
+   +'<div class="bz-hint">Si el móvil no da la ubicación (sin permiso o sin datos recientes), se usa la zona por defecto y el aviso lo dice.</div>'
+   +'<b class="bz-sub">Códigos postales de la recogida</b>'
+   +'<small>Si la tarjeta de Bolt trae el código postal de la recogida (por ejemplo «Madrid 28001») y está en una de estas listas, esa zona manda sobre el GPS. Si no sale o no está en ninguna lista, se usa el GPS y tus zonas como siempre (la zona forzada de arriba manda sobre todo). Escribe los códigos separados por espacios o comas.</small>'
+   +postalBox('h','Zona alta')+postalBox('m','Zona media')+postalBox('l','Zona baja')
+   +'<div class="bz-hint" id="bz_cp_msg"></div>';
 }
 const forceTxt=()=>B.cfg.zoneForce==='auto'?'La zona se decide por tu ubicación y tus zonas dibujadas.':'⚠ Zona forzada: todas las ofertas se calculan como zona '+ZN[ZW.indexOf(B.cfg.zoneForce)]+' hasta que vuelvas a «Automática». No es solo para un viaje.';
 window.boltZoneName=function(i,el){const a=B.cfg.zone.zones[i];if(!a)return;a.n=areaName(el.value);if(P.zmap&&P.zmap.open)P.zmap.redraw()};
@@ -5507,6 +5647,16 @@ document.addEventListener('visibilitychange',function(){if(document.visibilitySt
 })();
 </script>
 <!--v316-end-->
+<style id="v318-style">
+.appblk{margin:14px 0 6px!important;font:800 13px system-ui,sans-serif!important;letter-spacing:.3px!important;color:#cfe6ff!important}
+.appsw{margin:12px 0 4px!important}
+.appsw>small{display:block!important;color:#9fb4c8!important;font-weight:700!important;margin-bottom:5px!important}
+.appsw .sg{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important}
+.appsw button{padding:12px 8px!important;border-radius:14px!important;border:1px solid #299dff66!important;background:#08243b!important;color:#eaf6ff!important;font-weight:800!important;font-size:15px!important}
+.appsw button.on{background:#0f9d55!important;border-color:#12e875!important;color:#fff!important}
+.appsw button.on.o{background:#1877f2!important;border-color:#7fb8ff!important}
+.metric>small+b+small{display:block!important;margin-top:2px!important;color:#9fb4c8!important}
+</style>
 <style id="v315-style">
 /* ===================== v3.14 ===================== */
 /* --- botón Cancelaciones junto a Aeropuerto --- */

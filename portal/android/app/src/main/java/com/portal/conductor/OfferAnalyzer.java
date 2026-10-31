@@ -15,6 +15,7 @@ public class OfferAnalyzer {
         public double minHour = 15, minKm = 1.0, maxPickup = 5.0, commission = 0, tolPct = 15, tolPickup = 1.0;
         public boolean includePickup = true;
         public BoltCfg bolt = new BoltCfg();     // estimacion de Bolt cuando la oferta no trae precio
+        public long nowMs = 0;                   // v3.20-cp: hora (ms) para decidir la punta de la zona por codigo postal; 0 = ahora
         public boolean weekendNow = false;       // v3.15h: \u00abahora es hora punta\u00bb para la zona actual (lo decide quien llama con isWeekend)
     }
 
@@ -138,11 +139,26 @@ public class OfferAnalyzer {
     /** Las zonas dibujadas. Fuera de todas ellas vale la zona por defecto de Ajustes (media de fabrica). */
     public static class Zone {
         public List<Area> good = new ArrayList<Area>();   // sin zonas al principio
+        // v3.20-cp: codigos postales de la RECOGIDA por tipo de zona. De fabrica (lista del conductor): alta = norte y noroeste; media = dentro de la M-30; baja = este y sur
+        public List<String> postH = new ArrayList<String>(java.util.Arrays.asList("28023 28033 28034 28035 28042 28043 28049 28050 28055 28100 28108 28109 28220 28221 28222 28223 28224 28230 28231 28232 28250 28701 28702 28703 28760 28761 28762".split(" ")));
+        public List<String> postM = new ArrayList<String>(java.util.Arrays.asList("28001 28002 28003 28004 28005 28006 28007 28008 28009 28010 28012 28013 28014 28015 28016 28020 28028 28029 28036 28039 28045".split(" ")));
+        public List<String> postL = new ArrayList<String>(java.util.Arrays.asList("28022 28037 28801 28802 28803 28804 28805 28806 28807 28821 28822 28823 28830 28850 28018 28019 28021 28025 28026 28030 28031 28032 28038 28041 28044 28047 28054 28901 28902 28903 28904 28905 28906 28907 28911 28912 28913 28914 28915 28916 28917 28918 28919 28921 28922 28923 28924 28925 28931 28932 28933 28934 28935 28936 28937 28938 28940 28941 28942 28943 28944 28945 28946 28947 28980 28981 28982 28983 28984 28300 28311 28312 28320 28341 28342 28343".split(" ")));
         public Zone copy() {
             Zone z = new Zone();
             z.good = new ArrayList<Area>();
             for (Area a : good) z.good.add(a.copy());
+            z.postH = new ArrayList<String>(postH);
+            z.postM = new ArrayList<String>(postM);
+            z.postL = new ArrayList<String>(postL);
             return z;
+        }
+        /** Tipo de zona de un codigo postal (Z_HIGH, Z_MID o Z_LOW), o -1 si no esta en ninguna lista; si esta en varias manda la alta, luego la media y luego la baja. */
+        public int postalKind(String cp) {
+            if (cp == null) return -1;
+            if (postH != null && postH.contains(cp)) return Z_HIGH;
+            if (postM != null && postM.contains(cp)) return Z_MID;
+            if (postL != null && postL.contains(cp)) return Z_LOW;
+            return -1;
         }
     }
 
@@ -168,6 +184,20 @@ public class OfferAnalyzer {
     public static String goodAreaAt(Zone z, double lat, double lon) {
         Area a = areaAt(z, lat, lon);
         return a == null ? null : a.name;
+    }
+
+    private static final Pattern POSTAL = Pattern.compile("(?<![\\d.,])(28\\d{3})(?!\\d|[.,]\\d)");
+
+    /** Codigo postal (28xxx) de la direccion de RECOGIDA: el del texto mas cercano ANTES del bloque km/min del viaje con pasajero (en la tarjeta la recogida va antes que el destino). null si no hay o no se sabe cual es el viaje. */
+    public static String pickupPostal(List<String> nodes, int tripFirst) {
+        if (nodes == null || tripFirst <= 0) return null;
+        for (int i = Math.min(tripFirst, nodes.size()) - 1; i >= 0; i--) {
+            String s = nodes.get(i);
+            if (s == null) continue;
+            Matcher m = POSTAL.matcher(s);
+            if (m.find()) return m.group(1);
+        }
+        return null;
     }
 
     public static class BoltCfg {
@@ -388,6 +418,8 @@ public class OfferAnalyzer {
     private static final Pattern EUR1 = Pattern.compile("(\\d{1,3}(?:\\.\\d{3})+,\\d{2}|\\d{1,4}[.,]\\d{1,2})\\s*(?:\u20AC|eur\\b)", Pattern.CASE_INSENSITIVE);
     private static final Pattern EUR2 = Pattern.compile("\u20AC\\s*(\\d{1,3}(?:\\.\\d{3})+,\\d{2}|\\d{1,4}[.,]\\d{1,2})", Pattern.CASE_INSENSITIVE);
     private static final Pattern KM = Pattern.compile("(\\d+(?:[.,]\\d+)?)\\s*km\\b", Pattern.CASE_INSENSITIVE);
+    // «A 46 min del destino» / «A 12 km de tu destino»: distancia hasta TU destino (filtro de destino de Uber). No es un dato del viaje.
+    private static final Pattern DEST_CHIP = Pattern.compile("^a\\s+\\d[\\d.,]*\\s*(?:min\\w*|km|kilometros?|h\\w*)\\b.*\\bdestino\\b");
     private static final Pattern MET = Pattern.compile("(?<![\\d.,])(\\d{2,4})\\s*m(?![a-zA-Z])");
     private static final Pattern MIN = Pattern.compile("(?:(\\d+)\\s*h(?:ora)?s?\\s*)?(\\d+)\\s*min", Pattern.CASE_INSENSITIVE);
     private static final Pattern HOURS = Pattern.compile("(?<![\\d.,])(\\d+)\\s*h(?:ora)?s?\\b(?!\\s*\\d+\\s*min)", Pattern.CASE_INSENSITIVE);
@@ -478,7 +510,7 @@ public class OfferAnalyzer {
     /** isBolt: la oferta viene de Bolt (paquete bolt/mtakso). Solo en ese caso, y sin precio visible, se estima el precio. */
     public static Result analyze(List<String> rawNodes, Params p, boolean lenient, boolean isBolt) {
         List<String> nodes = new ArrayList<String>();
-        for (String x : rawNodes) for (String line : clean(x).split("\\n")) if (line.trim().length() > 0) nodes.add(line.trim());
+        for (String x : rawNodes) for (String line : clean(x).split("\\n")) if (line.trim().length() > 0 && !DEST_CHIP.matcher(norm(line).trim()).find()) nodes.add(line.trim());
         Result r = new Result();
         // ---- precio: primer importe en euros razonable (sin contar los importes de peaje)
         List<String> priceNodes = withoutTolls(nodes);
@@ -569,11 +601,24 @@ public class OfferAnalyzer {
             boolean tripSure = !(r.orderAssumed && pick == null);   // un unico bloque sin etiqueta no se da por viaje
             if (tripSure && r.tripKm > 0 && r.tripMin > 0) {
                 double om = detectDemand(nodes);
-                Est e = estimate(p.bolt, p.weekendNow, r.tripKm, r.tripMin, om, detectAirport(nodes));
+                // v3.20-cp: si la tarjeta trae el codigo postal de la RECOGIDA y esta en las listas de Ajustes, manda sobre el GPS (salvo zona forzada)
+                int zk0 = p.bolt.zoneKind; String zn0 = p.bolt.zoneName, zs0 = p.bolt.zoneSrc; boolean peakZ = p.weekendNow;
+                try {
+                    if (p.bolt.zoneForce == null || "auto".equals(p.bolt.zoneForce)) {
+                        String cpZ = trip == null ? null : pickupPostal(nodes, trip.first);
+                        int kz = cpZ == null || p.bolt.zone == null ? -1 : p.bolt.zone.postalKind(cpZ);
+                        if (kz >= 0) {
+                            p.bolt.zoneKind = kz; p.bolt.zoneName = "c\u00F3digo postal " + cpZ; p.bolt.zoneSrc = "postal";
+                            if (kz != zk0) { java.util.Calendar calZ = java.util.Calendar.getInstance(); if (p.nowMs > 0) calZ.setTimeInMillis(p.nowMs); peakZ = isPeak(p.bolt, kz, calZ); }
+                        }
+                    }
+                } catch (Exception ex) { p.bolt.zoneKind = zk0; p.bolt.zoneName = zn0; p.bolt.zoneSrc = zs0; peakZ = p.weekendNow; }
+                Est e = estimate(p.bolt, peakZ, r.tripKm, r.tripMin, om, detectAirport(nodes));
                 r.estimated = true; r.estGross = e.gross; r.estComm = e.comm; r.estNet = e.net; r.estMult = e.mult;
                 r.estOfferMult = om;
                 r.estAirport = e.airport; r.estFee = e.fee;
                 r.estZone = e.zone; r.estArea = p.bolt.zoneName; r.estZoneSrc = p.bolt.zoneSrc;
+                p.bolt.zoneKind = zk0; p.bolt.zoneName = zn0; p.bolt.zoneSrc = zs0;
                 r.estRange = e.range; r.estNetLo = e.range ? e.netLo : -1; r.estNetHi = e.range ? e.netHi : -1;
                 r.estAlt = e.alt; r.estPeakUsed = e.peakUsed; r.estFine = e.fine;
                 r.estMinApplied = e.minApplied; r.estWeekend = e.weekend; r.estCommPct = Math.max(0, Math.min(90, p.bolt.comm));

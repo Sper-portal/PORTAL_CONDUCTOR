@@ -861,7 +861,7 @@ public class ScreenReaderService extends AccessibilityService {
     static String zoneLine(OfferAnalyzer.Result r) {
         String z = "Zona " + OfferAnalyzer.zoneName(r.estZone);
         if ("forced".equals(r.estZoneSrc)) return z + " (forzada en Ajustes)";
-        if ("area".equals(r.estZoneSrc)) return z + (r.estArea != null && r.estArea.length() > 0 ? " (" + r.estArea + ")" : "");
+        if ("area".equals(r.estZoneSrc) || "postal".equals(r.estZoneSrc)) return z + (r.estArea != null && r.estArea.length() > 0 ? " (" + r.estArea + ")" : "");
         String w = ZoneLocator.why();
         return z + " (" + (w.length() > 0 ? w + " \u2192 zona por defecto" : "fuera de tus zonas dibujadas") + ")";
     }

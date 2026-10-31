@@ -161,7 +161,25 @@ public class BoltConfig {
             }
             z.good = l;
         }
+        Map<String, Object> pm = map(m.get("postal"));
+        if (pm != null) {
+            z.postH = postalList(pm.get("h"), z.postH);
+            z.postM = postalList(pm.get("m"), z.postM);
+            z.postL = postalList(pm.get("l"), z.postL);
+        }
         return z;
+    }
+
+    /** Lista de codigos postales: solo de cinco cifras, sin repetir y hasta 400; si no es una lista se queda la que habia. */
+    private static List<String> postalList(Object o, List<String> def) {
+        if (!(o instanceof List)) return def;
+        List<String> l = new ArrayList<String>();
+        for (Object x : (List<?>) o) {
+            if (!(x instanceof String)) continue;
+            String s = ((String) x).trim();
+            if (s.matches("\\d{5}") && !l.contains(s) && l.size() < 400) l.add(s);
+        }
+        return l;
     }
 
     private static final int MAX_ZONES = 40, MAX_PTS = 200, MAX_SLOTS = 30;
@@ -275,7 +293,25 @@ public class BoltConfig {
             b.append("]}");
             first = false;
         }
-        return b.append("]}").toString();
+        b.append("],\"postal\":{\"h\":");
+        postalJson(b, z.postH);
+        b.append(",\"m\":");
+        postalJson(b, z.postM);
+        b.append(",\"l\":");
+        postalJson(b, z.postL);
+        return b.append("}}").toString();
+    }
+
+    private static void postalJson(StringBuilder b, List<String> l) {
+        b.append('[');
+        boolean first = true;
+        if (l != null) for (String s : l) {
+            if (s == null || !s.matches("\\d{5}")) continue;
+            if (!first) b.append(',');
+            b.append('"').append(s).append('"');
+            first = false;
+        }
+        b.append(']');
     }
 
     private static void slotsJson(StringBuilder b, List<OfferAnalyzer.Slot> l) {
