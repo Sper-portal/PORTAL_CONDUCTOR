@@ -2225,7 +2225,7 @@ function renderSendSupport(){jPanel('Pregúntale a Jenny','helpBack()','<div cla
 function renderWriteQuestion(){jPanel('Escribir mi pregunta','renderSendSupport()','<div class="help-hero"><h2>¿Qué necesitas?</h2><p>Escríbelo como lo dirías hablando. Por ejemplo: «se me olvidó iniciar la jornada» o «cómo apunto una propina».</p></div><textarea id="autoQuery" rows="6" placeholder="Escribe aquí tu pregunta…" style="width:100%;margin-top:6px;border-radius:14px;padding:12px;box-sizing:border-box"></textarea><button class="action" style="width:100%;margin-top:10px" onclick="answerUserQuery()">😊 Preguntar a Jenny</button>')}
 function renderAutoHelp(){jPanel('Preguntas rápidas','renderSendSupport()','<div class="subpage-list">'+['viajes','freenow','aeropuerto','compensaciones','pago','corregir','jornada','gasolina','km','lector','pdf','tema','nocuadra'].map(id=>{const e=jEntry(id);return jRow(e[1],e[2],'','showAutoAnswer(\''+id+'\')')}).join('')+'</div>')}
 function renderFaq(){jPanel('Preguntas frecuentes','helpBack()','<div class="subpage-list">'+J_KB.filter(e=>e[0]!=='contacto').map(e=>'<details class="subpage-row" style="display:block"><summary style="cursor:pointer;list-style:none"><span class="sicon" style="display:inline-grid;margin-right:8px">'+e[1]+'</span><b>'+e[2]+'</b></summary><small style="display:block;color:#64748b;margin:8px 0 2px;line-height:1.45">'+e[4]+'</small></details>').join('')+'</div>')}
-function renderHelpCarga(){const S=[['🧮','Calculadora','Escribe el importe y pulsa la plataforma (Bolt, Uber, Cabify, Privados, Free Now o Pide Taxi). Para aeropuerto, usa el botón verde de Aeropuerto. Si te cancelan un viaje, pulsa Cancelaciones, elige la app y escribe el importe. Con «Importe automático» la app lee el precio de la otra ventana. Elige tarjeta o efectivo cuando te lo pregunte. En Últimos viajes puedes añadir propina (🎁), editar (✏️) o borrar (🗑) cada viaje.'],['🧾','Facturación','Diario, Semanal y Mensual, con totales por plataforma y facturación manual. Las cancelaciones se suman al día y a la app que elijas; en Semanal, las compensaciones sueltas y la nómina.'],['◉','Control','Iniciar y finalizar jornada, corregir horas de días anteriores, apuntar gasolina y kilómetros (con GPS automático o a mano). Aquí eliges tu aplicación prioritaria (Bolt, Uber, Cabify, Free Now o Pide Taxi).'],['📍','GPS y lector de pantalla','El odómetro GPS cuenta los kilómetros con la jornada iniciada. El lector y la burbuja necesitan activar Portal Lector en Accesibilidad de Android.'],['📊','Informe','Elige el periodo, genera el informe y compártelo en PDF o imagen.'],['⚙️','Ajustes','Tema (claro, oscuro o automático), comisión, tasa de aeropuerto, objetivos, horarios prioritarios, burbuja, GPS, copia de seguridad y Rentabilidad de viajes (aviso de si compensa cada oferta).'],['🌤️','Madrid hoy','En el menú de las tres rayitas: el tiempo y los eventos del día (Ticketmaster e IFEMA) para saber dónde puede haber más movimiento.'],['👤','Cuenta','Inicia sesión para guardar tus datos en la nube y recuperarlos si cambias de móvil.']];jPanel('Ayuda con cargar datos','helpBack()','<div class="help-hero"><h2>Dónde se carga cada cosa</h2><p>Un repaso rápido por pantallas. Si te queda alguna duda, pregúntale a Jenny.</p></div><div class="subpage-list">'+S.map(s=>'<div class="subpage-row"><span class="sicon">'+s[0]+'</span><div><b>'+s[1]+'</b><small style="display:block;color:#64748b;margin-top:3px;line-height:1.45">'+s[2]+'</small></div></div>').join('')+'</div>')}
+function renderHelpCarga(){const S=[['🧮','Calculadora','Escribe el importe y pulsa la plataforma (Bolt, Uber, Cabify, Privados, Free Now o Pide Taxi). Para aeropuerto, usa el botón verde de Aeropuerto. Si te cancelan un viaje, pulsa Cancelaciones, elige la app y escribe el importe. Con «Importe automático» la app lee el precio de la otra ventana. Elige tarjeta o efectivo cuando te lo pregunte. En Últimos viajes puedes añadir propina (🎁), editar (✏️) o borrar (🗑) cada viaje.'],['🧾','Facturación','Diario, Semanal y Mensual, con totales por plataforma y facturación manual. Las cancelaciones se suman al día y a la app que elijas; en Semanal, las compensaciones sueltas y la nómina. En Mensual, cada mes cerrado tiene un botón para cambiar su nómina con los ajustes de ahora (porcentaje, mínimo, propinas).'],['◉','Control','Iniciar y finalizar jornada, corregir horas de días anteriores, apuntar gasolina y kilómetros (con GPS automático o a mano). Aquí eliges tu aplicación prioritaria (Bolt, Uber, Cabify, Free Now o Pide Taxi).'],['📍','GPS y lector de pantalla','El odómetro GPS cuenta los kilómetros con la jornada iniciada. El lector y la burbuja necesitan activar Portal Lector en Accesibilidad de Android.'],['📊','Informe','Elige el periodo, genera el informe y compártelo en PDF o imagen.'],['⚙️','Ajustes','Tema (claro, oscuro o automático), comisión, tasa de aeropuerto, objetivos, horarios prioritarios, burbuja, GPS, copia de seguridad y Rentabilidad de viajes (aviso de si compensa cada oferta).'],['🌤️','Madrid hoy','En el menú de las tres rayitas: el tiempo y los eventos del día (Ticketmaster e IFEMA) para saber dónde puede haber más movimiento.'],['👤','Cuenta','Inicia sesión para guardar tus datos en la nube y recuperarlos si cambias de móvil.']];jPanel('Ayuda con cargar datos','helpBack()','<div class="help-hero"><h2>Dónde se carga cada cosa</h2><p>Un repaso rápido por pantallas. Si te queda alguna duda, pregúntale a Jenny.</p></div><div class="subpage-list">'+S.map(s=>'<div class="subpage-row"><span class="sicon">'+s[0]+'</span><div><b>'+s[1]+'</b><small style="display:block;color:#64748b;margin-top:3px;line-height:1.45">'+s[2]+'</small></div></div>').join('')+'</div>')}
 /* PDF e imagen del informe */
 function reportCanvas(light){const out=document.querySelector('#reportOut');if(!out||!out.dataset.ready){alert('Primero genera el informe.');return null}const clean=x=>String(x||'').replace(/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/gu,'').replace(/\s+/g,' ').trim();const period=clean((out.querySelector('.metric b')||{}).innerText),plats=[...out.querySelectorAll('.platform-summary .ps')].map(e=>[clean(e.childNodes[0].textContent),clean((e.querySelector('b')||{}).innerText)]),rows=[...out.querySelectorAll('table tr')].map(tr=>[...tr.children].map(c=>clean(c.innerText))).filter(r=>r.length>=2&&r[0]);const W=1080,P=56,RH=84,H=260+(plats.length?190*Math.ceil(plats.length/3):0)+rows.length*RH+150,cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d'),C=light?{bg:'#ffffff',row:'#f1f5f9',txt:'#0f172a',mut:'#475569',acc:'#1d4ed8'}:{bg:'#07111f',row:'#0e2038',txt:'#ffffff',mut:'#9fb4c8',acc:'#5fe6ff'};g.fillStyle=C.bg;g.fillRect(0,0,W,H);const hg=g.createLinearGradient(0,0,W,0);hg.addColorStop(0,'#0a3d9c');hg.addColorStop(1,'#0b6fd6');g.fillStyle=hg;g.fillRect(0,0,W,210);g.fillStyle='#fff';g.font='bold 54px sans-serif';g.textBaseline='alphabetic';g.fillText('Super Portal del Conductor',P,92);g.font='36px sans-serif';g.fillStyle='#dff3ff';g.fillText('Informe · '+period,P,152);let y=250;const fit=(t,mx,font)=>{g.font=font;while(g.measureText(t).width>mx&&t.length>3)t=t.slice(0,-2);return t};if(plats.length){const per=3,cw=(W-2*P-(per-1)*16)/per,col={Bolt:'#00b85c',Uber:'#1f2937',Cabify:'#7c3aed',Privados:'#2563eb','Free Now':'#d6046f','Pide Taxi':'#ffbf00'};plats.forEach((p,i)=>{const x=P+(i%per)*(cw+16),yy=y+Math.floor(i/per)*190;g.fillStyle=col[p[0]]||'#2563eb';g.beginPath();g.roundRect?g.roundRect(x,yy,cw,150,22):g.rect(x,yy,cw,150);g.fill();g.fillStyle=p[0]==='Pide Taxi'?'#2b2100':'#fff';g.font='bold 30px sans-serif';g.textAlign='center';g.fillText(p[0],x+cw/2,yy+54);g.font='bold 40px sans-serif';g.fillText(fit(p[1],cw-16,'bold 40px sans-serif'),x+cw/2,yy+114);g.textAlign='left'});y+=190*Math.ceil(plats.length/per)}rows.forEach((r,i)=>{if(i%2===0){g.fillStyle=C.row;g.fillRect(P-16,y,W-2*P+32,RH-6)}g.fillStyle=C.mut;g.textAlign='left';g.fillText(fit(r[0],W-2*P-300,'30px sans-serif'),P,y+52);g.fillStyle=C.txt;g.textAlign='right';g.font='bold 34px sans-serif';g.fillText(r[r.length-1],W-P,y+52);g.textAlign='left';y+=RH});g.fillStyle=C.mut;g.font='26px sans-serif';g.fillText('Generado el '+new Date().toLocaleDateString('es-ES')+' · Portal del Conductor',P,H-56);return cv}
 function jpegToPdf(jb,w,h){const pw=595,ph=Math.round(595*h/w),enc=new TextEncoder(),parts=[],offs=[];let off=0;const push=x=>{const b=typeof x==='string'?enc.encode(x):x;parts.push(b);off+=b.length};push('%PDF-1.4\n');offs[1]=off;push('1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n');offs[2]=off;push('2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n');offs[3]=off;push('3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 '+pw+' '+ph+']/Resources<</XObject<</Im0 4 0 R>>>>/Contents 5 0 R>>endobj\n');offs[4]=off;push('4 0 obj<</Type/XObject/Subtype/Image/Width '+w+'/Height '+h+'/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length '+jb.length+'>>stream\n');push(jb);push('\nendstream endobj\n');const cs='q '+pw+' 0 0 '+ph+' 0 0 cm /Im0 Do Q';offs[5]=off;push('5 0 obj<</Length '+cs.length+'>>stream\n'+cs+'\nendstream endobj\n');const xo=off;let x='xref\n0 6\n0000000000 65535 f \n';for(let i=1;i<=5;i++)x+=String(offs[i]).padStart(10,'0')+' 00000 n \n';push(x+'trailer<</Size 6/Root 1 0 R>>\nstartxref\n'+xo+'\n%%EOF');const all=new Uint8Array(off);let p=0;parts.forEach(b=>{all.set(b,p);p+=b.length});return all}
@@ -2238,7 +2238,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.27';
+const APP_VERSION='v3.28';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -3062,7 +3062,7 @@ window.payrollSettingsForMonth=function(offset){
   if(out.underBase==null)out.underBase=db.settings.underBase==='total'?'total':'base';
   // propinas: los meses guardados antes de existir esta opción siguen con «aparte» (así se veían); el resto usa lo elegido en Ajustes
   const tm=snap?snap.tipMode:db.settings.tipMode;
-  out.tipMode=tm==='all'||tm==='pct'?tm:'apart';
+  out.tipMode=tm==='all'||tm==='pct'?tm:(snap?'apart':'all');
   out.tipPct=clampPct(snap?snap.tipPct:db.settings.tipPct);
   return out;
 };
@@ -3073,7 +3073,7 @@ function globalsCfg(){
   return {payrollProfile:s.payrollProfile||'variableFixedCash',commission:s.commission,commissionMode:s.commissionMode,commissionMinimum:s.commissionMinimum,
     salaryBase:Number(s.salaryBase??1425),cashPayroll:Number(s.cashPayroll??2000),irpf:Number(s.irpf??14.5),
     fixedExtraVia:s.fixedExtraVia==='payroll'?'payroll':'cash',underBase:s.underBase==='total'?'total':'base',
-    tipMode:s.tipMode==='all'||s.tipMode==='pct'?s.tipMode:'apart',tipPct:clampPct(s.tipPct)};
+    tipMode:s.tipMode==='pct'?'pct':(s.tipMode==='all'||s.tipsMigrated328?'all':'apart'),tipPct:clampPct(s.tipPct)};
 }
 function monthsWithData(){
   const set=new Set();
@@ -3150,7 +3150,7 @@ function breakdown(r){
   else h+=row('Fijo adicional','—');
   h+='<div class="payroll-final"><span>Total final estimado para el conductor</span><b>'+euro(r.final)+'</b></div>';
   if(r.tips>0){
-    if(r.tipMode==='all')h+='<div class="note pr-tipsnote">🎁 Las propinas ('+esc(euro(r.tips))+') van dentro de la facturación y de la nómina: pagan comisión y llevan IRPF como todo lo demás.</div>';
+    if(r.tipMode==='all')h+='<div class="note pr-tipsnote">🎁 Las propinas ('+esc(euro(r.tips))+') están dentro de la facturación: cuentan para el porcentaje igual que el resto del dinero.</div>';
     else if(r.tipMode==='pct')h+=row('Propinas en nómina (solo retención del '+pc(r.tipPct)+' %, sin IRPF)','+ '+euro(r.tips),'pr-tips')+row('Retención sobre las propinas ('+pc(r.tipPct)+' %)','− '+euro(r.tipsWithheld),'pr-tips')+row('Total con propinas',euro(r.finalWithTips),'pr-tips');
     else h+=row('Propinas (100 % tuyas, aparte del cálculo)','+ '+euro(r.tips),'pr-tips')+row('Total con propinas',euro(r.finalWithTips),'pr-tips');
   }
@@ -3180,6 +3180,151 @@ P.decorateBillingPayroll=function(){
   const r=calculatePayrollForMonth(x,cfg);
   panel.innerHTML='<div class="section-title">Cálculo de nómina mensual</div>'+breakdown(r);
 };
+
+/*v328-nom*/
+/* ===================== v3.28 · PROPINAS (dos formas) + CAMBIAR UNA NÓMINA CON LOS AJUSTES DE AHORA =====================
+   1) Propinas: en Ajustes solo quedan dos formas:
+        · «Todo en facturación» (la de siempre «Todo en nómina», con otro nombre): las propinas se suman a la facturación del mes y de ahí sale el %.
+        · «En nómina, solo con una retención (%)»: sin cambios.
+      «Aparte» desaparece de Ajustes. Los meses que ya estaban calculados con «Aparte» se quedan tal cual (sus números no se mueven);
+      el mes actual y los nuevos usan «Todo en facturación» salvo que hayas elegido la retención.
+   2) En cada mes cerrado de Facturación → Mensual hay un botón «Cambiar esta nómina con los ajustes actuales». Antes de cambiar enseña
+      el antes y el después. Se cambia de verdad (porcentaje, mínimo, propinas…), pero se guarda una copia de cómo estaba: «Volver a como estaba». */
+function tipLabel(m){return m==='pct'?'En nómina, solo con una retención':m==='apart'?'Aparte (como antes de la v3.28)':'Todo en facturación'}
+function snapOf(key){const m=db.settings.payrollByMonth;return m&&m[key]?m[key]:null}
+function nomNorm(c){
+  c=c||{};
+  return {payrollProfile:c.payrollProfile||'variableFixedCash',commission:nm(c.commission),commissionMode:c.commissionMode==='minimum'?'minimum':'firstEuro',
+    commissionMinimum:nm(c.commissionMinimum),salaryBase:nm(c.salaryBase),cashPayroll:nm(c.cashPayroll),irpf:nm(c.irpf),
+    fixedExtraVia:c.fixedExtraVia==='payroll'?'payroll':'cash',underBase:c.underBase==='total'?'total':'base',
+    tipMode:c.tipMode==='pct'?'pct':c.tipMode==='all'?'all':'apart',tipPct:clampPct(c.tipPct)};
+}
+function nomNow(){const g=globalsCfg();g.tipMode=g.tipMode==='pct'?'pct':'all';return g}
+// qué ajustes cambian de verdad (solo los que afectan a ese perfil)
+function nomDiffs(a,b,modelA){
+  a=nomNorm(a);b=nomNorm(b);
+  const L=[],prof=b.payrollProfile,min=a.commissionMode==='minimum'||b.commissionMode==='minimum';
+  const add=(t,x,y)=>{if(x!==y)L.push([t,x,y])};
+  add('Perfil',PROFILES[a.payrollProfile]||a.payrollProfile,PROFILES[b.payrollProfile]||b.payrollProfile);
+  add('Tu porcentaje',pc(a.commission)+' %',pc(b.commission)+' %');
+  add('Regla de comisión',a.commissionMode==='minimum'?'Solo sobre el exceso del mínimo':'Desde el primer euro',b.commissionMode==='minimum'?'Solo sobre el exceso del mínimo':'Desde el primer euro');
+  if(min)add('Mínimo de facturación',euro(a.commissionMinimum),euro(b.commissionMinimum));
+  if(min||prof==='allPayroll'||prof==='basePayrollVariableCash')add('Nómina base',euro(a.salaryBase),euro(b.salaryBase));
+  if(prof==='variableFixedCash'){add('Fijo adicional',euro(a.cashPayroll),euro(b.cashPayroll));add('El fijo se paga',a.fixedExtraVia==='payroll'?'en nómina':'en efectivo',b.fixedExtraVia==='payroll'?'en nómina':'en efectivo')}
+  if(prof==='basePayrollVariableCash')add('Si no llega a la base',a.underBase==='total'?'solo lo calculado':'se garantiza la base',b.underBase==='total'?'solo lo calculado':'se garantiza la base');
+  add('IRPF',pc(a.irpf)+' %',pc(b.irpf)+' %');
+  add('Propinas',tipLabel(a.tipMode),tipLabel(b.tipMode));
+  if(a.tipMode==='pct'||b.tipMode==='pct')add('Retención de las propinas',pc(a.tipPct)+' %',pc(b.tipPct)+' %');
+  if(modelA===1)L.push(['Cálculo','el anterior','el nuevo']);
+  return L;
+}
+// mismas cifras, venga el mes del cálculo nuevo o del anterior
+function nomRows(r){
+  if(r.remuneration!==undefined)return {basis:r.basis,rem:r.remuneration,gross:r.gross,tax:r.tax,net:r.net,cash:r.cash,fin:r.finalWithTips};
+  return {basis:null,rem:r.commission,gross:r.grossPayroll,tax:r.tax,net:r.netPayroll,cash:r.cash,fin:r.total};
+}
+const NOM_ROWS=[['basis','Facturación que cuenta para el %'],['rem','Remuneración total'],['gross','Nómina bruta'],['tax','IRPF'],['net','Nómina neta'],['cash','Efectivo'],['fin','Total final (con propinas)']];
+const nomEur=v=>v==null?'—':euro(v);
+let NOMS=null;
+function nomClose(){const o=document.getElementById('nomModal');if(o)o.remove();NOMS=null}
+window.nomClose=nomClose;
+window.nomOpen=function(){
+  nomClose();
+  const off=billMonthOffset,key=monthKeyFromOffset(off),snap=snapOf(key);if(!snap)return;
+  const g=nomNow(),x=periodData('monthly',off);
+  const cfgBefore=payrollSettingsForMonth(off),cfgAfter=Object.assign({},g,{model:2});
+  const A=nomRows(calculatePayrollForMonth(x,cfgBefore)),B=nomRows(calculatePayrollForMonth(x,cfgAfter));
+  const diffs=nomDiffs(cfgBefore,g,cfgBefore.model);
+  const d=c2(B.fin-A.fin);
+  const [yy,mm]=key.split('-').map(Number);
+  const mes=new Date(yy,mm-1,1).toLocaleDateString('es-ES',{month:'long',year:'numeric'});
+  NOMS={off,key};
+  const o=document.createElement('div');o.id='nomModal';o.className='cn-overlay';
+  o.innerHTML='<div class="cn-card nm-card" role="dialog" aria-modal="true" aria-label="Cambiar la nómina">'
+    +'<div class="cn-title">🔄 Cambiar la nómina de '+esc(mes)+'</div>'
+    +'<div class="cn-day">Se calculará con los ajustes de ahora. Si no te gusta, luego puedes volver a como estaba.</div>'
+    +'<div class="cn-label">Qué cambia</div>'
+    +'<ul class="nm-chg">'+(diffs.length?diffs.map(t=>'<li><span>'+esc(t[0])+'</span><span class="nm-ba"><i>'+esc(t[1])+'</i> → <b>'+esc(t[2])+'</b></span></li>').join(''):'<li><span>Nada de los ajustes</span></li>')+'</ul>'
+    +'<div class="cn-label">Resultado (antes → después)</div>'
+    +'<div class="nm-res">'+NOM_ROWS.map(([k,l])=>{const a=A[k],b=B[k],same=a===b||(a!=null&&b!=null&&Math.abs(a-b)<.005);
+        return '<div class="nm-row'+(k==='fin'?' nm-fin':'')+'"><span class="nm-l">'+esc(l)+'</span><span class="nm-v"><i>'+esc(k==='tax'&&a!=null?'− '+nomEur(a):nomEur(a))+'</i> → <b'+(same?'':' class="nm-chd"')+'>'+esc(k==='tax'&&b!=null?'− '+nomEur(b):nomEur(b))+'</b></span></div>'}).join('')+'</div>'
+    +'<div class="nm-diff '+(d>0?'nm-up':d<0?'nm-down':'')+'">'+(d===0?'El total final no cambia.':'El total final '+(d>0?'sube ':'baja ')+esc(euro(Math.abs(d)))+'.')+'</div>'
+    +'<div class="cn-row"><button type="button" class="cn-save" id="nomOk" onclick="nomApply()">✓ Cambiar la nómina</button><button type="button" class="cn-cancel" onclick="nomClose()">Cancelar</button></div>'
+    +'</div>';
+  o.addEventListener('click',ev=>{if(ev.target===o)nomClose()});
+  document.body.appendChild(o);
+};
+const nomPlain=s=>{const c=Object.assign({},s);delete c.previous;return c};
+window.nomApply=function(){
+  if(!NOMS)return;
+  const {off,key}=NOMS,s=db.settings;s.payrollByMonth=s.payrollByMonth||{};
+  const old=s.payrollByMonth[key];if(!old){nomClose();return}
+  const stamp=new Date().toISOString();
+  s.payrollByMonth[key]=Object.assign({},nomNow(),{model:2,frozenAt:old.frozenAt||stamp,changedAt:stamp,previous:nomPlain(old)});
+  nomClose();
+  P.saveNow();renderBilling();
+};
+window.nomUndo=function(){
+  const key=monthKeyFromOffset(billMonthOffset),s=db.settings,cur=snapOf(key);
+  if(!cur||!cur.previous)return;
+  if(!confirm('¿Volver a como estaba esta nómina antes del cambio?\n\nSe quita el cambio y vuelve a salir con los ajustes y los números de antes.'))return;
+  s.payrollByMonth[key]=Object.assign({},cur.previous);
+  P.saveNow();renderBilling();
+};
+function nomAddBox(){
+  if(typeof billPeriod==='undefined'||billPeriod!=='monthly')return;
+  const root=document.getElementById('content');if(!root)return;
+  const panel=root.querySelector('section.payroll-panel:not(#weeklyPayrollPanel)');if(!panel||panel.querySelector('.nm-box'))return;
+  const off=billMonthOffset,key=monthKeyFromOffset(off),snap=snapOf(key);if(!snap)return;
+  const cfg=payrollSettingsForMonth(off);if(cfg.payrollProfile==='weeklyMonthly')return;
+  const g=nomNow();
+  let h='';
+  if(snap.changedAt&&snap.previous){
+    let f='';try{f=new Date(snap.changedAt).toLocaleDateString('es-ES')}catch(e){}
+    h+='<div class="note nm-note">📌 Esta nómina se cambió'+(f?' el '+esc(f):'')+' con los ajustes de ese día. <button type="button" class="nm-btn alt" onclick="nomUndo()">↩️ Volver a como estaba</button></div>';
+  }
+  if(g.payrollProfile!=='weeklyMonthly'&&nomDiffs(cfg,g,cfg.model).length)
+    h+='<button type="button" class="nm-btn" id="nomOpen" onclick="nomOpen()">🔄 Cambiar esta nómina con los ajustes actuales</button><small class="nm-hint">Porcentaje, mínimo, propinas… Antes de cambiar te enseño el antes y el después.</small>';
+  if(h)panel.insertAdjacentHTML('beforeend','<div class="nm-box">'+h+'</div>');
+}
+(function(){
+  const dbp=P.decorateBillingPayroll;
+  P.decorateBillingPayroll=function(){const r=dbp.apply(this,arguments);try{nomAddBox()}catch(e){console.warn('v3.28 nómina',e)}return r};
+})();
+// los meses que ya estaban calculados se quedan como estaban; lo nuevo usa «Todo en facturación»
+P.migrateTips328=function(){
+  const s=db&&db.settings;if(!s||s.tipsMigrated328)return false;
+  s.tipsMigrated328=1;
+  const old=s.tipMode==='all'||s.tipMode==='pct'?s.tipMode:'apart';
+  s.payrollByMonth=s.payrollByMonth||{};
+  const cur=monthKeyFromOffset(0),stamp=new Date().toISOString(),g=globalsCfg();g.tipMode=old;
+  for(const mk of monthsWithData()){
+    if(mk>=cur||s.payrollByMonth[mk])continue;
+    s.payrollByMonth[mk]=Object.assign({},g,{model:2,frozenAt:stamp});
+  }
+  for(const snap of Object.values(s.payrollByMonth)){if(snap&&snap.tipMode!=='all'&&snap.tipMode!=='pct')snap.tipMode='apart'}
+  s.tipMode=old==='pct'?'pct':'all';
+  return true;                       // sin guardar aparte: se guarda con la próxima escritura normal (así al abrir la app no se marca nada como «pendiente de subir»)
+};
+(function(){
+  const psm=window.payrollSettingsForMonth;
+  window.payrollSettingsForMonth=function(){try{P.migrateTips328()}catch(e){}return psm.apply(this,arguments)};
+})();
+try{P.migrateTips328()}catch(e){console.warn('v3.28 propinas',e)}
+// Jenny: dos preguntas nuevas, antes de «Hablar con una persona»
+(function(){
+  try{
+    if(typeof J_KB==='undefined'||J_KB.some(e=>e[0]==='propinasnomina'))return;
+    const nuevas=[
+      ['propinasnomina','🎁','Propinas en la nómina','propinas en la nomina^4,propina en la nomina^4,todo en facturacion^5,en facturacion^3,retencion^4,contingencias^4,propinas aparte^4,propina aparte^4,propinas suman^4,propinas cuentan^4',
+       'En Ajustes → Nómina → Propinas hay dos formas. «Todo en facturación»: las propinas se suman a la facturación del mes y de ahí sale tu porcentaje (por ejemplo el 45 %), como el resto del dinero. «En nómina, solo con una retención»: entran en la nómina pero solo se les resta el % que pongas (por ejemplo el 6,5 % de contingencias comunes), sin IRPF ni comisión. Los meses cerrados no cambian solos.'],
+      ['cambiarnomina','🔄','Cambiar una nómina ya calculada','cambiar la nomina^5,cambiar nomina^5,cambiar esta nomina^5,recalcular^4,recalcula^4,nomina anterior^4,nomina vieja^4,nomina del mes pasado^4,mes cerrado^3,otro porcentaje^4,porcentaje actual^4,ajustes actuales^4,volver a como estaba^4,no se me aplica^4,no me cambia la nomina^5',
+       'Cuando cambias algo en Ajustes (porcentaje, mínimo, propinas…) solo vale para el mes actual: los meses cerrados se quedan como estaban para que lo que ya enviaste no cambie solo. Para cambiar uno, ve a Facturación → Mensual, elige ese mes y pulsa «Cambiar esta nómina con los ajustes actuales». Verás el antes y el después y, si confirmas, se cambia. Debajo te queda «Volver a como estaba» por si te arrepientes.']
+    ];
+    const i=J_KB.findIndex(e=>e[0]==='contacto');
+    J_KB.splice(i<0?J_KB.length:i,0,...nuevas);
+  }catch(e){console.warn('v3.28 Jenny',e)}
+})();
 
 /* ---------- Ajustes ---------- */
 const $=id=>document.getElementById(id);
@@ -3211,10 +3356,9 @@ function decorateSettings(){
   // propinas: tres formas (la elige cada conductor)
   const pcn=$('payrollCompensation'),pcNote=pcn&&pcn.nextElementSibling;
   const tipHtml='<label id="tipModeLabel">Propinas</label><select id="tipMode" style="margin:6px 0 10px" oninput="previewPayrollSettings()" onchange="previewPayrollSettings()">'
-    +'<option value="apart"'+(s.tipMode!=='all'&&s.tipMode!=='pct'?' selected':'')+'>Aparte (100 % para mí, fuera de la nómina)</option>'
-    +'<option value="all"'+(s.tipMode==='all'?' selected':'')+'>Todo en nómina (se suman a la facturación)</option>'
+    +'<option value="all"'+(s.tipMode!=='pct'?' selected':'')+'>Todo en facturación (las propinas suman al total)</option>'
     +'<option value="pct"'+(s.tipMode==='pct'?' selected':'')+'>En nómina, solo con una retención (%)</option></select>'
-    +'<div class="note" id="tipModeNote" style="margin-bottom:10px"><b>Aparte:</b> son 100 % tuyas, no pagan comisión y no entran en la nómina. <b>Todo en nómina:</b> se suman a la facturación del mes y reciben el mismo trato (comisión, nómina bruta e IRPF). <b>Con retención:</b> entran en la nómina, pero solo se les resta el % que pongas debajo (por ejemplo, contingencias comunes), sin IRPF y sin comisión. Los meses ya cerrados no cambian.</div>'
+    +'<div class="note" id="tipModeNote" style="margin-bottom:10px"><b>Todo en facturación:</b> las propinas se suman a la facturación del mes y de ahí sale tu porcentaje, como el resto del dinero. <b>Con retención:</b> entran en la nómina, pero solo se les resta el % que pongas debajo (por ejemplo, el 6,5 % de contingencias comunes), sin IRPF y sin comisión. Los meses ya cerrados no cambian solos: en Facturación → Mensual, cada uno tiene un botón para cambiar su nómina con los ajustes de ahora.</div>'
     +'<label id="tipPctLabel">Retención sobre las propinas (%)</label><input id="tipPct" type="number" inputmode="decimal" step="0.01" min="0" max="100" value="'+esc(s.tipPct==null?0:s.tipPct)+'" oninput="previewPayrollSettings()" onchange="previewPayrollSettings()">'
     +'<div class="note" id="tipPctNote" style="margin-bottom:10px">Solo para «En nómina, solo con una retención». Es el % que se descuenta de las propinas (sin IRPF y sin comisión).</div>';
   (pcNote&&pcNote.classList.contains('note')?pcNote:pcn).insertAdjacentHTML('afterend',tipHtml);
@@ -3298,10 +3442,10 @@ window.saveSettings=function(){
     if(via)s.fixedExtraVia=via==='payroll'?'payroll':'cash';
     if(ub)s.underBase=ub==='total'?'total':'base';
     s.commission=clampPct(s.commission);
-    if(tm)s.tipMode=tm==='all'||tm==='pct'?tm:'apart';
+    if(tm)s.tipMode=tm==='pct'?'pct':'all';
     if(tp!=null)s.tipPct=clampPct(tp);
     const snap=s.payrollByMonth&&s.payrollByMonth[monthKeyFromOffset(0)];
-    if(snap){snap.model=2;snap.fixedExtraVia=s.fixedExtraVia;snap.underBase=s.underBase;snap.commission=s.commission;snap.tipMode=s.tipMode==='all'||s.tipMode==='pct'?s.tipMode:'apart';snap.tipPct=clampPct(s.tipPct)}
+    if(snap){snap.model=2;snap.fixedExtraVia=s.fixedExtraVia;snap.underBase=s.underBase;snap.commission=s.commission;snap.tipMode=s.tipMode==='pct'?'pct':'all';snap.tipPct=clampPct(s.tipPct)}
     P.saveNow();
     if($('payrollProfile'))window.renderAppSettings();
   }catch(e){console.warn('v3.14 guardar ajustes',e)}
@@ -6667,4 +6811,27 @@ html body .settings-option.themeopt .theme-seg{grid-column:1/-1;display:grid;gri
 html body .theme-seg button{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0;padding:9px 2px;border-radius:14px;border:1px solid #c6d6e6;background:#fff;color:#102333;font-weight:800;font-size:clamp(10px,3.1vw,12.5px);line-height:1.15;cursor:pointer;touch-action:manipulation}
 html body .theme-seg button span{max-width:100%;text-align:center;overflow-wrap:anywhere}
 html body .theme-seg button.on{background:linear-gradient(145deg,#4db3ff,#0a84ff);border-color:#0a84ff;color:#fff}
+</style>
+<style id="v328-style">.nm-box{margin-top:12px}
+.nm-btn{display:block;width:100%;box-sizing:border-box;padding:13px 12px;border-radius:14px;border:1px solid #3fc8ff;background:linear-gradient(145deg,#0f5a9c,#0a3566);color:#fff;font-weight:900;font-size:15px;line-height:1.25;text-align:center;cursor:pointer;touch-action:manipulation}
+.nm-btn.alt{background:#13243d;border-color:#ffffff44;font-size:14px;margin-top:8px}
+.nm-hint{display:block;margin-top:6px;font-size:12px;line-height:1.35;color:#9fb4c8}
+.nm-note{margin-bottom:10px}
+.nm-card .cn-day{line-height:1.35}
+.nm-chg{list-style:none;margin:0;padding:0}
+.nm-chg li{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 10px;padding:8px 2px;border-bottom:1px solid #ffffff18;font-size:14px}
+.nm-ba{margin-left:auto;text-align:right;overflow-wrap:anywhere}
+.nm-ba i,.nm-v i{font-style:normal;color:#9fb4c8}
+.nm-row{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:2px 10px;padding:9px 2px;border-bottom:1px solid #ffffff18;font-size:14px}
+.nm-l{flex:1 1 100%;font-size:13px;color:#cfe3f5}
+.nm-v{margin-left:auto;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:baseline;gap:2px 6px;text-align:right}
+.nm-v b{white-space:nowrap}
+.nm-v b.nm-chd{color:#ffd166}
+.nm-row.nm-fin{margin-top:6px;border:1px solid #3fc8ff66;border-radius:12px;padding:10px;background:#0a2a52}
+.nm-row.nm-fin .nm-v b{font-size:17px}
+.nm-diff{margin:10px 0 2px;font-weight:800;font-size:14px}
+.nm-up{color:#18c987}
+.nm-down{color:#ff9a9a}
+html body.lt #content .nm-hint{color:#475569}
+html body.lt #content .nm-btn,html body.lt #content .nm-note .nm-btn{color:#fff!important}
 </style>
