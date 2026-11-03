@@ -166,7 +166,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:8px 4px;b
     <button class="drawer-item" onclick="closeSideMenu();renderNotifications()"><span class="di">🔔</span><span><b>Notificaciones</b><small>Avisos y recordatorios</small></span><span class="arr">›</span></button>
     <button class="drawer-item" onclick="closeSideMenu();renderInfo()"><span class="di">ℹ️</span><span><b>Información</b><small>Versión, actualizaciones y datos de la app</small></span><span class="arr">›</span></button>
     <button class="drawer-item" onclick="closeSideMenu();renderHelp()"><span class="di">❓</span><span><b>Ayuda</b><small>Ayuda para conductores y contacto</small></span><span class="arr">›</span></button>
-    <!--v316-menu--><button class="drawer-item" onclick="closeSideMenu();renderMadridHoy()"><span class="di">🌦️</span><span><b>Madrid hoy</b><small>Tiempo y eventos de Madrid</small></span><span class="arr">›</span></button><!--v316-menu-end-->
+    <!--v316-menu--><button class="drawer-item" onclick="closeSideMenu();renderMadridHoy()"><span class="di">🌦️</span><span><b>Madrid hoy</b><small>Tiempo y eventos de Madrid</small></span><span class="arr">›</span></button><button class="drawer-item" onclick="closeSideMenu();renderDeportes()"><span class="di">⚽</span><span><b>Deportes</b><small>Partidos y clasificaciones</small></span><span class="arr">›</span></button><!--v316-menu-end-->
   </div>
 </aside>
 <main id="content"></main>
@@ -2247,7 +2247,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.30';
+const APP_VERSION='v3.31';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -3396,6 +3396,265 @@ window.commission=function(k){
 };
 })();
 
+/*v331-sports*/
+/* v3.31 · Deportes. Partidos de fútbol (LaLiga y Champions) y, si se activa en Supabase, de la Euroliga; clasificaciones y equipos.
+   Todo viene de la función «deportes» de tu Supabase (una caché compartida que llama a Football-Data); la app NO lleva ninguna clave de deportes.
+   Los marcadores van con retraso (la fuente gratuita no es en directo). Los partidos en estadios de Madrid también salen en «Madrid hoy».
+   Si la función no está creada o falla, no pasa nada: la pantalla lo explica y todo lo demás de la app sigue igual. */
+(function(){
+'use strict';
+var K_SP='pdc_sports_v1',K_SPP='pdc_sports_prefs_v1',RETRY=1800000,COOL=30000,TMO=12000,WAIT=6000,MAXAGE=43200000;
+var TZ='Europe/Madrid';
+var LIGAS=[['PD','LaLiga'],['CL','Champions'],['PL','Premier'],['BL1','Bundesliga'],['SA','Serie A'],['FL1','Ligue 1']];
+var GRATIS='LaLiga, Champions League, Premier League, Bundesliga, Serie A, Ligue 1, Eredivisie, Primeira Liga, Championship, Brasileirão, Mundial y Eurocopa';
+var S={tab:'hoy',comp:'PD',busy:{},last:0,tm:0};
+var CHEV='<svg width="12" height="20" viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2L2 10l8 8"/></svg>';
+var REF='<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>';
+var inflight={};
+function h(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function z(n){return (n<10?'0':'')+n}
+function jget(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}}
+function jset(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function cache(){var c=jget(K_SP);return c&&typeof c==='object'?c:{}}
+function prefs(){var p=jget(K_SPP);return p&&typeof p==='object'?p:{madrid:true}}
+function madToday(){return new Intl.DateTimeFormat('en-CA',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}
+function addD(d,n){var p=d.split('-').map(Number);return new Date(Date.UTC(p[0],p[1]-1,p[2]+n)).toISOString().slice(0,10)}
+var DOW=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+function dowOf(d){var p=d.split('-').map(Number);return new Date(Date.UTC(p[0],p[1]-1,p[2])).getUTCDay()}
+function ago(t){var m=Math.max(0,Math.round((Date.now()-t)/60000));return m<1?'ahora mismo':m<60?'hace '+m+' min':'hace '+Math.round(m/60)+' h'}
+function fresh(e){return !!e&&e.exp>Date.now()}
+
+/* ---------- red: una petición con tiempo máximo ---------- */
+function call(q){
+  return new Promise(function(res,rej){
+    var base=typeof PDC_SUPABASE_URL!=='undefined'?String(PDC_SUPABASE_URL):'';
+    if(!base)return rej(new Error('sin_url'));
+    var url=base.replace(/\/+$/,'')+'/functions/v1/deportes?'+q;
+    var fin=false,ctl=window.AbortController?new AbortController():null;
+    var tm=setTimeout(function(){if(fin)return;fin=true;try{if(ctl)ctl.abort()}catch(e){}rej(new Error('tiempo agotado'))},TMO);
+    function ok(v){if(fin)return;fin=true;clearTimeout(tm);res(v)}
+    function ko(e){if(fin)return;fin=true;clearTimeout(tm);rej(e)}
+    function st(s){return s===404?'no_desplegada':(s===401||s===403)?'jwt':'HTTP '+s}
+    fetch(url,ctl?{signal:ctl.signal}:{}).then(function(r){if(!r.ok)throw new Error(st(r.status));return r.json()}).then(ok,function(e){
+      if(fin)return;
+      var H=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.CapacitorHttp;
+      if(e instanceof TypeError&&H&&H.get){
+        H.get({url:url,readTimeout:TMO,connectTimeout:TMO}).then(function(r){
+          if(r.status>=200&&r.status<300){var d=r.data;if(typeof d==='string'){try{d=JSON.parse(d)}catch(x){return ko(new Error('respuesta no válida'))}}ok(d)}
+          else ko(new Error(st(r.status)));
+        },ko);
+      }else ko(e);
+    });
+  });
+}
+function human(m){
+  m=String(m||'');
+  if(m==='no_desplegada')return 'la función «deportes» todavía no está creada en Supabase';
+  if(m==='jwt')return 'Supabase rechaza la llamada: en la función «deportes» hay que desactivar «Verify JWT»';
+  if(m==='f:sin_clave')return 'falta la clave de Football-Data en los Secrets de Supabase (FOOTBALL_DATA_KEY)';
+  if(m==='f:sin_tabla')return 'falta crear la tabla de caché en Supabase (el SQL del paquete)';
+  if(m==='f:sin_bd')return 'la función no encuentra la base de datos de Supabase';
+  if(m==='f:429'||m==='f:bloqueo')return 'Football-Data pide esperar un poco; se reintenta solo';
+  if(m==='f:cuota')return 'pausa de un minuto para no pasarme de la cuota gratis';
+  if(m==='f:403')return 'el plan gratis de Football-Data no incluye eso';
+  if(/^f:(http 5|ocupado)/.test(m))return 'la fuente no responde ahora';
+  if(m==='tiempo agotado'||m==='sin_url')return m==='sin_url'?'sin dirección de Supabase':'tiempo agotado';
+  if(/^HTTP/.test(m)||/no válida/.test(m))return m.replace(/^f:/,'');
+  if(/^f:/.test(m))return m.slice(2);
+  return 'sin conexión';
+}
+function parse(j){
+  if(!j||typeof j!=='object')throw new Error('respuesta no válida');
+  if(j.ok===false)throw new Error('f:'+(j.err||'fallo'));
+  return j;
+}
+
+/* ---------- datos con caché en el móvil (la caché de verdad está en Supabase) ---------- */
+function slot(kind,key){var c=cache();return kind==='m'?c.m:(c[kind]||{})[key]}
+function load(kind,key,force){
+  var e=slot(kind,key);
+  if(!force&&fresh(e))return Promise.resolve(e);
+  var id=kind+':'+key;
+  if(inflight[id])return inflight[id];
+  var q=kind==='m'?'r=matches':(kind==='s'?'r=standings&c=':'r=teams&c=')+encodeURIComponent(key);
+  S.busy[id]=1;
+  inflight[id]=call(q).then(parse).then(function(j){
+    var c=cache(),ttl=Math.max(60,Math.min(1200,(Number(j.ttl)||600)-(Number(j.age)||0)));
+    var rec={t:Date.now(),exp:Date.now()+ttl*1000,stale:!!j.stale,err:j.err||'',gen:j.gen||''};
+    if(kind==='m')rec.data={f:j.f||[],b:j.b||[],bk:!!j.bk,today:j.today||'',note:j.note||'',ferr:j.ferr||'',berr:j.berr||''};
+    else rec.data=j.data||{};
+    if(kind==='m')c.m=rec;else{c[kind]=c[kind]||{};c[kind][key]=rec}
+    delete c.fail;jset(K_SP,c);return rec;
+  }).then(function(r){delete inflight[id];delete S.busy[id];redraw();return r},function(e){
+    delete inflight[id];delete S.busy[id];
+    var c=cache();c.fail={t:Date.now(),err:human(e&&e.message)};jset(K_SP,c);redraw();throw e;
+  });
+  return inflight[id];
+}
+
+/* ---------- pantalla ---------- */
+function stat(m){
+  var sc=(m.hs!=null&&m.as!=null)?'<span class="sp-sc">'+m.hs+'–'+m.as+'</span>':'';
+  if(m.s==='vivo')return '<span class="sp-live">● '+(m.min!=null?m.min+'′ ':'')+sc+'</span>';
+  if(m.s==='desc')return '<span class="sp-live">Descanso '+sc+'</span>';
+  if(m.s==='fin')return '<span class="sp-fin">Final '+sc+'</span>';
+  if(m.s==='apl')return '<span class="sp-fin">Aplazado</span>';
+  if(m.s==='canc')return '<span class="sp-fin">Cancelado</span>';
+  return '';
+}
+function row(m){
+  var sm=[m.cn,m.v].filter(Boolean).join(' · ');
+  return '<div class="inf-row sp-row"><div class="t">'+h(m.t||'—')+'</div><div class="n">'+h(m.h&&m.h.n)+' – '+h(m.a&&m.a.n)+'<small>'+h(sm)+'</small></div><div class="l">'+stat(m)+'</div></div>';
+}
+function block(title,list){
+  if(!list.length)return '';
+  var o='<div class="inf-day sp-sport">'+title+'<small>'+list.length+(list.length===1?' partido':' partidos')+'</small></div><div class="inf-card" style="padding:4px 12px">';
+  list.forEach(function(m){o+=row(m)});
+  return o+'</div>';
+}
+function viewDay(day){
+  var e=slot('m','m'),d=e&&e.data;
+  if(!d)return '';
+  var F=(d.f||[]).filter(function(m){return m.d===day}),B=(d.b||[]).filter(function(m){return m.d===day});
+  var o=block('⚽ Fútbol',F)+block('🏀 Baloncesto',B);
+  if(!o)o='<div class="inf-note">No hay partidos de '+(d.bk?'LaLiga, Champions ni Euroliga':'LaLiga ni Champions')+' este día.</div>';
+  return o;
+}
+function chips(sel,fn){
+  var o='<div class="sp-chips">';
+  LIGAS.forEach(function(x){o+='<button class="'+(sel===x[0]?'on':'')+'" onclick="'+fn+'(\''+x[0]+'\')">'+h(x[1])+'</button>'});
+  return o+'</div>';
+}
+function viewTable(){
+  var e=slot('s',S.comp),o=chips(S.comp,'spComp');
+  var d=e&&e.data;
+  if(!d||!d.rows)return o+(S.busy['s:'+S.comp]?'<div class="inf-note">Cargando la clasificación…</div>':'');
+  if(!d.rows.length)return o+'<div class="inf-note">Todavía no hay clasificación.</div>';
+  o+='<div class="inf-card" style="padding:6px 10px"><table class="sp-tab"><thead><tr><th></th><th>Equipo</th><th>PJ</th><th>DG</th><th>Pts</th></tr></thead><tbody>';
+  d.rows.forEach(function(r){
+    var mad=/real madrid|atl[eé]tico|rayo vallecano/i.test((r.t&&r.t.n)||'');
+    o+='<tr'+(mad?' class="mad"':'')+'><td>'+h(r.p)+'</td><td>'+h(r.t&&r.t.n)+'</td><td>'+h(r.pj)+'</td><td>'+(r.dg>0?'+':'')+h(r.dg)+'</td><td><b>'+h(r.pts)+'</b></td></tr>';
+  });
+  return o+'</tbody></table></div><div class="inf-foot" style="margin-top:0">PJ = partidos jugados · DG = diferencia de goles · Pts = puntos.'+(e.stale?' Datos guardados (la fuente no responde ahora).':'')+'</div>';
+}
+function viewTeams(){
+  var e=slot('tm',S.comp),o=chips(S.comp,'spComp');
+  var d=e&&e.data;
+  if(!d||!d.teams)return o+(S.busy['tm:'+S.comp]?'<div class="inf-note">Cargando los equipos…</div>':'');
+  o+='<div class="inf-card" style="padding:4px 12px">';
+  d.teams.forEach(function(t){o+='<div class="inf-row sp-row"><div class="n">'+h(t.n)+'<small>'+h(t.v||'Estadio sin datos')+'</small></div><div class="l">'+h(t.tla)+'</div></div>'});
+  o+='</div><div class="inf-foot" style="margin-top:0">Competiciones del plan gratis de Football-Data: '+h(GRATIS)+'. El calendario de «Hoy» y «Mañana» usa LaLiga y Champions; no están Copa del Rey, Europa League ni Segunda.</div>';
+  return o;
+}
+function view(){
+  var c=cache(),m=c.m,o='',today=madToday();
+  o+='<div class="inf-nav"><button class="inf-bk" onclick="backToGeneralMenu()">'+CHEV+'<span>Menú</span></button><button class="inf-ref" aria-label="Actualizar" onclick="spRefresh()"'+(Object.keys(S.busy).length?' disabled':'')+'>'+REF+'</button></div><h1 class="inf-title">Deportes</h1>';
+  o+='<div class="inf-upd">'+(Object.keys(S.busy).length?'Actualizando…':(m?'Actualizado a las '+z(new Date(m.t).getHours())+':'+z(new Date(m.t).getMinutes())+' · '+ago(m.t):'Aún sin datos'))+' · '+DOW[dowOf(today)]+' '+(+today.slice(8))+'</div>';
+  if(navigator.onLine===false)o+='<div class="inf-note inf-warn">Sin conexión. Te enseño lo último que guardé.</div>';
+  if(c.fail)o+='<div class="inf-note inf-warn">No he podido actualizar: '+h(c.fail.err)+'.'+(m?' Te enseño lo guardado.':'')+'</div>';
+  else if(m&&m.stale)o+='<div class="inf-note inf-warn">La fuente no responde ahora; son datos guardados '+ago(m.t)+'.</div>';
+  o+='<div class="inf-tabs"><button class="'+(S.tab==='hoy'?'on':'')+'" onclick="spTab(\'hoy\')">Hoy</button><button class="'+(S.tab==='manana'?'on':'')+'" onclick="spTab(\'manana\')">Mañana</button><button class="'+(S.tab==='tablas'?'on':'')+'" onclick="spTab(\'tablas\')">Tablas</button><button class="'+(S.tab==='equipos'?'on':'')+'" onclick="spTab(\'equipos\')">Equipos</button></div>';
+  if(S.tab==='hoy'||S.tab==='manana'){
+    var day=S.tab==='manana'?addD(today,1):today;
+    o+='<h2 class="inf-h2">'+(S.tab==='manana'?'Mañana':'Hoy')+'<small>'+DOW[dowOf(day)]+' '+(+day.slice(8))+'</small></h2>';
+    o+=m?viewDay(day):(c.fail?'':'<div class="inf-note">Cargando los partidos…</div>');
+  }else if(S.tab==='tablas')o+=viewTable();
+  else o+=viewTeams();
+  var p=prefs();
+  o+='<button class="inf-btn" onclick="spMadrid()">Partidos en «Madrid hoy»: '+(p.madrid===false?'No':'Sí')+'</button>';
+  o+='<div class="inf-foot">Datos: Football-Data.org (LaLiga y Champions). Los marcadores llegan con retraso: la fuente gratuita no es en directo.'+(m&&m.data&&m.data.bk?' Baloncesto: Euroliga.':' Baloncesto (Euroliga): todavía sin activar.')+' Las horas son las de España.</div>';
+  return '<section class="inf" id="spRoot">'+o+'</section>';
+}
+function redraw(){
+  var r=document.getElementById('spRoot');if(!r)return;
+  var el=document.getElementById('content');if(!el)return;
+  var y=window.scrollY||0;
+  el.innerHTML=view();
+  window.scrollTo(0,y);
+}
+function need(force){
+  var p=[];
+  if(S.tab==='tablas')p.push(load('s',S.comp,force));
+  else if(S.tab==='equipos')p.push(load('tm',S.comp,force));
+  else p.push(load('m','m',force));
+  return Promise.all(p).then(function(){return true},function(){return false});
+}
+window.renderDeportes=function(){
+  try{if(typeof ltSet==='function')ltSet(false)}catch(e){}
+  var el=document.getElementById('content');if(!el)return;
+  el.innerHTML=view();window.scrollTo(0,0);
+  need(false);
+  if(!S.tm)S.tm=setTimeout(tick,30000);
+};
+window.spTab=function(t){S.tab=t;redraw();need(false)};
+window.spComp=function(c){S.comp=c;redraw();need(false)};
+window.spRefresh=function(){
+  if(S.last&&Date.now()-S.last<COOL)return;
+  S.last=Date.now();redraw();need(true);
+};
+window.spMadrid=function(){var p=prefs();p.madrid=p.madrid===false;jset(K_SPP,p);redraw()};
+/* mientras la pantalla está abierta se mira cada 30 s si lo guardado ha caducado (casi siempre no hace nada); al salir de la pantalla se para solo */
+function tick(){
+  S.tm=0;
+  if(!document.getElementById('spRoot'))return;
+  var f=cache().fail;
+  if(!document.hidden&&(S.tab==='hoy'||S.tab==='manana')&&!(f&&Date.now()-f.t<300000))need(false);   // si falló, no se insiste solo durante 5 min
+  S.tm=setTimeout(tick,30000);
+}
+
+/* ---------- enganche con «Madrid hoy» (solo si la función responde; si no, no cambia nada) ---------- */
+var KW=['bernabeu','metropolitano','vallecas','movistar arena'];
+function nv(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace('wizink','movistar arena')}
+function kw(v){v=nv(v);for(var i=0;i<KW.length;i++)if(v.indexOf(KW[i])>=0)return KW[i];return ''}
+function toEvents(d){
+  var out=[];
+  ((d&&d.f)||[]).concat((d&&d.b)||[]).forEach(function(m){
+    if(!m||!m.mad||m.s==='canc'||m.s==='apl'||!m.d)return;
+    out.push({id:'sp'+m.id,n:((m.h&&m.h.n)||'—')+' – '+((m.a&&m.a.n)||'—'),d:m.d,t:m.t||'',v:m.v||'',c:m.ci||'Madrid',k:'sports',g:m.cn||'',src:m.sp==='b'?'Euroliga':'Football-Data'});
+  });
+  return out;
+}
+function oldEvents(){var c=cache();return c.m&&c.m.data&&Date.now()-c.m.t<MAXAGE?toEvents(c.m.data):[]}
+window.PDC331={
+  madridEvents:function(){
+    if(prefs().madrid===false)return Promise.resolve([]);
+    var c=cache();
+    if(c.fail&&Date.now()-c.fail.t<RETRY&&!fresh(c.m))return Promise.resolve(oldEvents());   // sin reintentos seguidos si no responde
+    // «Madrid hoy» espera como mucho 6 s; si Supabase tarda, sigue con lo guardado y la descarga termina por su cuenta
+    return new Promise(function(res){
+      var done=false,tm=setTimeout(function(){if(!done){done=true;res(oldEvents())}},WAIT);
+      load('m','m',false).then(function(e){if(!done){done=true;clearTimeout(tm);res(toEvents(e.data))}},function(){if(!done){done=true;clearTimeout(tm);res(oldEvents())}});
+    });
+  },
+  merge:function(list,sp){
+    var out=list.slice();
+    sp.forEach(function(e){
+      var k=kw(e.v),dup=false;
+      if(k)list.forEach(function(t){if(t.d===e.d&&t.k==='sports'&&kw(t.v)===k)dup=true});
+      if(!dup)out.push(e);
+    });
+    out.sort(function(a,b){return a.d<b.d?-1:a.d>b.d?1:a.t<b.t?-1:a.t>b.t?1:0});
+    return out;
+  },
+  on:function(){var c=cache();return prefs().madrid!==false&&!!(c.m&&c.m.data&&Date.now()-c.m.t<MAXAGE)},
+  statusHtml:function(){
+    var c=cache(),p=prefs();
+    if(p.madrid===false)return '<br>'+h('Deportes: los partidos en Madrid hoy están apagados (Menú → Deportes).');
+    if(c.m&&c.m.data&&Date.now()-c.m.t<MAXAGE){
+      var n=toEvents(c.m.data).length;
+      return '<br>'+h('Deportes: '+(n?n+(n===1?' partido':' partidos')+' en estadios de Madrid los próximos días (Football-Data)':'no hay partidos en estadios de Madrid los próximos días')+(c.m.stale?' · datos guardados':'')+'.');
+    }
+    return '';      // si no hay datos o la función no responde, «Madrid hoy» no dice nada (el motivo se ve en Deportes)
+  }
+};
+/* ayuda de Jenny: una entrada nueva, antes de «contacto» (si no hay lista de ayuda, no hace nada) */
+try{
+  if(typeof J_KB!=='undefined'&&!J_KB.some(function(e){return e[0]==='deportes'})){
+    var ic=J_KB.findIndex(function(e){return e[0]==='contacto'});
+    J_KB.splice(ic<0?J_KB.length:ic,0,['deportes','⚽','Deportes: partidos y clasificaciones','deportes^5,futbol^5,partidos^4,partido^3,clasificacion^5,tabla de liga^5,laliga^6,champions^6,baloncesto^4,euroliga^6,marcador^4,resultados^3,football data^6','Menú → Deportes: los partidos de LaLiga y Champions de hoy y mañana, las clasificaciones y los equipos, con la hora de España. Los marcadores llegan con retraso porque la fuente gratuita (Football-Data) no es en directo. Los partidos que se juegan en estadios de Madrid (Bernabéu, Metropolitano, Vallecas) también salen en «Madrid hoy» con su salida estimada; se pueden apagar con el botón de abajo de Deportes. Los datos pasan por una función tuya en Supabase: si Deportes dice que falta algo (la función, la clave o la tabla), hay que terminar los pasos del paquete de instalación. Copa del Rey, Europa League y Segunda no están en el plan gratis.']);
+  }
+}catch(e){}
+})();
 /* ---------- Ajustes ---------- */
 const $=id=>document.getElementById(id);
 function setLabel(id,text){const el=$(id);const l=el&&el.previousElementSibling;if(l&&l.tagName==='LABEL')l.textContent=text}
@@ -5852,8 +6111,12 @@ function ifStatusHtml(){
   var m=s.err?'IFEMA: no he podido leer ifema.es ('+s.err+'). Se enseñan solo los eventos de Ticketmaster.':(s.n>0?'IFEMA: '+s.n+(s.n===1?' evento leído':' eventos leídos')+' en ifema.es para estos días.':'IFEMA: no hay eventos en ifema.es para estos días.');
   return '<br>'+esc(m);
 }
+function spEv(){try{return window.PDC331?window.PDC331.madridEvents().then(function(l){return l||[]},function(){return []}):Promise.resolve([])}catch(e){return Promise.resolve([])}}
+function spOn(){try{return !!(window.PDC331&&window.PDC331.on())}catch(e){return false}}
+function spStat(){try{return window.PDC331?window.PDC331.statusHtml():''}catch(e){return ''}}
 function evAll(){
   var tm=http(evUrl()).then(parseEv);
+  var spp=spEv();
   var ifp=Promise.all(IF_URLS.map(function(u){return httpText(u).then(function(x){return {x:x}},function(e){return {e:e}})})).then(function(rs){
     var ranges=[],okn=0,err='',seen={};
     rs.forEach(function(r){
@@ -5866,7 +6129,7 @@ function evAll(){
     ifSave({t:Date.now(),n:Object.keys(names).length,err:ranges.length?'':err});
     return L;
   },function(){return []});
-  return Promise.all([tm,ifp]).then(function(a){return mergeIf(a[0],a[1])});
+  return Promise.all([tm,ifp,spp]).then(function(a){var m=mergeIf(a[0],a[1]);try{return a[2].length?window.PDC331.merge(m,a[2]):m}catch(e){return m}});
 }
 var V3=/movistar arena|wizink|metropolitano|c[ií]vitas|bernab[eé]u|vistalegre|las ventas|caja m[aá]gica|ifema|ciudad del f[uú]tbol|iberdrola music|mad cool/i;
 var V2=/riviera|auditorio nacional|teatro real|estadio de vallecas|sala but|mon live|teatro barcel[oó]|la cubierta|dcode|matadero/i;
@@ -6011,12 +6274,12 @@ function viewList(){
     if(S.tab==='hoy'){var nm=nowMin();all=all.filter(function(r){return !r.win||r.b>=nm})}
     var lst2=pick(all);
     o+='<h2 class="inf-h2">Eventos de '+(S.tab==='hoy'?'hoy':'mañana')+'<small>'+lst2.length+' '+(lst2.length===1?'evento':'eventos')+'</small></h2>';
-    if(!lst2.length)o+='<div class="inf-note">'+(c.ev?'No veo eventos grandes para este día en Ticketmaster ni en IFEMA.':'Todavía no hay datos de eventos.')+' Ojo: Ticketmaster no lo tiene todo (por ejemplo, no vende los partidos de Real Madrid ni Atlético).</div>';
+    if(!lst2.length)o+='<div class="inf-note">'+(c.ev?'No veo eventos grandes para este día en Ticketmaster ni en IFEMA.':'Todavía no hay datos de eventos.')+(spOn()?' Tampoco hay partidos de LaLiga ni Champions en estadios de Madrid (Football-Data).':' Ojo: Ticketmaster no lo tiene todo (por ejemplo, no vende los partidos de Real Madrid ni Atlético).')+'</div>';
     lst2.forEach(function(r){o+=evCard(r)});
   }
   if(hidden>0&&!S.small)o+='<button class="inf-btn" onclick="infSmall(true)">Mostrar también '+hidden+(hidden===1?' evento pequeño':' eventos pequeños')+'</button>';
   if(S.small)o+='<button class="inf-btn" onclick="infSmall(false)">Ocultar los eventos pequeños</button>';
-  o+='<div class="inf-foot">Son estimaciones de posibles oportunidades, no garantías de que haya viajes. La hora de salida es la de inicio más una duración que supongo (se puede cambiar en cada evento). Datos de eventos: Ticketmaster e IFEMA (ifema.es). Datos del tiempo: Open-Meteo.com.'+ifStatusHtml()+'</div>';
+  o+='<div class="inf-foot">Son estimaciones de posibles oportunidades, no garantías de que haya viajes. La hora de salida es la de inicio más una duración que supongo (se puede cambiar en cada evento). Datos de eventos: Ticketmaster e IFEMA (ifema.es). Datos del tiempo: Open-Meteo.com.'+ifStatusHtml()+spStat()+'</div>';
   return '<section class="inf" id="infRoot">'+o+'</section>';
 }
 function findEv(id){var L=(cache().ev&&cache().ev.data)||[];for(var i=0;i<L.length;i++)if(L[i].id===id)return L[i];return null}
@@ -6027,7 +6290,7 @@ function viewDetail(){
   var r=calc(ev,map,p),o=back;
   var dt=ev.d.split('-');
   o+='<h1 class="inf-title inf-t2">'+esc(ev.n)+'</h1><div class="inf-sub" style="margin-top:4px">'+esc(placeTxt(ev))+' · '+(+dt[2])+' de '+MES[+dt[1]-1]+'</div>';
-  o+='<div class="inf-card" style="margin-top:12px"><div class="inf-lbl">Dato de la fuente</div><div class="inf-big">'+(ev.k==='fair'&&ev.t?'~':'')+(ev.t||'Por confirmar')+'</div><div class="inf-sub">'+(ev.k==='fair'?(ev.t?'Hora supuesta (feria: apertura típica) · IFEMA no publica horario · según el calendario de ifema.es':'Espectáculo de temporada · sin hora en el calendario de ifema.es'):'Hora de inicio · según Ticketmaster')+(cache().ev?' · consultado a las '+z(new Date(cache().ev.t).getHours())+':'+z(new Date(cache().ev.t).getMinutes()):'')+'</div></div>';
+  o+='<div class="inf-card" style="margin-top:12px"><div class="inf-lbl">Dato de la fuente</div><div class="inf-big">'+(ev.k==='fair'&&ev.t?'~':'')+(ev.t||'Por confirmar')+'</div><div class="inf-sub">'+(ev.k==='fair'?(ev.t?'Hora supuesta (feria: apertura típica) · IFEMA no publica horario · según el calendario de ifema.es':'Espectáculo de temporada · sin hora en el calendario de ifema.es'):'Hora de inicio · según '+(ev.src||'Ticketmaster')+(ev.src?' (hora de España)':''))+(cache().ev?' · consultado a las '+z(new Date(cache().ev.t).getHours())+':'+z(new Date(cache().ev.t).getMinutes()):'')+'</div></div>';
   o+='<div class="inf-card" style="border-color:#168bff"><div class="inf-lbl" style="color:#8fb8ff">Mi estimación</div>';
   if(r.win){
     o+='<div class="inf-sub" style="margin-top:6px">Salida de la gente</div><div class="inf-big">'+hm(r.a)+' – '+hm(r.b)+'</div>';
@@ -6881,6 +7144,24 @@ html body .settings-option.themeopt .theme-seg{grid-column:1/-1;display:grid;gri
 html body .theme-seg button{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0;padding:9px 2px;border-radius:14px;border:1px solid #c6d6e6;background:#fff;color:#102333;font-weight:800;font-size:clamp(10px,3.1vw,12.5px);line-height:1.15;cursor:pointer;touch-action:manipulation}
 html body .theme-seg button span{max-width:100%;text-align:center;overflow-wrap:anywhere}
 html body .theme-seg button.on{background:linear-gradient(145deg,#4db3ff,#0a84ff);border-color:#0a84ff;color:#fff}
+</style>
+<style id="v331-style">/* v3.31 · Deportes (mismo estilo que Madrid hoy) */
+.inf .sp-row{cursor:default}
+.inf .sp-row .l{min-width:64px;font-size:13px;font-weight:600}
+.inf .sp-sc{font-feature-settings:'tnum';color:#fff;font-weight:700;margin-left:2px}
+.inf .sp-live{color:#30d158}
+.inf .sp-fin{color:#8e8e93}
+.inf .sp-sport{font-size:17px}
+.inf .sp-chips{display:flex;gap:6px;overflow-x:auto;padding:0 0 12px;margin:0 -4px;-webkit-overflow-scrolling:touch}
+.inf .sp-chips button{flex:none;min-height:36px;padding:0 14px;border:0;border-radius:999px;background:#1c1c1e;color:#fff;font-size:14px;font-weight:600}
+.inf .sp-chips button.on{background:#636366}
+.inf .sp-tab{width:100%;border-collapse:collapse;font-size:14px;font-feature-settings:'tnum'}
+.inf .sp-tab th{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:#8e8e93;text-align:right;padding:6px 4px}
+.inf .sp-tab th:nth-child(2){text-align:left}
+.inf .sp-tab td{padding:9px 4px;border-top:.5px solid #38383a;text-align:right}
+.inf .sp-tab td:first-child{width:26px;text-align:left;color:#8e8e93}
+.inf .sp-tab td:nth-child(2){text-align:left;font-weight:600;word-break:break-word}
+.inf .sp-tab tr.mad td{color:#6cb6ff}
 </style>
 <style id="v330-style">/* v3.30 · pantalla «Tema» (dentro de Ajustes): tres opciones como las demás filas, con una marca en la elegida */
 .tm-list{display:grid;gap:10px}
