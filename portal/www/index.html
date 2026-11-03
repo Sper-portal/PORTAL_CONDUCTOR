@@ -5321,8 +5321,8 @@ var LAT=40.4168,LON=-3.7038;
 var TTL_WX=3600000,TTL_EV=21600000,COOL=120000,TMO=10000,RETRY=1800000;
 var DOW=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
 var MES=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-var DUR0={music:150,sports:120,other:150};
-var KIND_TXT={music:'conciertos',sports:'eventos deportivos',other:'este tipo de eventos'};
+var DUR0={music:150,sports:120,other:150,fair:540};
+var KIND_TXT={music:'conciertos',sports:'eventos deportivos',other:'este tipo de eventos',fair:'eventos de feria de IFEMA'};
 var S={tab:'hoy',det:null,small:false,busy:false,msg:'',err:{}};
 var inflight=null,noticeBusy=false;
 var CHEV='<svg width="12" height="20" viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2L2 10l8 8"/></svg>';
@@ -5426,6 +5426,120 @@ function parseEv(j){
   out.sort(function(a,b){return a.d<b.d?-1:a.d>b.d?1:a.t<b.t?-1:a.t>b.t?1:0});
   return out;
 }
+/*v325-ifema*/
+/* v3.25 · IFEMA en «Madrid hoy». Fechas y nombres de ifema.es/calendario (la web no tiene horario: si es una feria de pocos dias
+   se supone el horario tipico 10:00; los espectaculos de larga temporada salen sin hora). Si IFEMA falla, siguen los eventos de Ticketmaster. */
+var IF_URLS=['https://www.ifema.es/calendario','https://www.ifema.es/calendario/ferias'],K_IF='pdc_ifema_v1';
+function httpText(url){
+  return new Promise(function(res,rej){
+    var fin=false,ctl=window.AbortController?new AbortController():null;
+    var tm=setTimeout(function(){if(fin)return;fin=true;try{if(ctl)ctl.abort()}catch(e){}rej(new Error('tiempo agotado'))},TMO);
+    function ok(v){if(fin)return;fin=true;clearTimeout(tm);res(v)}
+    function ko(e){if(fin)return;fin=true;clearTimeout(tm);rej(e)}
+    fetch(url,ctl?{signal:ctl.signal}:{}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text()}).then(ok,function(e){
+      if(fin)return;
+      var H=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.CapacitorHttp;
+      if(e instanceof TypeError&&H&&H.get){
+        H.get({url:url,readTimeout:TMO,connectTimeout:TMO,responseType:'text'}).then(function(r){
+          if(r.status>=200&&r.status<300){var d=r.data;if(typeof d!=='string')d=JSON.stringify(d);ok(d)}else ko(new Error('HTTP '+r.status));
+        },ko);
+      }else ko(e);
+    });
+  });
+}
+var IF_ENT={aacute:'á',eacute:'é',iacute:'í',oacute:'ó',uacute:'ú',ntilde:'ñ',Aacute:'Á',Eacute:'É',Iacute:'Í',Oacute:'Ó',Uacute:'Ú',Ntilde:'Ñ',uuml:'ü',iquest:'¿',iexcl:'¡',ordm:'º',ordf:'ª',middot:'·',ndash:'–',mdash:'—',hellip:'…',rsquo:"'",lsquo:"'",ldquo:'"',rdquo:'"',nbsp:' ',lt:'<',gt:'>',quot:'"',apos:"'"};
+function ifDec(s){
+  return String(s).replace(/&#x([0-9a-f]+);/gi,function(m,n){return String.fromCharCode(parseInt(n,16))}).replace(/&#(\d+);/g,function(m,n){return String.fromCharCode(+n)})
+    .replace(/&([a-zA-Z]+);/g,function(m,n){return Object.prototype.hasOwnProperty.call(IF_ENT,n)?IF_ENT[n]:m}).replace(/&amp;/gi,'&');
+}
+function ifTokens(h){
+  h=String(h||'');
+  h=h.replace(/<(script|style|noscript|svg)\b[\s\S]*?<\/\1>/gi,' ').replace(/<!--[\s\S]*?-->/g,' ');
+  h=h.replace(/<a\b[^>]*href=["'][^"']*\/calendario\/[^"']*["'][^>]*>[\s\S]*?<\/a>/gi,' ');   /* etiquetas de categoria y paginas */
+  h=h.replace(/<a\b[^>]*>\s*(?:descubre|ver)\s+m[aá]s[\s\S]*?<\/a>/gi,' ');
+  return h.replace(/<[^>]+>/g,'\n').split('\n').map(function(s){return ifDec(s).replace(/\s+/g,' ').trim()}).filter(Boolean);
+}
+var IF_D=/^(\d{2})\/(\d{2})\/(\d{2})$/,IF_NOISE=/^(a|de|p[uú]blico|profesional|general|feria|ferias|congreso|descubre|ver|m[aá]s|anterior|siguiente|buscar|filtrar|todos|todas|\d+)$/i;
+function ifDate(s){var m=IF_D.exec(s);if(!m)return null;var d=+m[1],mo=+m[2];if(mo<1||mo>12||d<1||d>31)return null;return '20'+m[3]+'-'+m[2]+'-'+m[1]}
+function ifDays(a,b){var p=a.split('-'),q=b.split('-');return Math.round((Date.UTC(+q[0],+q[1]-1,+q[2])-Date.UTC(+p[0],+p[1]-1,+p[2]))/86400000)}
+function parseIfema(html){
+  if(typeof html!=='string')throw new Error('respuesta no válida');
+  var T=ifTokens(html),M=[],i=0,t;
+  /* une «04/11/26 a 05/11/26» aunque venga en trozos */
+  while(i<T.length){
+    t=T[i];
+    var rg=/^(\d{2}\/\d{2}\/\d{2})\s+a\s+(\d{2}\/\d{2}\/\d{2})$/.exec(t);
+    if(rg){M.push([rg[1],rg[2]]);i++;continue}
+    if(IF_D.test(t)){
+      if(T[i+1]==='a'&&IF_D.test(T[i+2]||'')){M.push([t,T[i+2]]);i+=3;continue}
+      M.push([t,t]);i++;continue;
+    }
+    M.push(t);i++;
+  }
+  var out=[],seen={},k;
+  for(k=0;k<M.length;k++){
+    if(typeof M[k]==='string')continue;
+    var a=ifDate(M[k][0]),b=ifDate(M[k][1]);if(!a||!b||b<a||ifDays(a,b)>400)continue;
+    var n='',j,g=0;
+    for(j=k+1;j<M.length&&g<3;j++){
+      if(typeof M[j]!=='string')break;
+      if(IF_NOISE.test(M[j])||M[j].length<3){g++;continue}
+      n=M[j].slice(0,90);break;
+    }
+    if(!n)continue;
+    var key=n.toLowerCase()+'|'+a+'|'+b;if(seen[key])continue;seen[key]=1;
+    out.push({n:n,a:a,b:b});
+  }
+  return out;
+}
+function ifSlug(s){return String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,30)}
+function ifExpand(ranges){
+  var out=[],from=dkey(new Date()),i,j,d,r,lg;
+  for(i=0;i<ranges.length;i++){
+    r=ranges[i];lg=ifDays(r.a,r.b)>=14;
+    for(j=0;j<7;j++){
+      d=addDays(from,j);if(d<r.a||d>r.b)continue;
+      out.push({id:'if'+ifSlug(r.n)+d,n:r.n,d:d,t:lg?'':'10:00',v:'IFEMA Madrid',c:'Madrid',k:'fair',g:lg?'Espectáculo':'Feria'});
+    }
+  }
+  return out;
+}
+function mergeIf(tm,ifl){
+  var out=tm.slice(),i,j,e,t,a,b,dup;
+  for(i=0;i<ifl.length;i++){
+    e=ifl[i];dup=false;a=ifSlug(e.n);
+    for(j=0;j<tm.length;j++){
+      t=tm[j];if(t.d!==e.d||!/ifema/i.test(t.v||''))continue;
+      b=ifSlug(t.n);if(a&&b&&(b.indexOf(a)>=0||a.indexOf(b)>=0)){dup=true;break}
+    }
+    if(!dup)out.push(e);
+  }
+  out.sort(function(x,y){return x.d<y.d?-1:x.d>y.d?1:x.t<y.t?-1:x.t>y.t?1:0});
+  return out;
+}
+function ifSave(o){try{localStorage.setItem(K_IF,JSON.stringify(o))}catch(e){}}
+function ifGet(){try{return JSON.parse(localStorage.getItem(K_IF)||'null')}catch(e){return null}}
+function ifStatusHtml(){
+  var s=ifGet();if(!s)return '';
+  var m=s.err?'IFEMA: no he podido leer ifema.es ('+s.err+'). Se enseñan solo los eventos de Ticketmaster.':(s.n>0?'IFEMA: '+s.n+(s.n===1?' evento leído':' eventos leídos')+' en ifema.es para estos días.':'IFEMA: no hay eventos en ifema.es para estos días.');
+  return '<br>'+esc(m);
+}
+function evAll(){
+  var tm=http(evUrl()).then(parseEv);
+  var ifp=Promise.all(IF_URLS.map(function(u){return httpText(u).then(function(x){return {x:x}},function(e){return {e:e}})})).then(function(rs){
+    var ranges=[],okn=0,err='',seen={};
+    rs.forEach(function(r){
+      if(r.e){err=errTxt(r.e);return}
+      okn++;
+      try{parseIfema(r.x).forEach(function(q){var k=q.n.toLowerCase()+'|'+q.a+'|'+q.b;if(!seen[k]){seen[k]=1;ranges.push(q)}})}catch(x){err='respuesta no válida'}
+    });
+    if(okn&&!ranges.length)err='no he sabido leer la página';
+    var L=ifExpand(ranges),names={};L.forEach(function(e){names[e.n]=1});
+    ifSave({t:Date.now(),n:Object.keys(names).length,err:ranges.length?'':err});
+    return L;
+  },function(){return []});
+  return Promise.all([tm,ifp]).then(function(a){return mergeIf(a[0],a[1])});
+}
 var V3=/movistar arena|wizink|metropolitano|c[ií]vitas|bernab[eé]u|vistalegre|las ventas|caja m[aá]gica|ifema|ciudad del f[uú]tbol|iberdrola music|mad cool/i;
 var V2=/riviera|auditorio nacional|teatro real|estadio de vallecas|sala but|mon live|teatro barcel[oó]|la cubierta|dcode|matadero/i;
 var BAR=[[/movistar arena|wizink/i,'Salamanca'],[/metropolitano|c[ií]vitas/i,'San Blas'],[/bernab[eé]u/i,'Chamartín'],[/vistalegre/i,'Carabanchel'],[/las ventas/i,'Salamanca'],[/caja m[aá]gica/i,'Usera'],[/ifema/i,'Barajas'],[/auditorio nacional/i,'Chamartín'],[/estadio de vallecas/i,'Puente de Vallecas']];
@@ -5453,7 +5567,7 @@ function calc(ev,map,p){
   }else f.push(['','Neutro','Hora por confirmar','La fuente no da la hora de inicio, así que no puedo calcular la salida.']);
   r.lvl=r.tier===0?1:(r.score>=3?3:(r.score===2?2:1));
   r.lvlTxt=r.lvl===3?'Interés alto':r.lvl===2?'Interés medio':'Interés bajo';
-  r.rel=(r.tier>0&&ev.t)?'fiabilidad media':'fiabilidad baja';
+  r.rel=(r.tier>0&&ev.t&&ev.k!=='fair')?'fiabilidad media':'fiabilidad baja';
   return r;
 }
 function barsHtml(n){
@@ -5465,12 +5579,12 @@ function barsHtml(n){
 /* ---------- descarga con caché ---------- */
 function pageOpen(){return !!document.getElementById('infRoot')}
 function job(name,f,today){
-  return f().then(function(data){var c=cache();c[name]={t:Date.now(),data:data};if(name==='ev')c.ev.from=today;jset(K_CACHE,c);return true},function(e){S.err[name]=errTxt(e);return false});
+  return f().then(function(data){var c=cache();c[name]={t:Date.now(),data:data};if(name==='ev'){c.ev.from=today;c.ev.src='if1'}jset(K_CACHE,c);return true},function(e){S.err[name]=errTxt(e);return false});
 }
 function refresh(force){
   var c=cache(),now=Date.now(),today=dkey(new Date());
   var needWx=force||!c.wx||now-c.wx.t>TTL_WX;
-  var needEv=force||!c.ev||now-c.ev.t>TTL_EV||c.ev.from!==today;
+  var needEv=force||!c.ev||now-c.ev.t>TTL_EV||c.ev.from!==today||c.ev.src!=='if1';
   if(!needWx&&!needEv)return Promise.resolve('fresh');
   if(navigator.onLine===false)return Promise.resolve('offline');
   if(inflight)return inflight;
@@ -5478,7 +5592,7 @@ function refresh(force){
   if(pageOpen())draw(true);
   var jobs=[];
   if(needWx)jobs.push(job('wx',function(){return http(wxUrl()).then(parseWx)},today));
-  if(needEv)jobs.push(job('ev',function(){return http(evUrl()).then(parseEv)},today));
+  if(needEv)jobs.push(job('ev',function(){return evAll()},today));
   inflight=Promise.all(jobs).then(function(){
     inflight=null;S.busy=false;
     var c2=cache();c2.last=Date.now();jset(K_CACHE,c2);
@@ -5517,13 +5631,13 @@ function evCard(r){
   var ev=r.ev,exit=r.win?'Salida estimada '+hm(r.a)+' – '+hm(r.b):'Hora por confirmar';
   var chips=r.win?'<div class="inf-chips"><span>'+esc(rainTxt(r.pop))+'</span></div>':'';
   return '<div class="inf-ev" data-id="'+esc(ev.id)+'" onclick="infDetail(this.getAttribute(\'data-id\'))">'+
-    '<div class="inf-evtop"><div class="inf-time"><b>'+(ev.t||'—')+'</b><small>empieza</small></div><div class="inf-evmain"><div class="inf-name">'+esc(ev.n)+'</div><div class="inf-sub">'+esc(placeTxt(ev))+'</div></div></div>'+
+    '<div class="inf-evtop"><div class="inf-time"><b>'+(ev.k==='fair'&&ev.t?'~':'')+(ev.t||'—')+'</b><small>'+(ev.k==='fair'&&ev.t?'supuesto':'empieza')+'</small></div><div class="inf-evmain"><div class="inf-name">'+esc(ev.n)+'</div><div class="inf-sub">'+esc(placeTxt(ev))+'</div></div></div>'+
     '<div class="inf-exit">🕒 <b>'+exit+'</b></div>'+chips+
     '<div class="inf-lvl">'+barsHtml(r.lvl)+'<div><b>'+r.lvlTxt+'</b><small>Estimación · '+r.rel+'</small></div><em>Ver detalle ›</em></div></div>';
 }
 function rowHtml(r){
   var ev=r.ev;
-  return '<div class="inf-row" data-id="'+esc(ev.id)+'" onclick="infDetail(this.getAttribute(\'data-id\'))"><div class="t">'+(ev.t||'—')+'</div><div class="n">'+esc(ev.n)+'<small>'+esc(placeTxt(ev))+'</small></div><div class="l">'+barsHtml(r.lvl)+'<span>'+r.lvlTxt.replace('Interés ','')+'</span></div></div>';
+  return '<div class="inf-row" data-id="'+esc(ev.id)+'" onclick="infDetail(this.getAttribute(\'data-id\'))"><div class="t">'+(ev.k==='fair'&&ev.t?'~':'')+(ev.t||'—')+'</div><div class="n">'+esc(ev.n)+'<small>'+esc(placeTxt(ev))+'</small></div><div class="l">'+barsHtml(r.lvl)+'<span>'+r.lvlTxt.replace('Interés ','')+'</span></div></div>';
 }
 function dayEvents(c,k,p,map,all){
   var L=(c.ev&&c.ev.data)||[],out=[],i,r;
@@ -5569,12 +5683,12 @@ function viewList(){
     if(S.tab==='hoy'){var nm=nowMin();all=all.filter(function(r){return !r.win||r.b>=nm})}
     var lst2=pick(all);
     o+='<h2 class="inf-h2">Eventos de '+(S.tab==='hoy'?'hoy':'mañana')+'<small>'+lst2.length+' '+(lst2.length===1?'evento':'eventos')+'</small></h2>';
-    if(!lst2.length)o+='<div class="inf-note">'+(c.ev?'No veo eventos grandes para este día en Ticketmaster.':'Todavía no hay datos de eventos.')+' Ojo: Ticketmaster no lo tiene todo (por ejemplo, no vende los partidos de Real Madrid ni Atlético).</div>';
+    if(!lst2.length)o+='<div class="inf-note">'+(c.ev?'No veo eventos grandes para este día en Ticketmaster ni en IFEMA.':'Todavía no hay datos de eventos.')+' Ojo: Ticketmaster no lo tiene todo (por ejemplo, no vende los partidos de Real Madrid ni Atlético).</div>';
     lst2.forEach(function(r){o+=evCard(r)});
   }
   if(hidden>0&&!S.small)o+='<button class="inf-btn" onclick="infSmall(true)">Mostrar también '+hidden+(hidden===1?' evento pequeño':' eventos pequeños')+'</button>';
   if(S.small)o+='<button class="inf-btn" onclick="infSmall(false)">Ocultar los eventos pequeños</button>';
-  o+='<div class="inf-foot">Son estimaciones de posibles oportunidades, no garantías de que haya viajes. La hora de salida es la de inicio más una duración que supongo (se puede cambiar en cada evento). Datos de eventos: Ticketmaster. Datos del tiempo: Open-Meteo.com.</div>';
+  o+='<div class="inf-foot">Son estimaciones de posibles oportunidades, no garantías de que haya viajes. La hora de salida es la de inicio más una duración que supongo (se puede cambiar en cada evento). Datos de eventos: Ticketmaster e IFEMA (ifema.es). Datos del tiempo: Open-Meteo.com.'+ifStatusHtml()+'</div>';
   return '<section class="inf" id="infRoot">'+o+'</section>';
 }
 function findEv(id){var L=(cache().ev&&cache().ev.data)||[];for(var i=0;i<L.length;i++)if(L[i].id===id)return L[i];return null}
@@ -5585,14 +5699,14 @@ function viewDetail(){
   var r=calc(ev,map,p),o=back;
   var dt=ev.d.split('-');
   o+='<h1 class="inf-title inf-t2">'+esc(ev.n)+'</h1><div class="inf-sub" style="margin-top:4px">'+esc(placeTxt(ev))+' · '+(+dt[2])+' de '+MES[+dt[1]-1]+'</div>';
-  o+='<div class="inf-card" style="margin-top:12px"><div class="inf-lbl">Dato de la fuente</div><div class="inf-big">'+(ev.t||'Por confirmar')+'</div><div class="inf-sub">Hora de inicio · según Ticketmaster'+(cache().ev?' · consultado a las '+z(new Date(cache().ev.t).getHours())+':'+z(new Date(cache().ev.t).getMinutes()):'')+'</div></div>';
+  o+='<div class="inf-card" style="margin-top:12px"><div class="inf-lbl">Dato de la fuente</div><div class="inf-big">'+(ev.k==='fair'&&ev.t?'~':'')+(ev.t||'Por confirmar')+'</div><div class="inf-sub">'+(ev.k==='fair'?(ev.t?'Hora supuesta (feria: apertura típica) · IFEMA no publica horario · según el calendario de ifema.es':'Espectáculo de temporada · sin hora en el calendario de ifema.es'):'Hora de inicio · según Ticketmaster')+(cache().ev?' · consultado a las '+z(new Date(cache().ev.t).getHours())+':'+z(new Date(cache().ev.t).getMinutes()):'')+'</div></div>';
   o+='<div class="inf-card" style="border-color:#168bff"><div class="inf-lbl" style="color:#8fb8ff">Mi estimación</div>';
   if(r.win){
     o+='<div class="inf-sub" style="margin-top:6px">Salida de la gente</div><div class="inf-big">'+hm(r.a)+' – '+hm(r.b)+'</div>';
-    o+='<div class="inf-lvl" style="border:0;padding-top:8px">'+barsHtml(r.lvl)+'<div><b>'+r.lvlTxt+'</b><small>'+r.rel.charAt(0).toUpperCase()+r.rel.slice(1)+': la hora es un dato, la duración no</small></div></div>';
+    o+='<div class="inf-lvl" style="border:0;padding-top:8px">'+barsHtml(r.lvl)+'<div><b>'+r.lvlTxt+'</b><small>'+r.rel.charAt(0).toUpperCase()+r.rel.slice(1)+': '+(ev.k==='fair'?'la hora y la duración son suposiciones mías':'la hora es un dato, la duración no')+'</small></div></div>';
   }else o+='<div class="inf-sub" style="margin-top:6px">Sin hora de inicio no puedo estimar la salida.</div>';
   o+='</div>';
-  var ds=[120,150,180],labs={120:'2 h',150:'2 h 30',180:'3 h'},btn='';
+  var ds=ev.k==='fair'?[480,540,600]:[120,150,180],labs={120:'2 h',150:'2 h 30',180:'3 h',480:'8 h',540:'9 h',600:'10 h'},btn='';
   ds.forEach(function(m){btn+='<button class="'+(r.dur===m?'on':'')+'" onclick="infDur(\''+ev.k+'\','+m+')">'+labs[m]+'</button>'});
   o+='<div class="inf-card"><div class="inf-lbl">Duración que supongo</div><div class="inf-durs">'+btn+'</div><div class="inf-sub" style="margin-top:8px">Se guarda para todos los '+KIND_TXT[ev.k]+'. Margen de salida: ± '+r.spread+' min.</div></div>';
   var fh='';
@@ -5630,7 +5744,7 @@ function noticeLines(){
   var L=dayEvents(c,today,p,map).filter(function(r){return r.lvl>=2&&(!r.win||r.b>=nm)});
   L.sort(function(a,b){return b.lvl-a.lvl||(a.ev.t<b.ev.t?-1:1)});
   var out=L.slice(0,3).map(function(r){
-    return {t:r.ev.t||'—',a:r.ev.n,b:placeTxt(r.ev)+(r.win?' · salida estimada '+hm(r.a)+' – '+hm(r.b):'')};
+    return {t:(r.ev.k==='fair'&&r.ev.t?'~':'')+(r.ev.t||'—'),a:r.ev.n,b:placeTxt(r.ev)+(r.win?' · salida estimada '+hm(r.a)+' – '+hm(r.b):'')};
   });
   var rb=(c.wx&&c.wx.data&&Date.now()-c.wx.t<12*3600000)?rainBlock(map,today,nm):null;
   if(rb)out.push({t:hh(rb[0]).slice(0,2)+' h',a:'Lluvia prevista',b:'De '+hh(rb[0])+' a '+hh(rb[1])+' (probabilidad de al menos el 50 %)'});
