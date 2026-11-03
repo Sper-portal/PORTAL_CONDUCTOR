@@ -972,7 +972,7 @@ ${dailyMotivationHtml()}
 </div>
 <button class="airport airport-premium" onclick="tripAdd('Bolt',true)" aria-label="Añadir viaje de aeropuerto"><span class="airport-plane" aria-hidden="true">✈</span><span class="airport-copy"><strong>Aeropuerto</strong><small>Ida y Vuelta <i>↑↓</i></small></span><span class="airport-chip"><small>Comisión</small><b>${Number(db.settings.boltCommission??25).toLocaleString('es-ES')}% · ${euro(Number(db.settings.airportFee??2.57))}</b></span></button>
 <div class="navrow calc-day-nav"><button class="back" onclick="changeCalcDay(-1)" aria-label="Día anterior">‹</button><b>${fmtDate(k)}</b><button class="back" onclick="changeCalcDay(1)" aria-label="Día siguiente" ${k===today()?'disabled':''}>›</button></div>
-<div class="results"><div class="metric totalMetric"><div class="metricLabelRow"><small>Total facturación diaria</small><button class="billing-eye" type="button" aria-label="${hidden?'Mostrar':'Ocultar'} facturación diaria" onclick="toggleDailyBillingVisibility()">${hidden?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M6.6 7.6C4.6 8.9 3.2 10.7 2.5 12c1 1.8 4.5 6 9.5 6 1.5 0 2.8-.3 3.9-.8"/><path d="M10.7 6.1c.4-.1.8-.1 1.3-.1 5 0 8.5 4.2 9.5 6-.4.8-1.3 2-2.6 3.1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="3"/></svg>'}</button></div><b>${money(tot)}</b></div><div class="metric"><div class="metricLabelRow"><small>Mi comisión diaria (${db.settings.commission}%)</small></div><b>${money(comm)}</b></div></div>
+<div class="results"><div class="metric totalMetric"><div class="metricLabelRow"><small>Total facturación diaria</small><button class="billing-eye" type="button" aria-label="${hidden?'Mostrar':'Ocultar'} facturación diaria" onclick="toggleDailyBillingVisibility()">${hidden?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M6.6 7.6C4.6 8.9 3.2 10.7 2.5 12c1 1.8 4.5 6 9.5 6 1.5 0 2.8-.3 3.9-.8"/><path d="M10.7 6.1c.4-.1.8-.1 1.3-.1 5 0 8.5 4.2 9.5 6-.4.8-1.3 2-2.6 3.1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="3"/></svg>'}</button></div><b>${money(tot)}</b></div><div class="metric"><div class="metricLabelRow"><small>Mi comisión diaria (${window.PDC314&&window.PDC314.billPct?window.PDC314.billPct(k):db.settings.commission}%)</small></div><b>${money(comm)}</b></div></div>
 <div class="platform-summary">${PLAT6.map(p=>{let s=ts.filter(t=>t.platform===p).reduce((a,t)=>a+(Number(t.net)||0)+(Number(t.tip)||0),0);if(p==='Bolt')s+=calcDayComp(k);let c=platCls(p);return `<div class="ps ${c}">${p}<b>${money(s)}</b></div>`}).join('')}</div><div class="note" style="color:#18c987">🎁 Propinas del día: <b>${money(ts.reduce((a,t)=>a+(Number(t.tip)||0),0))}</b></div>
 ${performanceStripHtml(k)}<div class="triplist"><div class="triplist-head"><b>Últimos viajes · ${ts.length}</b></div>${ts.length?ts.slice().reverse().map(t=>{let c=platCls(t.platform);return `<div class="trip"><i class="dot ${c}"></i><span class="platform-name ${c}">${t.platform}${t.airport?' ✈':''}</span><span>${t.time}</span><span class="orig">${money(t.orig)} → ${money(t.net)} ${t.payment==='cash'?'💵':t.payment==='card'?'💳':''}${Number(t.tip)>0?`<small style="display:block;color:#18c987">🎁 Propina: ${money(t.tip)}</small>`:''}</span><span class="trip-actions"><button class="action" title="Propina" onclick="addTripTip('${t.id}','calc')">🎁</button><button class="action" title="Editar viaje" onclick="editCalcTrip('${t.id}')">✏️</button><button class="trash" title="Borrar viaje" onclick="delTrip(${t.id})">🗑</button></span></div>`}).join(''):`<div class="empty">No hay viajes registrados el ${fmtDate(k)}.</div>`}</div>
 </section>
@@ -1161,20 +1161,29 @@ function themeNote(){
   var t=sunTimes(new Date());
   return 'Cambia solo: claro de día y oscuro de noche, según el sol en Madrid'+(t?' (hoy sale a las '+themeHm(t.rise)+' y se pone a las '+themeHm(t.set)+')':'')+'. Ahora: '+(themeLight()?'claro':'oscuro')+'.';
 }
+/*v330-tema*/
+// v3.30 · «Tema» es una fila de Ajustes con flechita (›), como Cuenta y Configuración de la app; dentro se elige Automático, Claro u Oscuro.
+function themeRowText(){var m=themeMode();return m==='light'?'Siempre claro':m==='dark'?'Siempre oscuro':'Automático · claro de día y oscuro de noche'}
 function themeCardFill(){
-  var c=document.getElementById('themeCard');if(!c)return;
   var m=themeMode();
-  c.querySelectorAll('.theme-seg button').forEach(function(b){var on=b.getAttribute('data-m')===m;b.classList.toggle('on',on);b.setAttribute('aria-checked',on?'true':'false')});
+  document.querySelectorAll('#themeOpts .tm-opt').forEach(function(b){var on=b.getAttribute('data-m')===m;b.classList.toggle('on',on);b.setAttribute('aria-checked',on?'true':'false')});
   var n=document.getElementById('themeNote');if(n)n.textContent=themeNote();
+  var r=document.getElementById('themeRowNote');if(r)r.textContent=themeRowText();
 }
 function themeCardAdd(){
   var menu=document.querySelector('#content .settings-menu');
-  if(!menu||document.getElementById('themeCard'))return;
-  menu.insertAdjacentHTML('beforeend','<div class="settings-option themeopt" id="themeCard"><span class="ico">🎨</span><span><b>Tema</b><small id="themeNote"></small></span>'
-    +'<div class="theme-seg" role="radiogroup" aria-label="Tema">'
-    +'<button type="button" role="radio" data-m="auto" onclick="themeSet(\'auto\')"><span>🌗</span><span>Automático</span></button>'
-    +'<button type="button" role="radio" data-m="light" onclick="themeSet(\'light\')"><span>☀️</span><span>Claro</span></button>'
-    +'<button type="button" role="radio" data-m="dark" onclick="themeSet(\'dark\')"><span>🌙</span><span>Oscuro</span></button></div></div>');
+  if(!menu||document.getElementById('themeRow'))return;
+  menu.insertAdjacentHTML('beforeend','<button class="settings-option themerow" id="themeRow" onclick="renderTema()"><span class="ico">🎨</span><span><b>Tema</b><small id="themeRowNote"></small></span><span style="margin-left:auto;font-size:24px;color:#7b8794">›</span></button>');
+  themeCardFill();
+}
+function renderTema(){
+  ltSet(false);
+  var o=function(m,ic,t,s){return '<button type="button" class="settings-option tm-opt" role="radio" data-m="'+m+'" onclick="themeSet(\''+m+'\')"><span class="ico">'+ic+'</span><span><b>'+t+'</b><small>'+s+'</small></span><span class="tm-ck">✓</span></button>'};
+  jPanel('Tema',"show('settings')",'<div class="note" style="margin-bottom:12px">Elige cómo se ven Calculadora, Control, Facturación e Informe. Ajustes, el menú y Madrid hoy son siempre oscuros.</div><div class="tm-list" id="themeOpts" role="radiogroup" aria-label="Tema">'
+    +o('auto','🌗','Automático','Claro de día y oscuro de noche, según el sol en Madrid')
+    +o('light','☀️','Claro','Siempre claro')
+    +o('dark','🌙','Oscuro','Siempre oscuro')
+    +'</div><div class="note" id="themeNote" style="margin-top:12px"></div>');
   themeCardFill();
 }
 (function(){
@@ -1386,7 +1395,7 @@ function deleteBillingTrip(id){const t=db.trips.find(x=>String(x.id)===String(id
 function changeBillPeriod(n){if(billPeriod==='daily'){let d=new Date(billAnchor+'T12:00:00');d.setDate(d.getDate()+n);let target=dateKey(d);let min=new Date();min.setMonth(min.getMonth()-18);if(target>today()||d<min)return;billAnchor=target;editingBillingTripId=null;}else if(billPeriod==='weekly'){billWeekOffset=Math.max(-78,Math.min(0,billWeekOffset+n))}else{billMonthOffset=Math.max(-17,Math.min(0,billMonthOffset+n))}renderBilling()}
 function setBillPeriod(p){billPeriod=p;renderBilling()}
 function workedMinutesForPeriod(start,end){let total=0;for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){total+=totalMinutesForDay(dateKey(d))}return Math.max(0,total)}
-function billingCard(title,x){const money=v=>euro(v);const pct=x.pct.toFixed(2)+'%';const manualExists=billPeriod==='daily'&&!!db.manual[billAnchor];const editButton=manualExists?`<button class="action" style="width:100%;margin-top:10px" onclick="openManualEdit()">✏️ Editar datos del día</button>`:'';const isPeriod=billPeriod==='daily'||billPeriod==='weekly'||billPeriod==='monthly';let workedMinutes=0;if(billPeriod==='daily')workedMinutes=totalMinutesForDay(billAnchor);else if(isPeriod&&x.start&&x.end)workedMinutes=workedMinutesForPeriod(x.start,x.end);const hourlyValue=workedMinutes>0?(Number(x.total||x.f||0))/(workedMinutes/60):null;const hourlyMetric=isPeriod?`<div class="metric"><small>Facturación hora</small><b>${hourlyValue===null?'—':money(hourlyValue)+'/h'}</b></div>`:'';return `<section class="panel"><div class="billing-head"><div class="section-title">Facturación ${title}</div></div><div class="summary-grid"><div class="metric"><small>Facturación</small><b>${money(x.total||x.f)}</b></div><div class="metric"><small>Efectivo</small><b>${money(x.cash||x.c)}</b></div><div class="metric"><small>Tarjeta</small><b>${money(x.card)}</b></div><div class="metric"><small>Propinas</small><b style="color:#18c987">${money(x.tips||0)}</b></div><div class="metric"><small>Mi comisión (${db.settings.commission}%)</small><b>${money(x.comm)}</b></div><div class="metric"><small>Gasolina</small><b>${money(x.g)}</b></div><div class="metric"><small>% gasolina</small><b>${pct}</b></div>${hourlyMetric}</div><div class="platform-summary">${PLAT6.map(p=>{let c=platCls(p);return `<div class="ps ${c}">${p}<b>${money(x.plat[p])}</b></div>`}).join('')}</div><div class="note">Viajes: ${x.trips}</div>${editButton}</section>`}
+function billingCard(title,x){const money=v=>euro(v);const pct=x.pct.toFixed(2)+'%';const manualExists=billPeriod==='daily'&&!!db.manual[billAnchor];const editButton=manualExists?`<button class="action" style="width:100%;margin-top:10px" onclick="openManualEdit()">✏️ Editar datos del día</button>`:'';const isPeriod=billPeriod==='daily'||billPeriod==='weekly'||billPeriod==='monthly';let workedMinutes=0;if(billPeriod==='daily')workedMinutes=totalMinutesForDay(billAnchor);else if(isPeriod&&x.start&&x.end)workedMinutes=workedMinutesForPeriod(x.start,x.end);const hourlyValue=workedMinutes>0?(Number(x.total||x.f||0))/(workedMinutes/60):null;const hourlyMetric=isPeriod?`<div class="metric"><small>Facturación hora</small><b>${hourlyValue===null?'—':money(hourlyValue)+'/h'}</b></div>`:'';return `<section class="panel"><div class="billing-head"><div class="section-title">Facturación ${title}</div></div><div class="summary-grid"><div class="metric"><small>Facturación</small><b>${money(x.total||x.f)}</b></div><div class="metric"><small>Efectivo</small><b>${money(x.cash||x.c)}</b></div><div class="metric"><small>Tarjeta</small><b>${money(x.card)}</b></div><div class="metric"><small>Propinas</small><b style="color:#18c987">${money(x.tips||0)}</b></div><div class="metric"><small>Mi comisión (${x.commPct!=null?x.commPct:db.settings.commission}%)</small><b>${money(x.comm)}</b></div><div class="metric"><small>Gasolina</small><b>${money(x.g)}</b></div><div class="metric"><small>% gasolina</small><b>${pct}</b></div>${hourlyMetric}</div><div class="platform-summary">${PLAT6.map(p=>{let c=platCls(p);return `<div class="ps ${c}">${p}<b>${money(x.plat[p])}</b></div>`}).join('')}</div><div class="note">Viajes: ${x.trips}</div>${editButton}</section>`}
 function weeklyPayrollStore(){db.settings.weeklyPayrolls=db.settings.weeklyPayrolls||{};return db.settings.weeklyPayrolls}
 function weeklyPayrollDefault(){const d=new Date(today()+'T12:00:00');const month=monthKeyFromDate(d);return {payMonth:month,boltRate:19,boltGrossReal:'',cashFixed:Number(db.settings.cashPayroll??2000),irpf:8,commonContingency:6.5,weeks:[{start:dateKey(new Date(d.getFullYear(),d.getMonth()-1,28,12)),end:dateKey(new Date(d.getFullYear(),d.getMonth(),4,12))}]}}
 function weeklyPayrollGet(){const k=document.querySelector('#weeklyPayMonth')?.value||monthKeyFromOffset(billMonthOffset);const all=weeklyPayrollStore();if(!all[k])all[k]={...weeklyPayrollDefault(),payMonth:k,weeks:[]};return all[k]}
@@ -1411,7 +1420,7 @@ document.querySelector('#content').innerHTML=`<section class="panel"><div class=
 function reportCurrentWeek(){let [a,b]=weekBounds(0);report(a,b)}
 function reportCurrentMonth(){let [a,b]=monthBounds(0);report(a,b)}
 function manualReport(){let a=new Date(document.querySelector('#r1').value+'T12:00:00'),b=new Date(document.querySelector('#r2').value+'T12:00:00');report(a,b)}
-function report(a,b){let total=0,cashT=0,cardT=0,trav=0,tips=0,plat=zeroPlat(),fuel=0,hours=0;for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1)){let k=dateKey(d),x=billingDay(k);total+=x.f;cashT+=x.c;cardT+=x.card;tips+=x.tips||0;fuel+=Number(x.g||0);trav+=x.ts.length;hours+=totalMinutesForDay(k);Object.keys(plat).forEach(p=>plat[p]+=Number(x.plat[p]||0))}let out=document.querySelector('#reportOut');out.innerHTML=`<div class="metric"><small>Periodo</small><b>${fmtDate(dateKey(a))} → ${fmtDate(dateKey(b))}</b></div><div class="platform-summary" style="margin-top:10px">${Object.entries(plat).map(([p,v])=>{let c=platCls(p);return `<div class="ps ${c}">${p}<b>${euro(v)}</b></div>`}).join('')}</div><table style="margin-top:8px"><tr><td>Total facturación</td><td class="money">${euro(total)}</td></tr><tr><td>Total efectivo</td><td class="money">${euro(cashT)}</td></tr><tr><td>Total tarjeta</td><td class="money">${euro(cardT)}</td></tr><tr><td>Viajes</td><td class="money">${trav}</td></tr><tr><td>Mi comisión (sin aplicar comisión a propinas)</td><td class="money">${euro(commissionAmount(Math.max(0,total-tips)))}</td></tr><tr><td>Gasolina</td><td class="money">${euro(fuel)}</td></tr><tr><td>Gasolina / facturación</td><td class="money">${(total?fuel/total*100:0).toFixed(1)}%</td></tr><tr><td>🕐 Total de horas trabajadas</td><td class="money">${hoursText(hours)}</td></tr>${(()=>{let kmTotal=0;for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1)){const km=kilometersForDay(dateKey(d));if(km!==null)kmTotal+=km}const hasKm=kmTotal>0;return `<tr><td>Media por viaje</td><td class="money">${trav?euro(total/trav)+'/viaje':'—'}</td></tr><tr><td>Facturación por hora</td><td class="money">${hours?euro(total/(hours/60))+'/h':'—'}</td></tr><tr><td>Kilómetros recorridos</td><td class="money">${hasKm?kmTotal.toLocaleString('es-ES')+' km':'—'}</td></tr><tr><td>Facturación por km</td><td class="money">${hasKm?euro(total/kmTotal)+'/km':'—'}</td></tr>`})()}</table><div class="report-actions"><button class="action" onclick="saveReportFile('pdf')">💾 Guardar PDF</button><button class="action" onclick="exportReportPdf()">📄 Compartir PDF</button><button class="action" onclick="saveReportFile('png')">💾 Guardar imagen</button><button class="action" onclick="shareReport()">🖼 Compartir imagen</button></div>`;out.dataset.ready='1'}
+function report(a,b){let total=0,cashT=0,cardT=0,trav=0,tips=0,plat=zeroPlat(),fuel=0,hours=0;for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1)){let k=dateKey(d),x=billingDay(k);total+=x.f;cashT+=x.c;cardT+=x.card;tips+=x.tips||0;fuel+=Number(x.g||0);trav+=x.ts.length;hours+=totalMinutesForDay(k);Object.keys(plat).forEach(p=>plat[p]+=Number(x.plat[p]||0))}let out=document.querySelector('#reportOut');out.innerHTML=`<div class="metric"><small>Periodo</small><b>${fmtDate(dateKey(a))} → ${fmtDate(dateKey(b))}</b></div><div class="platform-summary" style="margin-top:10px">${Object.entries(plat).map(([p,v])=>{let c=platCls(p);return `<div class="ps ${c}">${p}<b>${euro(v)}</b></div>`}).join('')}</div><table style="margin-top:8px"><tr><td>Total facturación</td><td class="money">${euro(total)}</td></tr><tr><td>Total efectivo</td><td class="money">${euro(cashT)}</td></tr><tr><td>Total tarjeta</td><td class="money">${euro(cardT)}</td></tr><tr><td>Viajes</td><td class="money">${trav}</td></tr>${(()=>{const q=window.PDC314&&window.PDC314.billReport?window.PDC314.billReport(total,tips,b):{v:commissionAmount(Math.max(0,total-tips)),label:'Mi comisión (sin aplicar comisión a propinas)'};return `<tr><td>${q.label}</td><td class="money">${euro(q.v)}</td></tr>`})()}<tr><td>Gasolina</td><td class="money">${euro(fuel)}</td></tr><tr><td>Gasolina / facturación</td><td class="money">${(total?fuel/total*100:0).toFixed(1)}%</td></tr><tr><td>🕐 Total de horas trabajadas</td><td class="money">${hoursText(hours)}</td></tr>${(()=>{let kmTotal=0;for(let d=new Date(a);d<=b;d.setDate(d.getDate()+1)){const km=kilometersForDay(dateKey(d));if(km!==null)kmTotal+=km}const hasKm=kmTotal>0;return `<tr><td>Media por viaje</td><td class="money">${trav?euro(total/trav)+'/viaje':'—'}</td></tr><tr><td>Facturación por hora</td><td class="money">${hours?euro(total/(hours/60))+'/h':'—'}</td></tr><tr><td>Kilómetros recorridos</td><td class="money">${hasKm?kmTotal.toLocaleString('es-ES')+' km':'—'}</td></tr><tr><td>Facturación por km</td><td class="money">${hasKm?euro(total/kmTotal)+'/km':'—'}</td></tr>`})()}</table><div class="report-actions"><button class="action" onclick="saveReportFile('pdf')">💾 Guardar PDF</button><button class="action" onclick="exportReportPdf()">📄 Compartir PDF</button><button class="action" onclick="saveReportFile('png')">💾 Guardar imagen</button><button class="action" onclick="shareReport()">🖼 Compartir imagen</button></div>`;out.dataset.ready='1'}
 function openSideMenu(){document.getElementById('sideDrawer').classList.add('open');document.getElementById('drawerBackdrop').classList.add('open')}
 function backToGeneralMenu(){renderCalc();setTimeout(openSideMenu,0)}
 function closeSideMenu(){document.getElementById('sideDrawer').classList.remove('open');document.getElementById('drawerBackdrop').classList.remove('open')}
@@ -2238,7 +2247,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.28';
+const APP_VERSION='v3.30';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -2295,7 +2304,7 @@ jPanel('Rentabilidad de viajes',"show('settings')",'<div class="help-hero"><h2>�
 +'<button class="action" style="width:100%" onclick="rentSave()">✔ Guardar parámetros</button>'
 +'<div class="note" style="margin:12px 0"><b>Probar el aviso</b><div class="row" style="margin-top:8px;gap:8px"><button class="action" style="flex:1" onclick="rentTest(\'OK\')">Verde</button><button class="action" style="flex:1" onclick="rentTest(\'NO\')">Rojo</button><button class="action" style="flex:1" onclick="rentTest(\'DATA\')">Naranja</button></div></div>'
 +'<div class="note" style="margin:12px 0;line-height:1.5"><b>Cómo se calcula</b><br><small>€/km = precio ÷ (km de recogida + km del viaje). €/h = precio ÷ horas (recogida + viaje). Verde si cumples tus tres objetivos, rojo si no, y naranja si no se pudo leer algún dato.</small></div>')};
-window.bubbleDiagShow=async()=>{if(!SRx){alert('Solo disponible en el móvil.');return}try{const r=await SRx.bubbleDiag(),L=[];L.push('Móvil: '+(r.brand||'?')+' '+(r.model||'')+' · Android '+(r.sdk||'?'));L.push(r.serviceOn?'✅ Lector de pantalla ACTIVADO':'❌ Lector de pantalla DESACTIVADO (Ajustes del móvil → Accesibilidad → Portal lector de pantalla)');L.push(r.bubbleOn?'✅ Burbuja activada en la app':'❌ Burbuja DESACTIVADA en la app (interruptor «Burbuja flotante»)');if(r.serviceOn){L.push('App en primer plano: '+(r.fgPkg||'(ninguna detectada)'));L.push(r.matchesDriver?'✅ Es Bolt, Uber o Cabify':'ℹ️ Abre Bolt, Uber o Cabify: la burbuja solo sale encima de ellas');L.push(r.shown?'✅ Burbuja visible ahora':'Burbuja no visible ahora')}L.push('','Si todo sale en ✅ y no la ves: Android 13 o superior → Ajustes → Apps → Portal → ⋮ → «Permitir ajustes restringidos», y pon la batería de la app en «Sin restricciones».');alert(L.join('\n'))}catch(e){alert('No se pudo hacer el diagnóstico.')}};
+window.bubbleDiagShow=async()=>{if(!SRx){alert('Solo disponible en el móvil.');return}try{const r=await SRx.bubbleDiag(),L=[];L.push('Móvil: '+(r.brand||'?')+' '+(r.model||'')+' · Android '+(r.sdk||'?'));L.push(r.serviceOn?'✅ Lector de pantalla ACTIVADO':'❌ Lector de pantalla DESACTIVADO (Ajustes del móvil → Accesibilidad → Portal lector de pantalla)');L.push(r.bubbleOn?'✅ Burbuja activada en la app':'❌ Burbuja DESACTIVADA en la app (interruptor «Burbuja flotante»)');if(r.serviceOn){L.push('App en primer plano: '+(r.fgPkg||'(ninguna detectada)'));L.push(r.matchesDriver?'✅ Es Bolt, Uber o Cabify':'ℹ️ Abre Bolt, Uber o Cabify: la burbuja solo sale encima de ellas');L.push(r.shown?'✅ Burbuja visible ahora':'Burbuja no visible ahora');if(r.log)L.push('','Últimos cambios de ventana (los nuevos abajo):',r.log);if(r.puesta!=null)L.push('Veces puesta / quitada: '+r.puesta+' / '+r.quitada)}L.push('','Si todo sale en ✅ y no la ves: Android 13 o superior → Ajustes → Apps → Portal → ⋮ → «Permitir ajustes restringidos», y pon la batería de la app en «Sin restricciones».');alert(L.join('\n'))}catch(e){alert('No se pudo hacer el diagnóstico.')}};
 window.renderReadDiag=async()=>{let txt='Solo disponible en el móvil o la tablet con la app instalada.',age='';if(SRx){try{const r=await SRx.getReadDiag();txt=r.text||'Todavía no se ha leído nada. Abre Bolt, Uber o Cabify con un viaje en pantalla, toca «Importe automático» (o la burbuja) y vuelve aquí.';if(r.text){const m=Math.round(r.ageMs/1000);age='Leído hace '+(m<90?m+' s':Math.round(m/60)+' min')+'.'}}catch(e){txt='No se pudo leer.'}}
 jPanel('Último texto leído',"show('settings')",'<div class="help-hero"><h2>🔎 Último texto leído</h2><p style="margin-top:8px;line-height:1.5">Esto es lo que ve la app en las otras ventanas. Si no te lee bien el importe, o no distingue tarjeta de efectivo, mándalo por Telegram para ajustar la lectura. '+age+'</p></div><textarea id="rdTxt" rows="14" readonly style="width:100%;border-radius:12px;padding:10px;box-sizing:border-box;font-size:12px"></textarea><button class="action" style="width:100%;margin-top:10px" onclick="openTelegramSupport(document.getElementById(\'rdTxt\').value)">✈ Enviar por Telegram</button><button class="secondary" style="width:100%;margin-top:8px" onclick="readDiagCopy()">📋 Copiar</button>');const el=document.getElementById('rdTxt');if(el)el.value=txt};
 window.readDiagCopy=async()=>{const el=document.getElementById('rdTxt');try{await navigator.clipboard.writeText(el.value);rentToast('Copiado')}catch(e){el.select();try{document.execCommand('copy')}catch(x){}rentToast('Copiado')}};
@@ -3324,6 +3333,67 @@ try{P.migrateTips328()}catch(e){console.warn('v3.28 propinas',e)}
     const i=J_KB.findIndex(e=>e[0]==='contacto');
     J_KB.splice(i<0?J_KB.length:i,0,...nuevas);
   }catch(e){console.warn('v3.28 Jenny',e)}
+})();
+
+/*v330-bill*/
+/* ---------- v3.30: «Mi comisión» de Facturación, de la pantalla principal y del Informe sigue la misma regla que la nómina de su mes ----------
+   · Si el mes tiene las propinas «dentro de la facturación» (todo en facturación), las propinas cuentan para el porcentaje, igual que en la nómina.
+   · Si tiene «con retención» o «aparte» (meses viejos guardados así), no cuentan, como hasta ahora.
+   · El porcentaje, el mínimo y la regla son los de ese mes (la «foto» guardada si está cerrado, los de Ajustes si es el actual).
+   · El perfil «Nómina mensual semanal» y los meses guardados con el cálculo antiguo tienen su propio cálculo: se quedan como estaban. */
+(function(){
+const P=window.PDC314;if(!P||P.bill330)return;P.bill330=true;
+P.billCfg=function(d){
+  try{
+    const dt=d instanceof Date?d:new Date(String(d).slice(0,10)+'T12:00:00'),t=new Date(today()+'T12:00:00');
+    const cfg=payrollSettingsForMonth((dt.getFullYear()-t.getFullYear())*12+dt.getMonth()-t.getMonth());
+    return cfg&&cfg.model!==1&&cfg.payrollProfile!=='weeklyMonthly'?cfg:null;
+  }catch(e){return null}
+};
+P.billComm=function(total,cfg){      // la misma fórmula de commissionAmount pero con la regla de ese mes
+  total=Number(total)||0;
+  const pct=Math.max(0,Number(cfg.commission)||0)/100,min=Math.max(0,Number(cfg.commissionMinimum)||0);
+  return cfg.commissionMode==='minimum'?Math.max(0,total-min)*pct:total*pct;
+};
+P.billPct=function(d){const cfg=P.billCfg(d);return cfg?cfg.commission:db.settings.commission};
+P.billReport=function(total,tips,end){   // Informe: toda la franja con la regla del mes en que acaba
+  const cfg=P.billCfg(end),all=!!cfg&&cfg.tipMode==='all';
+  if(!cfg)return {v:commissionAmount(Math.max(0,total-tips)),label:'Mi comisión (sin aplicar comisión a propinas)'};
+  return {v:P.billComm(Math.max(0,total-(all?0:tips)),cfg),label:all?'Mi comisión (con las propinas dentro)':'Mi comisión (sin aplicar comisión a propinas)'};
+};
+const bd=window.billingDay;
+window.billingDay=function(k){
+  const x=bd.apply(this,arguments);
+  try{
+    const cfg=P.billCfg(k);
+    if(cfg){x.comm=P.billComm((Number(x.f)||0)-(cfg.tipMode==='all'?0:(Number(x.tips)||0)),cfg);x.commPct=cfg.commission}
+  }catch(e){}
+  return x;
+};
+const pd=window.periodData;
+window.periodData=function(type,offset){
+  const r=pd.apply(this,arguments);
+  try{
+    const cfg=P.billCfg(type==='weekly'?r.end:r.start);
+    if(cfg){
+      if(type==='monthly'){
+        const pr=calculatePayrollForMonth(r,cfg);   // la misma cuenta que la nómina de ese mes
+        if(pr&&typeof pr.variable==='number'){r.comm=pr.variable;r.commPct=pr.pct}
+      }else{
+        r.comm=P.billComm(Math.max(0,(Number(r.total)||0)-(cfg.tipMode==='all'?0:(Number(r.tips)||0))),cfg);r.commPct=cfg.commission;
+      }
+    }
+  }catch(e){}
+  return r;
+};
+const cm=window.commission;
+window.commission=function(k){
+  try{
+    const cfg=P.billCfg(k);
+    if(cfg)return P.billComm((Number(window.fact(k))||0)-(cfg.tipMode==='all'?0:tipsForDay(k)),cfg);
+  }catch(e){}
+  return cm.apply(this,arguments);
+};
 })();
 
 /* ---------- Ajustes ---------- */
@@ -6811,6 +6881,12 @@ html body .settings-option.themeopt .theme-seg{grid-column:1/-1;display:grid;gri
 html body .theme-seg button{display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0;padding:9px 2px;border-radius:14px;border:1px solid #c6d6e6;background:#fff;color:#102333;font-weight:800;font-size:clamp(10px,3.1vw,12.5px);line-height:1.15;cursor:pointer;touch-action:manipulation}
 html body .theme-seg button span{max-width:100%;text-align:center;overflow-wrap:anywhere}
 html body .theme-seg button.on{background:linear-gradient(145deg,#4db3ff,#0a84ff);border-color:#0a84ff;color:#fff}
+</style>
+<style id="v330-style">/* v3.30 · pantalla «Tema» (dentro de Ajustes): tres opciones como las demás filas, con una marca en la elegida */
+.tm-list{display:grid;gap:10px}
+.settings-option.tm-opt .tm-ck{margin-left:auto;flex:0 0 auto;font-size:22px;font-weight:900;color:#0a84ff;visibility:hidden}
+.settings-option.tm-opt.on{border-color:#0a84ff;box-shadow:0 0 0 2px #0a84ff66}
+.settings-option.tm-opt.on .tm-ck{visibility:visible}
 </style>
 <style id="v328-style">.nm-box{margin-top:12px}
 .nm-btn{display:block;width:100%;box-sizing:border-box;padding:13px 12px;border-radius:14px;border:1px solid #3fc8ff;background:linear-gradient(145deg,#0f5a9c,#0a3566);color:#fff;font-weight:900;font-size:15px;line-height:1.25;text-align:center;cursor:pointer;touch-action:manipulation}
