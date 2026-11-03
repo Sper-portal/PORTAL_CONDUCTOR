@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+cd /workspaces/PORTAL_CONDUCTOR && gh run download $(gh run list -L 1 --status success --json databaseId -q '.[0].databaseId') -D apk_v325 && ls -R apk_v325# -*- coding: utf-8 -*-
 """Super portal del conductor 1.0  (v3.25)
 
 NUEVO en «Madrid hoy»: IFEMA.
