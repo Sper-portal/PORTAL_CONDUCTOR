@@ -1023,7 +1023,15 @@ public class ScreenReaderService extends AccessibilityService {
 
     /** hora punta ahora pero la tarifa de punta no sube tu precio (Ajustes): se dice lo que saldria si contara */
     static String peakLine(OfferAnalyzer.Result r) {
+        if (r.estPeakShort) return "Hora punta, pero es un viaje largo: tarifa de valle";
         if (r.estWeekend && !r.estPeakUsed) return "Ahora es hora punta: no sube tu precio" + (r.estAlt >= 0 ? " (con tarifa de punta: neto " + OfferAnalyzer.money(r.estAlt) + " \u20AC)" : "");
+        return "";
+    }
+
+    /** viaje largo con demanda: el descuento medio de la tarjeta; en un lugar de evento, sin descuento (v3.34) */
+    static String longLine(OfferAnalyzer.Result r) {
+        if (r.estDisc > 1e-9) return "Viaje largo con demanda: precio base \u2212" + num1(r.estDisc) + " %";
+        if (r.estEvent != null && r.estEvent.length() > 0) return "Lugar de evento (" + r.estEvent + "): sin descuento";
         return "";
     }
 
@@ -1088,6 +1096,7 @@ public class ScreenReaderService extends AccessibilityService {
             dt.append(zoneDemand(r)).append("\n");
             if (r.estRange) dt.append(rangeLine(r)).append("\n");
             if (peakLine(r).length() > 0) dt.append(peakLine(r)).append("\n");
+            if (longLine(r).length() > 0) dt.append(longLine(r)).append("\n");
             if (r.estMinApplied) dt.append("Se aplic\u00f3 la tarifa m\u00ednima estimada\n");
             if (r.pickupKm > 0 || r.pickupMin > 0) {
                 dt.append("Recogida (no cuenta en el precio): ");

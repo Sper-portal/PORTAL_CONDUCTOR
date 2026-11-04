@@ -184,6 +184,9 @@ public class BoltConfig {
 
     private static final int MAX_ZONES = 40, MAX_PTS = 200, MAX_SLOTS = 30;
 
+    /** v3.34: version de los ajustes (los guardados con una menor se migran a las reglas nuevas). */
+    static final int CFG_VER = 334;
+
     /** Franjas de hora punta: [{on, d (dias, bit 0 = lunes), a (desde, minutos del dia), b (hasta)}]. Lo no valido se descarta; las de la v3.15g (con from/to) no valen y se sustituyen por las de fabrica. */
     private static List<OfferAnalyzer.Slot> slots(Object o, List<OfferAnalyzer.Slot> def) {
         if (!(o instanceof List)) return def;
@@ -216,6 +219,10 @@ public class BoltConfig {
             c.peakApplies = bool(m.get("peakApplies"), c.peakApplies);
             c.round5 = bool(m.get("round5"), c.round5);
             c.fine = dbl(m.get("fine"), c.fine, -50, 100);
+            c.peakKm = dbl(m.get("peakKm"), c.peakKm, 0, 50);
+            c.longKm = dbl(m.get("longKm"), c.longKm, 0, 100);
+            c.longDisc = dbl(m.get("longDisc"), c.longDisc, 0, 50);
+            c.eventOn = bool(m.get("eventOn"), c.eventOn);
             Object zf = m.get("zoneForce");
             if (zf instanceof String && ("auto".equals(zf) || "low".equals(zf) || "mid".equals(zf) || "high".equals(zf))) c.zoneForce = (String) zf;
             c.zoneDef = kindWord(m.get("zoneDef"), c.zoneDef);
@@ -255,6 +262,11 @@ public class BoltConfig {
                 c.holidays = h;
             }
             c.zone = zone(m.get("zone"), c.zone);
+            // v3.34: los ajustes guardados con las reglas anteriores pasan a las nuevas (la punta sube el precio en viajes cortos; sin el extra de cortos de fabrica)
+            if (dbl(m.get("v"), 0, 0, 100000) < CFG_VER) {
+                c.peakApplies = true;
+                if (c.shortKm == 6 && c.shortFrom == 1.2 && c.bumpLo == 0 && c.bumpHi == 2.5) c.bumpHi = 0;
+            }
             return c;
         } catch (Exception e) {
             return new OfferAnalyzer.BoltCfg();
@@ -330,6 +342,7 @@ public class BoltConfig {
         StringBuilder b = new StringBuilder("{");
         b.append("\"on\":").append(c.on).append(",\"mode\":\"").append(c.mode).append("\",\"comm\":").append(n(c.comm));
         b.append(",\"peakApplies\":").append(c.peakApplies).append(",\"round5\":").append(c.round5).append(",\"fine\":").append(n(c.fine));
+        b.append(",\"peakKm\":").append(n(c.peakKm)).append(",\"longKm\":").append(n(c.longKm)).append(",\"longDisc\":").append(n(c.longDisc)).append(",\"eventOn\":").append(c.eventOn).append(",\"v\":").append(CFG_VER);
         b.append(",\"zoneForce\":\"").append(c.zoneForce).append("\",\"zoneDef\":\"").append(kindWordKey(c.zoneDef)).append('"');
         b.append(",\"short\":{\"km\":").append(n(c.shortKm)).append(",\"from\":").append(n(c.shortFrom)).append(",\"lo\":").append(n(c.bumpLo)).append(",\"hi\":").append(n(c.bumpHi)).append('}');
         b.append(",\"airOn\":").append(c.airOn).append(",\"airFee\":").append(n(c.airFee)).append(",\"airFlatKm\":").append(n(c.airFlatKm));

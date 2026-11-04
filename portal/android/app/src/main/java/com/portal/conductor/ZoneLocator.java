@@ -98,10 +98,14 @@ public class ZoneLocator {
     public static int apply(Context ctx, OfferAnalyzer.BoltCfg c, long now) {
         try {
             Fix f = null;
-            if (!"low".equals(c.zoneForce) && !"mid".equals(c.zoneForce) && !"high".equals(c.zoneForce)) f = lastFix(ctx, now);
+            boolean forced = "low".equals(c.zoneForce) || "mid".equals(c.zoneForce) || "high".equals(c.zoneForce);
+            if (!forced || c.eventOn) f = lastFix(ctx, now);
             resolve(c, f);
+            // v3.34: lugar de evento (IFEMA, Bernabeu...) segun la ubicacion: ahi no se aplica el descuento de los viajes largos con demanda
+            c.atEvent = false; c.eventName = "";
+            if (c.eventOn && f != null) { String ev = OfferAnalyzer.eventAt(f.lat, f.lon); if (ev.length() > 0) { c.atEvent = true; c.eventName = ev; } }
             diag(ctx, f, c, now);
-        } catch (Exception e) { c.zoneKind = c.zoneDef; c.zoneName = ""; c.zoneSrc = "default"; }
+        } catch (Exception e) { c.zoneKind = c.zoneDef; c.zoneName = ""; c.zoneSrc = "default"; c.atEvent = false; c.eventName = ""; }
         return c.zoneKind;
     }
 
