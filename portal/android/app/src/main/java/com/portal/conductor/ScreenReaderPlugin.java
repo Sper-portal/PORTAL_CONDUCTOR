@@ -207,6 +207,9 @@ public class ScreenReaderPlugin extends Plugin {
                 r.put("fgPkg", o.optString("fgPkg"));
                 r.put("matchesDriver", o.optBoolean("matchesDriver"));
                 r.put("shown", o.optBoolean("shown"));
+                r.put("puesta", o.optInt("puesta")); /*v330-diag*/
+                r.put("quitada", o.optInt("quitada"));
+                r.put("log", o.optString("log"));
             } catch (Exception e) { }
         }
         call.resolve(r);

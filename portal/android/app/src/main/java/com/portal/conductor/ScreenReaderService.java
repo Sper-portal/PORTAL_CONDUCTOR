@@ -102,7 +102,7 @@ public class ScreenReaderService extends AccessibilityService {
                 if (ar != null && ar.getPackageName() != null) {
                     String ap = ar.getPackageName().toString(), al = ap.toLowerCase();
                     if (!ap.equals("com.android.systemui") && !al.contains("inputmethod") && !al.contains("keyboard")) {
-                        fgPkg = ap;
+                        noteFg(ap);
                         refreshBubble();
                         if (trackOn(this) && DRIVER.matcher(ap).find()) scheduleEval();
                     }
@@ -116,7 +116,12 @@ public class ScreenReaderService extends AccessibilityService {
         String pkg = p.toString();
         String low = pkg.toLowerCase();
         if (pkg.equals("com.android.systemui") || low.contains("inputmethod") || low.contains("keyboard")) return;
-        fgPkg = pkg;
+        if (pkg.equals(getPackageName())) {   /*v330-guard*/
+            // los avisos y la burbuja del propio Portal no cuentan como app en primer plano; solo la pantalla del Portal
+            CharSequence cn330 = e.getClassName();
+            if (cn330 == null || !cn330.toString().endsWith("Activity")) return;
+        }
+        noteFg(pkg);
         refreshBubble();
         if (trackOn(this) && DRIVER.matcher(pkg).find()) scheduleEval();
     }
@@ -129,19 +134,147 @@ public class ScreenReaderService extends AccessibilityService {
         });
     }
 
+    /*v330-bub*/
+    // v3.30: la burbuja no se quita por cambios cortos de ventana, tiene un aro luminoso que late, y se anotan los cambios de app para el diagnostico
+    private final android.os.Handler ui330 = new android.os.Handler(android.os.Looper.getMainLooper());
+    private android.widget.FrameLayout bubbleBox;
+    private android.view.View halo;
+    private android.animation.ObjectAnimator haloAnim;
+    private int bubblePad = 0;
+    private boolean hidePending = false;
+    private int showCount = 0, hideCount = 0;
+    private final java.util.ArrayList<String> fgLog = new java.util.ArrayList<String>();
+    private final Runnable hideLater = new Runnable() {
+        @Override public void run() {
+            hidePending = false;
+            try {
+                android.view.accessibility.AccessibilityNodeInfo ar = getRootInActiveWindow();
+                if (ar != null && ar.getPackageName() != null) {
+                    String ap = ar.getPackageName().toString(), al = ap.toLowerCase();
+                    if (!ap.equals(getPackageName()) && !ap.equals("com.android.systemui") && !al.contains("inputmethod") && !al.contains("keyboard")) noteFg(ap);
+                }
+            } catch (Exception ex) { }
+            if (shown && !wantBubble()) hideBubble();
+        }
+    };
+
+    private boolean wantBubble() {
+        return forced || (bubbleOn(this) && !fgPkg.equals(getPackageName()) && DRIVER.matcher(fgPkg).find());
+    }
+
+    private android.view.View bubbleRoot() {
+        return bubbleBox != null ? bubbleBox : bubble;
+    }
+
+    private void cancelHide() {
+        ui330.removeCallbacks(hideLater);
+        hidePending = false;
+    }
+
+    /** Android cambia la ventana activa muchas veces; si vuelve a Bolt, Uber o Cabify enseguida, la burbuja ni se entera */
+    private void hideSoon() {
+        if (!bubbleOn(this)) {
+            cancelHide();
+            hideBubble();
+        } else if (!hidePending) {
+            hidePending = true;
+            ui330.postDelayed(hideLater, 1500);   /*v333-wait*/
+        }
+    }
+
+    /** anota los cambios de app en primer plano (los ultimos 8 salen en el diagnostico de la burbuja) */
+    private void noteFg(String pkg) {
+        if (pkg == null || pkg.equals(fgPkg)) return;
+        try {
+            String t = new java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(new java.util.Date());
+            fgLog.add(t + " " + fgPkg + " > " + pkg);
+            while (fgLog.size() > 8) fgLog.remove(0);
+        } catch (Exception ex) { }
+        fgPkg = pkg;
+    }
+
+    private String fgLogText() {
+        StringBuilder sb = new StringBuilder();
+        for (String ln : fgLog) { if (sb.length() > 0) sb.append('\n'); sb.append(ln); }
+        return sb.toString();
+    }
+
+    private void beforeShow330() {
+        try { android.view.View v = bubbleRoot(); v.animate().cancel(); v.setAlpha(0f); } catch (Exception ex) { }
+    }
+
+    private void afterShow330() {
+        showCount++;
+        try { bubbleRoot().animate().alpha(1f).setDuration(250).start(); } catch (Exception ex) { }
+        startHalo();
+    }
+
+    private void beforeHide330() {
+        ui330.removeCallbacks(hideLater);
+        hidePending = false;
+        stopHalo();
+        if (shown) hideCount++;
+        try { bubbleRoot().animate().cancel(); } catch (Exception ex) { }
+    }
+
+    /** mete el icono dentro de un contenedor con un aro luminoso por fuera; el icono mide lo mismo y queda donde estaba */
+    private void wrapHalo() {
+        try {
+            final float d = getResources().getDisplayMetrics().density;
+            int size = lp.width;
+            int pad = (int) (7 * d);   /*v333-ring*/
+            int box = size + 2 * pad;
+            android.view.View h = new android.view.View(this);
+            android.graphics.drawable.GradientDrawable hg = new android.graphics.drawable.GradientDrawable();
+            hg.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            hg.setColor(android.graphics.Color.parseColor("#403B82F6"));
+            hg.setStroke((int) (3 * d), android.graphics.Color.parseColor("#FF60A5FA"));
+            h.setBackground(hg);
+            android.widget.FrameLayout bx = new android.widget.FrameLayout(this);
+            bx.addView(h, new android.widget.FrameLayout.LayoutParams(box, box, android.view.Gravity.CENTER));
+            bx.addView(bubble, new android.widget.FrameLayout.LayoutParams(size, size, android.view.Gravity.CENTER));
+            halo = h;
+            bubbleBox = bx;
+            bubblePad = pad;
+            lp.width = box;
+            lp.height = box;
+            lp.x -= pad;
+            lp.y -= pad;
+        } catch (Throwable t) {
+            try { if (bubble.getParent() != null) ((android.view.ViewGroup) bubble.getParent()).removeView(bubble); } catch (Throwable t2) { }
+            bubbleBox = null; halo = null; bubblePad = 0;
+        }
+    }
+
+    /** v3.33: el aro de fuera se queda QUIETO y visible (sin latido, como las otras burbujas) */
+    private void startHalo() {   /*v333-calm*/
+        if (halo == null) return;
+        stopHalo();
+        halo.setScaleX(1f);
+        halo.setScaleY(1f);
+        halo.setAlpha(1f);
+    }
+
+    private void stopHalo() {
+        try { if (haloAnim != null) haloAnim.cancel(); } catch (Throwable t) { }
+        haloAnim = null;
+    }
+
     private void refreshBubble() {
         applyRentConfig();
-        boolean want = forced || (bubbleOn(this) && !fgPkg.equals(getPackageName()) && DRIVER.matcher(fgPkg).find());
+        boolean want = forced || (bubbleOn(this) && !fgPkg.equals(getPackageName()) && DRIVER.matcher(fgPkg).find()); if (want) cancelHide();
         if (want && !shown) showBubble();
-        else if (!want && shown) hideBubble();
+        else if (!want && shown) hideSoon();
     }
 
     private void showBubble() {
-        try { wm.addView(bubble, lp); shown = true; } catch (Exception e) { }
+        beforeShow330();
+        try { wm.addView(bubbleRoot(), lp); shown = true; afterShow330(); } catch (Exception e) { }
     }
 
     private void hideBubble() {
-        try { if (shown) wm.removeView(bubble); } catch (Exception e) { }
+        beforeHide330();
+        try { if (shown) wm.removeView(bubbleRoot()); } catch (Exception e) { }
         shown = false;
     }
 
@@ -193,17 +326,18 @@ public class ScreenReaderService extends AccessibilityService {
                     if (moved) {
                         lp.x = (int) (ox + dx);
                         lp.y = (int) (oy + dy);
-                        try { wm.updateViewLayout(bubble, lp); } catch (Exception e) { }
+                        try { wm.updateViewLayout(bubbleRoot(), lp); } catch (Exception e) { }
                     }
                     return true;
                 } else if (a == MotionEvent.ACTION_UP) {
-                    if (moved) sp.edit().putInt("bx", lp.x).putInt("by", lp.y).apply();
+                    if (moved) sp.edit().putInt("bx", lp.x + bubblePad).putInt("by", lp.y + bubblePad).apply();
                     else onBubbleTap();
                     return true;
                 }
                 return false;
             }
         });
+        wrapHalo(); /*v330-halo*/
     }
 
     private static class Cand {
@@ -997,6 +1131,9 @@ public class ScreenReaderService extends AccessibilityService {
             o.put("fgPkg", fgPkg);
             o.put("matchesDriver", DRIVER.matcher(fgPkg).find());
             o.put("shown", shown);
+            o.put("puesta", showCount); /*v330-diag*/
+            o.put("quitada", hideCount);
+            o.put("log", fgLogText());
         } catch (Exception e) { }
         return o;
     }
