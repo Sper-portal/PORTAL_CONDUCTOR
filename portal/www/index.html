@@ -2247,7 +2247,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.34';
+const APP_VERSION='v3.35';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -6802,6 +6802,567 @@ html.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite .header::before{displ
 .zm-kinds span{font-size:12px;color:#9fb4c8;font-weight:700}
 
 </style>
+<script id="tripsPatch335">
+/* v3.35 · VIAJES GUARDADOS (lengüeta)
+   - Solo Bolt. El aviso de la burbuja apunta cada oferta que enseña (parte nativa, «tripCur»). Aquí el Portal la recoge, enseña la lengüeta con ✗ y ✓ y,
+     si pulsas ✓ (aceptaste el viaje), la deja en la lista del día. ✗ la borra. Lo que no decides pasa a «sin decidir» (por si aceptaste y se te olvidó el ✓).
+   - La lista se queda en el móvil (no va a la nube, para no llenar Supabase): clave pdc_trips_v1_<usuario>. «Cerrar y guardar» archiva el día.
+   - Albarán: «Capturar albarán» lee la pantalla de Bolt (el albarán a la vista, en pantalla dividida) y rellena el desglose. Si es largo, se pulsa dos veces
+     (arriba y abajo) y se juntan las dos lecturas. Lo que falte se escribe a mano.
+   - Se enciende y apaga en Ajustes. */
+(function(){
+if(window.__pdcTrips)return;
+const LSK='pdc_trips_v1_',LS_ON='pdc_trips_on';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad=n=>String(n).padStart(2,'0');
+const fin=v=>typeof v==='number'&&isFinite(v);
+const nrm=s=>String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+const nf2=new Intl.NumberFormat('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2});
+const eur=n=>fin(n)?nf2.format(n)+' €':'—';
+const seur=n=>fin(n)?(n>0?'+':n<0?'−':'')+nf2.format(Math.abs(n))+' €':'—';
+const k1=n=>fin(n)&&n>=0?new Intl.NumberFormat('es-ES',{maximumFractionDigits:1}).format(n)+' km':'—';
+const mn=n=>fin(n)&&n>=0?Math.round(n)+' min':'—';
+const hhmm=ts=>{const d=new Date(ts);return pad(d.getHours())+':'+pad(d.getMinutes())};
+const dkey=ts=>{const d=new Date(ts);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+const dshow=k=>{const p=String(k).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:String(k)};
+let SR=null;
+function plugin(){try{if(SR)return SR;if(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform()){SR=(Capacitor.Plugins&&Capacitor.Plugins.ScreenReader)||Capacitor.registerPlugin('ScreenReader');return SR}}catch(e){}return null}
+
+/* ---------------- guardado en el móvil ---------------- */
+function uid(){
+  try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(/^sb-.*-auth-token$/.test(k)){const s=JSON.parse(localStorage.getItem(k)||'null');const u=s&&((s.currentSession||s).user);if(u&&u.id)return String(u.id).replace(/[^a-zA-Z0-9]/g,'').slice(0,16)}}}catch(e){}
+  return 'local';
+}
+const blank=()=>({v:1,open:[],pend:[],days:[],cur:null,lastTs:0,dec:null});
+let ST=null,STK=null;
+function state(){
+  const k=LSK+uid();
+  if(ST&&STK===k)return ST;
+  let j=null;
+  try{j=JSON.parse(localStorage.getItem(k)||'null')}catch(e){}
+  ST=(j&&j.v===1&&Array.isArray(j.open))?Object.assign(blank(),j):blank();
+  if(!Array.isArray(ST.pend))ST.pend=[];if(!Array.isArray(ST.days))ST.days=[];
+  STK=k;cur=ST.cur||null;curAt=cur?Date.now():0;
+  return ST;
+}
+function save(){try{const s=state();s.cur=cur;localStorage.setItem(STK,JSON.stringify(s))}catch(e){}}
+function enabled(){try{return localStorage.getItem(LS_ON)!=='0'}catch(e){return true}}
+function syncNative(){try{const p=plugin();if(p&&p.setTripLog){const r=p.setTripLog({enabled:enabled()});if(r&&r.catch)r.catch(()=>{})}}catch(e){}}
+function setEnabled(v){try{localStorage.setItem(LS_ON,v?'1':'0')}catch(e){}syncNative();if(!v){hideBar()}refresh()}
+
+/* ---------------- avisos pequeños ---------------- */
+function toast(msg){
+  let t=$('#tripToast');
+  if(!t){t=document.createElement('div');t.id='tripToast';t.style.cssText='position:fixed;left:50%;bottom:96px;transform:translateX(-50%);max-width:90%;background:#0b1a33;color:#fff;border:1px solid #3b82f6;border-radius:14px;padding:11px 16px;z-index:100010;font:600 15px system-ui;text-align:center;box-shadow:0 6px 20px #0008;white-space:pre-line';document.body.appendChild(t)}
+  t.textContent=msg;t.style.bottom=(sheet&&sheet.style.display!=='none')?'200px':'96px';t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>{t.style.display='none'},3800);
+}
+
+/* ---------------- oferta pendiente: ✗ / ✓ ---------------- */
+let cur=null,curAt=0;
+const tripKey=o=>[o.tripKm,o.tripMin,o.pickupKm,o.pickupMin].map(x=>Math.round((Number(x)||0)*10)).join('|');
+const offerNet=o=>o?(fin(o.net)&&o.net>=0?o.net:(fin(o.price)&&o.price>0?o.price:null)):null;
+function releaseCur(){
+  if(!cur)return;
+  const s=state();s.pend.unshift(cur);if(s.pend.length>15)s.pend.length=15;
+  cur=null;s.cur=null;save();
+}
+function newOffer(o){
+  const s=state(),now=Date.now();
+  if(s.dec&&s.dec.k===tripKey(o)&&now-s.dec.ts<180000)return false;   // la oferta que acabas de aceptar o descartar, leída otra vez con algún dato distinto
+  if(cur)releaseCur();
+  cur={id:'t'+o.ts+'_'+Math.floor(Math.random()*1e5),ts:o.ts,offer:o,alb:null,man:{}};
+  curAt=now;save();showBar();return true;
+}
+function decide(ok){
+  if(!cur)return;
+  const s=state(),t=cur;
+  s.dec={k:tripKey(t.offer),ts:Date.now()};
+  cur=null;s.cur=null;
+  if(ok){t.okAt=Date.now();s.open.push(t);save();hideBar();refresh();toast('Viaje '+s.open.length+' guardado')}
+  else{save();hideBar();refresh()}
+}
+function showBar(){
+  if(!enabled()||!cur)return;
+  let b=$('#tripBar');
+  if(!b){
+    b=document.createElement('div');b.id='tripBar';
+    b.style.cssText='position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 6px);width:min(92%,420px);z-index:100000;display:flex;align-items:center;gap:10px;background:#0b1a33f5;border:1px solid #3b82f6;border-radius:20px;padding:8px 10px;box-shadow:0 8px 26px #000a;font:600 15px system-ui;color:#fff';
+    const bs='flex:none;width:70px;height:54px;border:none;border-radius:16px;color:#fff;font:700 30px system-ui;cursor:pointer;';
+    b.innerHTML='<button id="tripNo" aria-label="No hice este viaje" style="'+bs+'background:#dc2626">✗</button><div id="tripBarTxt" style="flex:1;text-align:center;line-height:1.3"></div><button id="tripYes" aria-label="Acepté este viaje" style="'+bs+'background:#16a34a">✓</button>';
+    document.body.appendChild(b);
+    $('#tripNo').onclick=()=>decide(false);$('#tripYes').onclick=()=>decide(true);
+  }
+  const o=cur.offer,n=state().open.length+1,net=offerNet(o);
+  $('#tripBarTxt').innerHTML='<div style="font-size:13px;color:#9cc3ff">Viaje '+n+' · '+hhmm(cur.ts)+'</div><div style="font-size:19px">'+(net==null?'sin precio':eur(net))+'</div>';
+  b.style.display='flex';
+}
+function hideBar(){const b=$('#tripBar');if(b)b.style.display='none'}
+
+/* ---------------- la lengüeta pequeña (arriba, siempre recogida) ---------------- */
+function ensureHandle(){
+  let h=$('#tripHandle');if(h)return h;
+  h=document.createElement('div');h.id='tripHandle';h.setAttribute('role','button');h.setAttribute('aria-label','Viajes guardados');
+  h.style.cssText='position:fixed;left:50%;transform:translateX(-50%);top:env(safe-area-inset-top,0px);z-index:15;min-width:92px;height:26px;padding:0 16px;display:none;align-items:center;justify-content:center;gap:6px;background:#0b1a33d9;border:1px solid #3b82f655;border-top:none;border-radius:0 0 16px 16px;color:#9cc3ff;font:700 13px system-ui;opacity:.8;cursor:pointer';
+  h.innerHTML='<span>▾</span><span id="tripCnt"></span>';
+  let y0=null;
+  h.addEventListener('touchstart',e=>{y0=e.touches[0].clientY},{passive:true});
+  h.addEventListener('touchmove',e=>{if(y0!=null&&e.touches[0].clientY-y0>14){y0=null;openList()}},{passive:true});
+  h.addEventListener('click',()=>openList());
+  document.body.appendChild(h);return h;
+}
+function refresh(){
+  const on=enabled(),s=state();
+  const h=ensureHandle();
+  h.style.display=(on&&$('#price'))?'flex':'none';
+  const c=$('#tripCnt');if(c)c.textContent=s.open.length?String(s.open.length):'';
+  if(!on)hideBar();
+  if(sheet&&sheet.style.display!=='none'&&view.name!=='detail'){const sg=s.open.length+'/'+s.pend.length+'/'+s.days.length;if(sg!==lastPaintSig)paint()}
+}
+
+/* ---------------- lectura del albarán de Bolt ---------------- */
+const MESES={ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,sept:9,set:9,oct:10,nov:11,dic:12};
+/** un texto que es SOLO un importe («14,50 €», «-7,90 €», «− 7,90 €») → número; si no, null */
+function amtOnly(s){
+  let t=String(s==null?'':s).replace(/[  ]/g,' ').trim();
+  if(!t)return null;
+  let neg=false;
+  t=t.replace(/[−–—]/g,'-');
+  if(/^-/.test(t)){neg=true;t=t.replace(/^-\s*/,'')}
+  t=t.replace(/^€\s*/,'');
+  if(/^-/.test(t)){neg=true;t=t.replace(/^-\s*/,'')}
+  t=t.replace(/\s*(€|eur)\s*$/i,'').replace(/\s+/g,'');
+  if(!/^(\d{1,3}(\.\d{3})+,\d{2}|\d+,\d{2}|\d+\.\d{2})$/.test(t))return null;
+  const v=t.indexOf(',')>=0?Number(t.replace(/\./g,'').replace(',','.')):Number(t);
+  return fin(v)?(neg?-v:v):null;
+}
+/** importe dentro de un texto corto con etiqueta («Tarifa base • Bolt 14,50 €», «Pagado por el pasajero, 31,90 €, Pago en efectivo») → {label, v} */
+function amtTail(s){
+  const t=String(s==null?'':s).replace(/[\u00a0\u202f]/g,' ');
+  if(t.length>90)return null;
+  const m=t.match(/^(.*?)([-−–]?\s*\d{1,3}(?:\.\d{3})*,\d{2}\s*€)(.*)$/);
+  if(!m)return null;
+  const v=amtOnly(m[2]);
+  const label=(m[1]+' '+m[3]).replace(/\s+/g,' ').trim();
+  return v==null||!/[a-zA-ZáéíóúñÁÉÍÓÚÑ]/.test(label)?null:{label,v};
+}
+const KEYS=[['paid',/pagado por (el )?(pasajero|cliente)/],['comm',/comision/],['base',/tarifa base/],['demand',/alta demanda|demanda/],['wait',/tiempo de espera|espera/],
+  ['airport',/aeropuerto/],['toll',/peaje/],['tip',/propina/],['inc',/^(tus )?(ingresos|ganancias)\b/]];
+function labelKey(t){
+  const n=nrm(t).replace(/[•·]/g,' ').replace(/\s+/g,' ').trim();
+  if(!n||n.length>60)return null;
+  for(const [k,re] of KEYS)if(re.test(n))return k;
+  return null;
+}
+/** lo último que leyó de Bolt (para ver por qué no entiende un albarán y poder mandármelo): se guarda en el móvil */
+const LS_RAW='pdc_trips_lastraw';
+function rememberRaw(pkgs,texts){try{localStorage.setItem(LS_RAW,JSON.stringify({at:Date.now(),pkgs:pkgs.slice(0,12),texts:texts.slice(0,400).map(x=>String(x).slice(0,200))}))}catch(e){}}
+function lastRaw(){try{return JSON.parse(localStorage.getItem(LS_RAW)||'null')}catch(e){return null}}
+function rawText(){
+  const r=lastRaw();if(!r)return '';
+  return 'Portal v3.35 · lectura de Bolt · '+new Date(r.at).toISOString()+'\nVentanas vistas: '+(r.pkgs.join(', ')||'ninguna')+'\nTextos de Bolt: '+r.texts.length+'\n----\n'+r.texts.map((x,i)=>(i+1)+': '+x).join('\n');
+}
+/** lee los textos de la pantalla de Bolt y saca el desglose del albarán */
+function parseAlbaran(texts){
+  const tk=(texts||[]).map(x=>String(x==null?'':x).replace(/\s+/g,' ').trim()).filter(Boolean);
+  const all=nrm(tk.join(' | '));
+  const out={looks:/desglose|pagado por|comision de bolt|tarifa base|obtener albaran|hoja de ruta/.test(all),paid:null,base:null,demand:null,wait:null,airport:null,toll:null,tip:null,comm:null,net:null,other:[],hdr:null,t0:null,t1:null,min:null,flags:[],found:0};
+  const incomes=[];let firstInc=-1,lastInc=-1;
+  const used=new Set();
+  const pick=(i)=>{      // importe de la etiqueta que hay en la posición i: en el mismo texto o en uno de los 3 siguientes
+    const tail=amtTail(tk[i]);if(tail)return {v:tail.v,at:i};
+    for(let j=i+1;j<=i+3&&j<tk.length;j++){
+      const v=amtOnly(tk[j]);
+      if(v!=null&&!used.has(j))return {v,at:j};
+      if(/pago en|efectivo|tarjeta|cash|pago con/.test(nrm(tk[j])))continue;
+      break;
+    }
+    return null;
+  };
+  for(let i=0;i<tk.length;i++){
+    if(amtOnly(tk[i])!=null)continue;                 // un importe suelto no es etiqueta
+    const lab=amtTail(tk[i])?amtTail(tk[i]).label:tk[i];
+    const key=labelKey(lab);
+    if(!key)continue;
+    const p=pick(i);if(!p)continue;
+    used.add(p.at);
+    if(key==='inc'){incomes.push(p.v);if(firstInc<0)firstInc=i;lastInc=i;continue}
+    if(out[key]==null)out[key]=p.v;
+  }
+  // «Ingresos» sale dos veces: la primera es el total del desglose (lo que pagó el pasajero) y la última lo que cobras tú
+  if(incomes.length>=2){out.net=incomes[incomes.length-1];if(out.paid==null)out.paid=incomes[0]}
+  else if(incomes.length===1){
+    const v=incomes[0];
+    if(out.comm!=null&&out.paid!=null&&Math.abs(out.paid+out.comm-v)<=0.05)out.net=v;
+    else if(out.paid!=null&&Math.abs(out.paid-v)<=0.05){}              // es el total, no el neto
+    else if(out.comm!=null&&out.paid==null)out.net=v;
+    else if(out.paid==null&&out.comm==null)out.net=v;
+  }
+  if(out.net==null&&out.paid!=null&&out.comm!=null)out.net=Math.round((out.paid+out.comm)*100)/100;
+  if(out.comm!=null&&out.comm>0)out.comm=-out.comm;                    // la comisión se guarda en negativo, como sale
+  // importes con etiqueta entre el primer y el último «Ingresos» que no conocemos (propinas, suplementos...)
+  if(firstInc>=0&&lastInc>firstInc){
+    for(let i=firstInc+1;i<lastInc;i++){
+      if(amtOnly(tk[i])!=null||labelKey(amtTail(tk[i])?amtTail(tk[i]).label:tk[i]))continue;
+      const p=pick(i);
+      if(p&&p.at>=i&&p.at<lastInc&&(p.at===i||!used.has(p.at))&&/[a-z]/.test(nrm(tk[i]))&&tk[i].length<40){used.add(p.at);out.other.push({label:tk[i].replace(/\s*[•·]\s*bolt\s*$/i,''),v:p.v})}
+    }
+  }
+  // fecha y hora de cabecera («04 nov., 18:33») y horas de la ruta («18:40» → «18:59»)
+  let hi=-1;
+  for(let i=0;i<tk.length;i++){
+    const m=nrm(tk[i]).match(/\b(\d{1,2})\s+([a-z]{3,10})\.?,?\s*(?:\d{4})?[^\d]{0,4}(?:(\d{1,2}):(\d{2}))?/);
+    if(m&&MESES[m[2].slice(0,3)]){
+      let hh=m[3],mm=m[4];
+      if(hh==null&&i+1<tk.length){const t=tk[i+1].match(/^(\d{1,2}):(\d{2})$/);if(t){hh=t[1];mm=t[2];hi=i+1}}
+      if(hh==null)continue;
+      if(hi<0)hi=i;
+      out.hdr={day:Number(m[1]),mon:MESES[m[2].slice(0,3)],hh:Number(hh),mm:Number(mm),txt:tk[i]};
+      break;
+    }
+  }
+  const times=[];
+  for(let i=Math.max(0,hi+1);i<tk.length;i++){const t=tk[i].match(/^(\d{1,2}):(\d{2})$/);if(t)times.push(Number(t[1])*60+Number(t[2]))}
+  if(times.length>=2){out.t0=times[0];out.t1=times[1];out.min=((times[1]-times[0])%1440+1440)%1440}
+  // comprobaciones
+  const parts=['base','demand','wait','airport','toll','tip'].reduce((a,k)=>a+(out[k]||0),0)+out.other.reduce((a,x)=>a+x.v,0);
+  const known=['base','demand','wait','airport','toll','tip'].some(k=>out[k]!=null)||out.other.length>0;
+  if(out.paid!=null&&known&&Math.abs(parts-out.paid)>0.05)out.flags.push('sum');
+  if(out.paid!=null&&out.comm!=null&&out.net!=null&&Math.abs(out.paid+out.comm-out.net)>0.05)out.flags.push('net');
+  out.found=['paid','base','demand','wait','airport','toll','tip','comm','net'].filter(k=>out[k]!=null).length;
+  return out;
+}
+/** hora de cabecera del albarán → milisegundos (el año no sale: se toma el actual, o el anterior si saldría en el futuro) */
+function hdrTs(h,now){
+  if(!h)return null;
+  now=now||Date.now();const y=new Date(now).getFullYear();
+  let d=new Date(y,h.mon-1,h.day,h.hh,h.mm,0,0);
+  if(d.getTime()>now+36e5*30)d=new Date(y-1,h.mon-1,h.day,h.hh,h.mm,0,0);
+  return d.getTime();
+}
+function allTrips(){const s=state();let a=s.open.slice();for(const d of s.days.slice(0,3))a=a.concat(d.trips);return a.concat(s.pend)}
+/** el viaje guardado que corresponde a un albarán: el más cercano en hora (±20 min), y si empatan, el de duración parecida */
+function matchTrip(alb,trips,now){
+  const ts=hdrTs(alb.hdr,now);if(ts==null)return null;
+  let best=null,bs=1e18;
+  for(const t of trips){
+    const d=Math.abs(t.ts-ts);if(d>20*60000)continue;
+    let sc=d;
+    if(alb.min!=null&&t.offer&&fin(t.offer.tripMin)&&t.offer.tripMin>0)sc+=Math.min(30,Math.abs(alb.min-t.offer.tripMin))*20000;
+    if(sc<bs){bs=sc;best=t}
+  }
+  return best;
+}
+const ALB_F=['paid','base','demand','wait','airport','toll','tip','comm','net'];
+function applyAlb(t,a){
+  const al=t.alb||{};
+  for(const k of ALB_F)if(a[k]!=null)al[k]=a[k];
+  if(a.other&&a.other.length)al.other=a.other;
+  if(a.hdr){al.hdr=a.hdr.txt;const h=hdrTs(a.hdr);if(h!=null)al.hdrTs=h}
+  if(a.t0!=null){al.t0=a.t0;al.t1=a.t1;al.min=a.min}
+  al.at=Date.now();
+  t.alb=al;save();
+}
+const ALB_NAMES={paid:'bruto',base:'tarifa base',demand:'alta demanda',comm:'comisión',net:'neto'};
+function albMissing(al){const m=[];if(!al||al.paid==null)m.push('bruto');if(!al||al.net==null)m.push('neto');if(!al||al.comm==null)m.push('comisión');return m}
+async function readBolt(){
+  const p=plugin();
+  if(!p||!p.read){toast('Esto solo funciona en el móvil, con el lector de pantalla activado.');return null}
+  try{const st=await p.status();if(st&&st.enabled===false){toast('Activa «Portal lector de pantalla» en Accesibilidad (Ajustes del móvil) para poder leer el albarán.');return null}}catch(e){}
+  let r;try{r=await p.read()}catch(e){toast('No se pudo leer la pantalla: '+(e&&e.message||e));return null}
+  const wins=(r&&r.windows)||[];
+  const texts=[];let seen=false;
+  for(const w of wins){if(/mtakso|bolt/i.test(String(w.pkg||''))){seen=true;for(const x of (w.texts||[]))texts.push(x)}}
+  rememberRaw(wins.map(w=>String(w.pkg||'?')),texts);
+  if(!seen){toast('No veo Bolt en pantalla. Pon el albarán de Bolt a la vista (pantalla dividida) y vuelve a pulsar.');return null}
+  const a=parseAlbaran(texts);
+  if(!a.looks||!a.found){toast('Veo Bolt pero no un albarán. Abre el viaje terminado en Bolt, con el desglose a la vista, y vuelve a pulsar.');return null}
+  return a;
+}
+async function captureFor(id){
+  const t=findTrip(id);if(!t)return;
+  const a=await readBolt();if(!a)return;
+  const ts=hdrTs(a.hdr);
+  if(ts!=null&&Math.abs(ts-t.ts)>40*60000){
+    if(!confirm('La hora del albarán ('+hhmm(ts)+') no cuadra con este viaje ('+hhmm(t.ts)+').\n\n¿Guardar este albarán en este viaje de todas formas?'))return;
+  }
+  applyAlb(t,a);paint();
+  const m=albMissing(t.alb);
+  toast('Albarán leído'+(a.flags.length?' (revisa los importes: no cuadran)':'')+(m.length?'\nFalta: '+m.join(', ')+'. Baja/sube el albarán en Bolt y vuelve a pulsar, o escríbelo.':'.'));
+}
+async function captureAuto(){
+  const a=await readBolt();if(!a)return;
+  const s=state(),t=matchTrip(a,allTrips());
+  if(t){applyAlb(t,a);const idx=s.open.indexOf(t);paint();toast('Albarán guardado en '+(idx>=0?'el viaje '+(idx+1):'un viaje de la lista')+' ('+hhmm(t.ts)+').'+(albMissing(t.alb).length?'\nFalta: '+albMissing(t.alb).join(', ')+'.':''));return}
+  const ts=hdrTs(a.hdr);
+  if(confirm('No encuentro en tu lista ningún viaje de esa hora'+(ts!=null?' ('+hhmm(ts)+')':'')+'.\n\n¿Lo añado como viaje nuevo, solo con los datos del albarán?')){
+    const nt={id:'t'+(ts||Date.now())+'_'+Math.floor(Math.random()*1e5),ts:ts||Date.now(),offer:null,alb:null,man:{},st:'ok',okAt:Date.now(),manual:true};
+    applyAlb(nt,a);s.open.push(nt);s.open.sort((x,y)=>x.ts-y.ts);save();refresh();paint();toast('Viaje añadido a la lista.');
+  }
+}
+
+/* ---------------- ventana: lista, detalle, jornadas ---------------- */
+let sheet=null,view={name:'list'},lastPaintSig='';
+function findTrip(id){const s=state();const f=a=>a.find(t=>t.id===id);let t=f(s.open)||f(s.pend);if(t)return t;for(const d of s.days){t=f(d.trips);if(t)return t}return null}
+function sumEst(a){return a.reduce((x,t)=>{const n=offerNet(t.offer);return x+(n!=null?n:0)},0)}
+function sumReal(a){return a.reduce((x,t)=>x+(t.alb&&t.alb.net!=null?t.alb.net:0),0)}
+function ensureSheet(){
+  if(sheet)return sheet;
+  sheet=document.createElement('div');sheet.id='tripSheet';
+  sheet.style.cssText='position:fixed;inset:0;z-index:99980;background:#050d1c;color:#f2f7ff;display:none;flex-direction:column;font:500 15px system-ui;max-width:520px;margin:0 auto';
+  const st=document.createElement('style');st.id='tripCss';
+  st.textContent='#tripSheet *{box-sizing:border-box}#tripSheet button{font:inherit;color:inherit;cursor:pointer}'
+   +'#tripSheet .th{display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 10px;border-bottom:1px solid #1e3a66}'
+   +'#tripSheet .th b{display:block;font-size:17px}#tripSheet .th small{color:#9cb4d6;font-size:12px}'
+   +'#tripSheet .tx{flex:none;width:42px;height:42px;border-radius:12px;border:1px solid #2b4d85;background:#0b1a33;font-size:22px}'
+   +'#tripSheet .tb{flex:1;overflow:auto;padding:10px 12px;-webkit-overflow-scrolling:touch}'
+   +'#tripSheet .tf{padding:10px 12px calc(env(safe-area-inset-bottom,0px) + 10px);border-top:1px solid #1e3a66;display:grid;grid-template-columns:1fr 1fr;gap:8px}'
+   +'#tripSheet .bt{border:1px solid #2b4d85;background:#0b1a33;border-radius:14px;padding:12px 8px;font-weight:700;font-size:14px}'
+   +'#tripSheet .bt.g{background:#15803d;border-color:#22c55e}#tripSheet .bt.r{background:#7f1d1d;border-color:#ef4444}#tripSheet .bt.b{background:#1d4ed8;border-color:#60a5fa}#tripSheet .bt[disabled]{opacity:.4}'
+   +'#tripSheet .row{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:1px solid #1e3a66;background:#0a1a30;border-radius:14px;padding:12px;margin-bottom:8px}'
+   +'#tripSheet .row .n{font-weight:800;min-width:64px}#tripSheet .row .h{color:#9cb4d6;min-width:46px}#tripSheet .row .m{margin-left:auto;font-weight:800}'
+   +'#tripSheet .ok{color:#4ade80}#tripSheet .no{color:#7b8aa3}#tripSheet .sub{color:#9cb4d6;font-size:12px;margin:10px 2px 6px}'
+   +'#tripSheet .kv{display:flex;justify-content:space-between;gap:10px;padding:9px 2px;border-bottom:1px solid #12284a}#tripSheet .kv span:first-child{color:#9cb4d6}'
+   +'#tripSheet .tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}#tripSheet .tab{border:1px solid #2b4d85;background:#0b1a33;border-radius:12px;padding:10px 4px;font-weight:700;font-size:13px}#tripSheet .tab.on{background:#1d4ed8;border-color:#60a5fa}'
+   +'#tripSheet input[type=text]{width:120px;text-align:right;background:#0b1a33;color:#fff;border:1px solid #2b4d85;border-radius:10px;padding:8px;font:600 15px system-ui}'
+   +'#tripSheet .box{border:1px solid #1e3a66;border-radius:14px;padding:6px 12px;margin-bottom:10px;background:#081426}#tripSheet .box h4{margin:8px 0 2px;font-size:14px;color:#9cc3ff}'
+   +'#tripSheet .warn{color:#fbbf24;font-size:13px;margin:6px 2px}';
+  document.head.appendChild(st);
+  document.body.appendChild(sheet);
+  sheet.addEventListener('click',onClick);
+  sheet.addEventListener('change',onChange);
+  return sheet;
+}
+function openList(){if(!enabled())return;ensureSheet();view={name:'list'};sheet.style.display='flex';paint()}
+function closeSheet(){if(sheet)sheet.style.display='none';refresh()}
+function head(title,sub,back){return '<div class="th"><button class="tx" data-a="'+(back||'close')+'" aria-label="'+(back?'Volver':'Cerrar')+'">'+(back?'←':'×')+'</button><div><b>'+title+'</b>'+(sub?'<small>'+sub+'</small>':'')+'</div></div>'}
+function rowHtml(t,i,tag){
+  const net=offerNet(t.offer),done=t.alb&&t.alb.net!=null;
+  return '<button class="row" data-a="trip" data-id="'+esc(t.id)+'"><span class="n">'+(tag||('Viaje '+(i+1)))+'</span><span class="h">'+hhmm(t.ts)+'</span><span class="m">'+eur(net)+'</span><span class="'+(done?'ok':'no')+'" title="'+(done?'con albarán':'sin albarán')+'">'+(done?'✓':'○')+'</span><span class="no">›</span></button>';
+}
+function paint(){
+  if(!sheet)return;
+  const s=state();let h='';
+  lastPaintSig=s.open.length+'/'+s.pend.length+'/'+s.days.length;
+  if(view.name==='list'){
+    const n=s.open.length;
+    h+=head('Viajes pre-guardados ('+n+')','Viajes estimados del día (sin cerrar)');
+    h+='<div class="tb">';
+    if(!n)h+='<div class="sub" style="font-size:14px;margin:18px 4px">Todavía no hay viajes. Cuando salga una oferta de Bolt, arriba aparecerá la lengüeta con ✗ y ✓: pulsa ✓ si aceptas el viaje.</div>';
+    h+=s.open.map((t,i)=>rowHtml(t,i)).join('');
+    if(n){
+      const conAlb=s.open.filter(t=>t.alb&&t.alb.net!=null).length;
+      h+='<div class="sub">Estimado: <b>'+eur(sumEst(s.open))+'</b>'+(conAlb?' · Albarán ('+conAlb+' de '+n+'): <b>'+eur(sumReal(s.open))+'</b>':'')+'</div>';
+    }
+    if(s.pend.length){
+      h+='<div class="sub">Ofertas sin decidir ('+s.pend.length+') — por si aceptaste alguna y no pulsaste ✓</div>';
+      h+=s.pend.map(t=>'<div class="row"><span class="h">'+hhmm(t.ts)+'</span><span class="m" style="margin-left:0;flex:1">'+eur(offerNet(t.offer))+'</span><button class="bt g" style="padding:8px 10px" data-a="pend-ok" data-id="'+esc(t.id)+'">Fue mío ✓</button><button class="bt r" style="padding:8px 10px" data-a="pend-del" data-id="'+esc(t.id)+'">✗</button></div>').join('');
+    }
+    h+='</div><div class="tf">'
+      +'<button class="bt b" data-a="new">Nuevo viaje</button><button class="bt b" data-a="auto">Leer albarán de Bolt</button>'
+      +'<button class="bt g" data-a="close-day"'+(n?'':' disabled')+'>Cerrar y guardar ('+n+')</button><button class="bt r" data-a="clear"'+((n||s.pend.length)?'':' disabled')+'>Limpiar lista</button>'
+      +'<button class="bt" data-a="days">Jornadas cerradas ('+s.days.length+')</button><button class="bt" data-a="csv">Exportar (CSV)</button></div>';
+  }else if(view.name==='days'){
+    h+=head('Jornadas cerradas','Viajes guardados por días','list');
+    h+='<div class="tb">'+(s.days.length?s.days.map(d=>'<button class="row" data-a="day" data-id="'+esc(d.id)+'"><span class="n" style="min-width:90px">'+dshow(d.date)+'</span><span class="h">'+d.trips.length+' viajes</span><span class="m">'+eur(sumEst(d.trips))+'</span><span class="no">›</span></button>').join(''):'<div class="sub" style="font-size:14px;margin:18px 4px">Aún no has cerrado ninguna jornada.</div>')+'</div>';
+  }else if(view.name==='day'){
+    const d=s.days.find(x=>x.id===view.id);
+    if(!d){view={name:'days'};return paint()}
+    h+=head('Jornada '+dshow(d.date),d.trips.length+' viajes · estimado '+eur(sumEst(d.trips))+(sumReal(d.trips)?' · albarán '+eur(sumReal(d.trips)):''),'days');
+    h+='<div class="tb">'+d.trips.map((t,i)=>rowHtml(t,i)).join('')+'</div><div class="tf"><button class="bt r" style="grid-column:1/3" data-a="del-day" data-id="'+esc(d.id)+'">Borrar esta jornada</button></div>';
+  }else if(view.name==='raw'){
+    const r=lastRaw();
+    h+=head('Lo que leyó de Bolt',r?hhmm(r.at)+' · '+r.texts.length+' textos':'Todavía no ha leído nada','back');
+    h+='<div class="tb">'+(r?'<div class="sub">Ventanas vistas: '+esc(r.pkgs.join(', ')||'ninguna')+'</div><pre style="white-space:pre-wrap;word-break:break-word;font:12px/1.5 ui-monospace,monospace;margin:0;color:#cfe0ff">'+esc(r.texts.map((x,i)=>(i+1)+': '+x).join('\n'))+'</pre>':'<div class="sub" style="font-size:14px">Pulsa «Capturar albarán» con el albarán de Bolt a la vista y vuelve aquí.</div>')+'</div>';
+    h+='<div class="tf"><button class="bt b" data-a="raw-save"'+(r?'':' disabled')+'>Guardar como archivo</button><button class="bt" data-a="raw-copy"'+(r?'':' disabled')+'>Copiar</button></div>';
+  }else if(view.name==='detail'){
+    const t=findTrip(view.id);
+    if(!t){view={name:'list'};return paint()}
+    const idx=s.open.indexOf(t);
+    let dn=-1;for(const d of s.days){const k=d.trips.indexOf(t);if(k>=0){dn=k;break}}
+    const ttl=(idx>=0?'Viaje '+(idx+1):(dn>=0?'Viaje '+(dn+1):'Oferta sin decidir'))+' – '+hhmm(t.ts);
+    h+=head(ttl,t.manual?'Añadido desde el albarán':'','back');
+    h+='<div class="tb"><div class="tabs"><button class="tab'+(view.tab!=='alb'?' on':'')+'" data-a="tab" data-t="calc">Calculadora (Estimación)</button><button class="tab'+(view.tab==='alb'?' on':'')+'" data-a="tab" data-t="alb">Albarán (Desglose)</button></div>';
+    h+=view.tab==='alb'?detailAlb(t):detailCalc(t);
+    h+='</div><div class="tf"><button class="bt b" style="grid-column:1/3" data-a="cap" data-id="'+esc(t.id)+'">Capturar albarán</button><button class="bt g" data-a="save-trip">Guardar viaje</button><button class="bt r" data-a="del-trip" data-id="'+esc(t.id)+'">Eliminar</button></div>';
+  }
+  sheet.innerHTML=h;
+}
+function kv(a,b){return '<div class="kv"><span>'+a+'</span><b>'+b+'</b></div>'}
+function detailCalc(t){
+  const o=t.offer;
+  if(!o)return '<div class="sub" style="font-size:14px">Este viaje se añadió desde el albarán: no tiene datos de la oferta.</div>';
+  const net=offerNet(o);
+  let h='<div class="box"><h4>Datos del viaje (Bolt)</h4>';
+  h+=kv('Precio estimado',(net==null?'—':eur(net))+(fin(o.lo)&&o.lo>=0&&fin(o.hi)&&o.hi>o.lo?' <small>(entre '+eur(o.lo)+' y '+eur(o.hi)+')</small>':''));
+  h+=kv('Tiempo de recogida',mn(o.pickupMin))+kv('Km de recogida',k1(o.pickupKm))+kv('Tiempo con cliente',mn(o.tripMin))+kv('Km con cliente',k1(o.tripKm));
+  h+=kv('Zona',esc(o.zoneName||'—')+(o.area?' ('+esc(o.area)+')':''))+kv('Hora del viaje',hhmm(t.ts))+kv('Tarifa',o.peak?'Punta':'Valle')+kv('Demanda',fin(o.offerMult)&&o.offerMult>0?'×'+new Intl.NumberFormat('es-ES',{maximumFractionDigits:2}).format(o.offerMult):'sin demanda');
+  h+='</div>';
+  let x='';
+  if(fin(o.gross)&&o.gross>=0)x+=kv('Bruto estimado',eur(o.gross));
+  if(fin(o.fee)&&o.fee>0)x+=kv('Tasa de aeropuerto',eur(o.fee));
+  if(fin(o.comm)&&o.comm>=0)x+=kv('Comisión Bolt'+(fin(o.commPct)&&o.commPct>=0?' ('+new Intl.NumberFormat('es-ES',{maximumFractionDigits:1}).format(o.commPct)+' %)':''),eur(o.comm));
+  if(fin(o.disc)&&o.disc>0)x+=kv('Viaje largo con demanda','−'+o.disc+' % al precio base');
+  if(o.event)x+=kv('Lugar de evento',esc(o.event));
+  if(o.airport)x+=kv('Aeropuerto',o.airport==='pickup'?'recogida':'destino');
+  if(x)h+='<div class="box"><h4>Cómo salió el cálculo</h4>'+x+'</div>';
+  return h;
+}
+const inp=(f,v,neg)=>'<input type="text" inputmode="decimal" data-f="'+f+'" value="'+(v==null?'':nf2.format(v).replace(/\./g,''))+'" placeholder="—" aria-label="'+f+'">';
+function detailAlb(t){
+  const al=t.alb||{},man=t.man||{},o=t.offer;
+  let h='<div class="box"><h4>Desglose del albarán</h4>';
+  h+=kv('Neto (ingresos)',inp('net',al.net))+kv('Tarifa base',inp('base',al.base))+kv('Alta demanda',inp('demand',al.demand))+kv('Tiempo de espera (€)',inp('wait',al.wait))+kv('Tarifa de aeropuerto (€)',inp('airport',al.airport));
+  if(al.toll!=null||al.tip!=null)h+=kv('Peajes',inp('toll',al.toll))+kv('Propina',inp('tip',al.tip));
+  h+=kv('Comisión Bolt'+(fin(al.comm)&&fin(al.paid)&&al.paid>0?' ('+new Intl.NumberFormat('es-ES',{maximumFractionDigits:1}).format(-al.comm/al.paid*100)+' %)':''),inp('comm',al.comm));
+  h+=kv('Bruto (pagado por el pasajero)',inp('paid',al.paid));
+  h+='</div>';
+  if(al.other&&al.other.length)h+='<div class="box"><h4>Otros conceptos del albarán</h4>'+al.other.map(x=>kv(esc(x.label),eur(x.v))).join('')+'</div>';
+  const en=o?offerNet(o):null;
+  if(al.net!=null&&en!=null)h+='<div class="box"><h4>Estimado contra real</h4>'+kv('Estimado',eur(en))+kv('Real (albarán)',eur(al.net))+kv('Diferencia',seur(al.net-en))+(en>0?kv('En %',(al.net-en>=0?'+':'−')+new Intl.NumberFormat('es-ES',{maximumFractionDigits:1}).format(Math.abs((al.net-en)/en*100))+' %'):'')+'</div>';
+  if(al.paid!=null&&al.comm!=null&&al.net!=null&&Math.abs(al.paid+al.comm-al.net)>0.05)h+='<div class="warn">⚠ Bruto + comisión no da el neto: revisa los importes.</div>';
+  if(al.hdr||al.min!=null)h+='<div class="sub">Albarán leído: '+esc(al.hdr||'')+(al.min!=null?' · ruta '+pad(Math.floor(al.t0/60))+':'+pad(al.t0%60)+' → '+pad(Math.floor(al.t1/60))+':'+pad(al.t1%60)+' ('+al.min+' min)':'')+'</div>';
+  h+='<div class="box"><h4>Datos que a veces faltan / editar</h4>'+kv('Tiempo de espera (min)',inp('m.waitMin',man.waitMin))+kv('Tarifa aeropuerto (€)',inp('m.airport',man.airport))+'</div>';
+  h+='<button class="bt" style="width:100%;margin-bottom:10px" data-a="raw">Ver lo que leyó de Bolt</button>';
+  return h;
+}
+const parseEs=v=>{
+  let t=String(v==null?'':v).replace(/[−–—]/g,'-').replace(/[€\s]/g,'');if(!t)return null;
+  if(t.indexOf(',')>=0)t=t.replace(/\./g,'').replace(',','.');
+  const n=Number(t);return fin(n)?n:null;
+};
+function onChange(e){
+  const el=e.target;if(!el||!el.dataset||!el.dataset.f||view.name!=='detail')return;
+  const t=findTrip(view.id);if(!t)return;
+  const f=el.dataset.f,v=parseEs(el.value);
+  if(f.startsWith('m.')){t.man=t.man||{};if(v==null)delete t.man[f.slice(2)];else t.man[f.slice(2)]=v}
+  else{t.alb=t.alb||{};if(v==null)delete t.alb[f];else t.alb[f]=(f==='comm'&&v>0)?-v:v;t.alb.at=t.alb.at||Date.now()}
+  save();
+}
+function onClick(e){
+  const b=e.target.closest&&e.target.closest('[data-a]');if(!b||!sheet.contains(b))return;
+  const a=b.dataset.a,id=b.dataset.id,s=state();
+  if(a==='close')return closeSheet();
+  if(a==='list'||a==='back'&&view.name==='detail'&&view.from!=='day'){view={name:'list'};return paint()}
+  if(a==='raw'){view={name:'raw',prev:view};return paint()}
+  if(a==='raw-save'){const t=rawText();if(!t)return;try{if(typeof saveB64==='function')saveB64(btoa(unescape(encodeURIComponent(t))),'lectura_bolt_'+dkey(Date.now())+'.txt','text/plain');else toast('No puedo guardar el archivo aquí.')}catch(e){toast('No se pudo guardar: '+(e&&e.message||e))}return}
+  if(a==='raw-copy'){const t=rawText();if(!t)return;try{navigator.clipboard.writeText(t).then(()=>toast('Copiado'),()=>toast('No se pudo copiar: usa «Guardar como archivo».'))}catch(e){toast('No se pudo copiar: usa «Guardar como archivo».')}return}
+  if(a==='back'&&view.name==='raw'){view=view.prev||{name:'list'};return paint()}
+  if(a==='back'){view=view.from==='day'?{name:'day',id:view.fromId}:{name:'list'};return paint()}
+  if(a==='days'){view={name:'days'};return paint()}
+  if(a==='day'){view={name:'day',id};return paint()}
+  if(a==='trip'){view={name:'detail',id,tab:'calc',from:view.name==='day'?'day':'list',fromId:view.id};return paint()}
+  if(a==='tab'){view.tab=b.dataset.t;return paint()}
+  if(a==='save-trip'){save();toast('Viaje guardado');view=view.from==='day'?{name:'day',id:view.fromId}:{name:'list'};return paint()}
+  if(a==='del-trip'){
+    if(!confirm('¿Eliminar este viaje de la lista?'))return;
+    s.open=s.open.filter(t=>t.id!==id);s.pend=s.pend.filter(t=>t.id!==id);for(const d of s.days)d.trips=d.trips.filter(t=>t.id!==id);
+    s.days=s.days.filter(d=>d.trips.length);save();refresh();
+    view=view.from==='day'?(s.days.some(d=>d.id===view.fromId)?{name:'day',id:view.fromId}:{name:'days'}):{name:'list'};return paint();
+  }
+  if(a==='del-day'){if(!confirm('¿Borrar esta jornada y todos sus viajes?'))return;s.days=s.days.filter(d=>d.id!==id);save();view={name:'days'};return paint()}
+  if(a==='cap')return captureFor(id);
+  if(a==='auto')return captureAuto();
+  if(a==='new'){
+    const t={id:'t'+Date.now()+'_'+Math.floor(Math.random()*1e5),ts:Date.now(),offer:null,alb:null,man:{},st:'ok',okAt:Date.now(),manual:true};
+    s.open.push(t);save();refresh();view={name:'detail',id:t.id,tab:'alb',from:'list'};return paint();
+  }
+  if(a==='pend-ok'){const t=s.pend.find(x=>x.id===id);if(t){s.pend=s.pend.filter(x=>x!==t);t.okAt=Date.now();s.open.push(t);s.open.sort((x,y)=>x.ts-y.ts);save();refresh();toast('Viaje añadido a la lista')}return}
+  if(a==='pend-del'){s.pend=s.pend.filter(x=>x.id!==id);save();return paint()}
+  if(a==='close-day'){
+    if(!s.open.length)return;
+    if(!confirm('¿Cerrar y guardar los '+s.open.length+' viajes de la jornada? Se archivan y la lista del día queda vacía.'))return;
+    s.days.unshift({id:'d'+Date.now(),date:dkey(s.open[0].ts),closedAt:Date.now(),trips:s.open});
+    s.open=[];s.pend=[];save();refresh();toast('Jornada guardada');return paint();
+  }
+  if(a==='clear'){
+    if(!confirm('¿Vaciar la lista del día? Los viajes de la lista se borran (las jornadas ya cerradas no se tocan).'))return;
+    s.open=[];s.pend=[];save();refresh();return paint();
+  }
+  if(a==='csv')return exportCsv();
+}
+
+/* ---------------- exportar a hoja de cálculo ---------------- */
+function csvCell(v){
+  if(v==null)return '';
+  if(typeof v==='number')return String(Math.round(v*100)/100).replace('.',',');
+  const t=String(v);return /[;"\n\r]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t;
+}
+function csvText(){
+  const s=state();
+  const cols=['Jornada','Nº','Fecha','Hora','Neto estimado','Bruto estimado','Comisión est.','Comisión est. %','Tasa aeropuerto est.','Demanda','Tarifa','Zona','Zona (nombre)','Min recogida','Km recogida','Min con cliente','Km con cliente','Viaje largo -%','Evento','Aeropuerto',
+    'Albarán: bruto','Albarán: tarifa base','Albarán: alta demanda','Albarán: espera €','Albarán: aeropuerto €','Albarán: peajes','Albarán: propina','Albarán: comisión','Albarán: neto','Real − estimado €','Albarán: hora','Albarán: min de ruta','Espera (min) manual','Aeropuerto € manual','Añadido a mano'];
+  const rows=[cols.join(';')];
+  const add=(label,trips)=>trips.forEach((t,i)=>{
+    const o=t.offer||{},al=t.alb||{},m=t.man||{},en=offerNet(t.offer);
+    rows.push([label,i+1,dkey(t.ts),hhmm(t.ts),en,fin(o.gross)&&o.gross>=0?o.gross:null,fin(o.comm)&&o.comm>=0?o.comm:null,fin(o.commPct)&&o.commPct>=0?o.commPct:null,fin(o.fee)?o.fee:null,fin(o.offerMult)&&o.offerMult>0?o.offerMult:null,t.offer?(o.peak?'Punta':'Valle'):'',t.offer?o.zone:'',o.zoneName||'',
+      fin(o.pickupMin)&&o.pickupMin>=0?o.pickupMin:null,fin(o.pickupKm)&&o.pickupKm>=0?o.pickupKm:null,fin(o.tripMin)&&o.tripMin>=0?o.tripMin:null,fin(o.tripKm)&&o.tripKm>=0?o.tripKm:null,fin(o.disc)&&o.disc>0?o.disc:null,o.event||'',o.airport||'',
+      al.paid,al.base,al.demand,al.wait,al.airport,al.toll,al.tip,al.comm,al.net,(al.net!=null&&en!=null)?al.net-en:null,al.hdr||'',al.min,m.waitMin,m.airport,t.manual?'sí':''].map(csvCell).join(';'));
+  });
+  add('Sin cerrar',s.open);
+  for(const d of s.days)add(dshow(d.date),d.trips);
+  return rows.join('\r\n');
+}
+async function exportCsv(){
+  const s=state();
+  if(!s.open.length&&!s.days.length){toast('No hay viajes que exportar.');return}
+  const csv='﻿'+csvText();
+  const b64=btoa(unescape(encodeURIComponent(csv)));
+  const name='viajes_portal_'+dkey(Date.now())+'.csv';
+  try{if(typeof saveB64==='function')await saveB64(b64,name,'text/csv');else toast('No puedo guardar el archivo aquí.')}catch(e){toast('No se pudo guardar: '+(e&&e.message||e))}
+}
+
+/* ---------------- Ajustes: interruptor ---------------- */
+function injectCard(){
+  const content=$('#content');if(!content||$('#tripsCard'))return;
+  const t=content.querySelector('.section-title');if(!t||!/Ajustes/.test(t.textContent))return;
+  const card=document.createElement('div');
+  card.id='tripsCard';card.className='note';
+  card.style.cssText='margin:12px 0;display:flex;align-items:center;justify-content:space-between;gap:12px';
+  card.innerHTML='<div><b>Viajes guardados (lengüeta)</b><br><small>Solo Bolt. Apunta cada oferta; con ✓ la guardas en la lista del día y con ✗ la borras. Después puedes añadir el albarán.</small><br><button id="tripsOpen" style="margin-top:8px;padding:7px 12px;border-radius:10px;border:1px solid #3b82f6;background:#0b1a33;color:#fff;font:600 13px system-ui">Abrir lista de viajes</button></div><input type="checkbox" id="tripsChk" style="width:26px;height:26px;flex:none">';
+  (document.getElementById('srBubbleCard')||t).insertAdjacentElement('afterend',card);
+  const chk=$('#tripsChk');chk.checked=enabled();
+  chk.onchange=()=>{setEnabled(chk.checked);$('#tripsOpen').disabled=!chk.checked};
+  $('#tripsOpen').disabled=!chk.checked;
+  $('#tripsOpen').onclick=()=>openList();
+}
+
+/* ---------------- arranque ---------------- */
+let polling=false;
+async function poll(){
+  if(document.hidden||polling||!enabled())return;
+  const p=plugin();if(!p||!p.tripCur)return;
+  polling=true;
+  try{
+    const r=await p.tripCur();
+    if(!r||!r.json)return;
+    let o=null;try{o=JSON.parse(r.json)}catch(e){}
+    if(!o||!fin(o.ts))return;
+    const s=state();
+    if(!(o.ts>s.lastTs))return;
+    s.lastTs=o.ts;save();
+    if(Date.now()-o.ts>120000)return;       // oferta vieja (el Portal estaba cerrado): no se ofrece ✓/✗
+    newOffer(o);
+  }catch(e){}finally{polling=false}
+}
+function tick(){
+  try{
+    const s=state();
+    if(cur&&Date.now()-curAt>90000){releaseCur();hideBar();refresh()}
+    else if(cur&&enabled()){const b=$('#tripBar');if(!b||b.style.display==='none')showBar()}
+    refresh();poll();
+  }catch(e){}
+}
+window.__pdcTrips={rawText,parseAlbaran,matchTrip,amtOnly,hdrTs,state,decide,openList,closeSheet,csvText,tripKey,setEnabled,enabled,poll,tick,newOffer,releaseCur};
+const content=$('#content');
+let rq=0;
+if(content){new MutationObserver(()=>{injectCard();if(!rq)rq=setTimeout(()=>{rq=0;try{refresh()}catch(e){}},60)}).observe(content,{childList:true,subtree:true});injectCard()}
+syncNative();
+setInterval(tick,1500);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick()});
+setTimeout(tick,300);
+})();
+</script>
 </body></html><style>
 /* V25 visual refinement: futuristic premium skin only. Functional JS untouched. */
 body{background:radial-gradient(circle at 50% -10%,#18364d 0,#07121c 34%,#040b12 100%);}

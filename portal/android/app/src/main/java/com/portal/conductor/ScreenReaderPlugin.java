@@ -83,6 +83,34 @@ public class ScreenReaderPlugin extends Plugin {
         call.resolve();
     }
 
+    /** Viajes guardados: la ultima oferta de Bolt que apunto el aviso (numero de serie creciente; «json» vacio si aun no hay ninguna) */
+    @PluginMethod
+    public void tripCur(PluginCall call) {
+        android.content.SharedPreferences sp = getContext().getSharedPreferences("portal", Context.MODE_PRIVATE);
+        JSObject r = new JSObject();
+        r.put("on", sp.getInt("trip_on", 1) == 1);
+        r.put("seq", sp.getLong("trip_seq", 0L));
+        String js = sp.getString("trip_cur", "");
+        r.put("json", js == null ? "" : js);
+        call.resolve(r);
+    }
+
+    @PluginMethod
+    public void getTripLog(PluginCall call) {
+        JSObject r = new JSObject();
+        r.put("enabled", getContext().getSharedPreferences("portal", Context.MODE_PRIVATE).getInt("trip_on", 1) == 1);
+        call.resolve(r);
+    }
+
+    @PluginMethod
+    public void setTripLog(PluginCall call) {
+        boolean en = call.getBoolean("enabled", true);
+        android.content.SharedPreferences.Editor ed = getContext().getSharedPreferences("portal", Context.MODE_PRIVATE).edit().putInt("trip_on", en ? 1 : 0);
+        if (!en) ed.remove("trip_cur").remove("trip_sig");
+        ed.apply();
+        call.resolve();
+    }
+
     @PluginMethod
     public void getRent(PluginCall call) {
         android.content.SharedPreferences sp = getContext().getSharedPreferences("portal", Context.MODE_PRIVATE);

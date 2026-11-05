@@ -743,6 +743,7 @@ public class ScreenReaderService extends AccessibilityService {
             if (found == null && ocrFound != null && now - ocrFoundTs < 4500) found = ocrFound;
             if (found != null) {
                 lastOfferSeen = now;
+                logTripOffer(found, now);
                 showAlert(found);
                 speakOffer(found);
                 rh.removeCallbacks(hideRun);
@@ -750,6 +751,66 @@ public class ScreenReaderService extends AccessibilityService {
             } else if (alertShown && now - lastOfferSeen > 1800) {
                 hideAlert();
             }
+        } catch (Exception e) { }
+    }
+
+    // ===================== Viajes guardados (lengueta del Portal): apunta cada oferta de Bolt que sale en el aviso =====================
+    // El Portal (en pantalla dividida) pregunta cada poco «tripCur» y, si hay una oferta nueva, enseña la lengueta con X y V.
+    // Aqui solo se guarda la ULTIMA oferta (con un numero de serie que va subiendo); todo lo demas (lista, albaran...) lo lleva el Portal.
+    static String jq(String s) {
+        StringBuilder b = new StringBuilder("\"");
+        if (s != null) for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '"' || c == '\\') b.append('\\').append(c);
+            else if (c < 0x20) b.append(' ');
+            else b.append(c);
+        }
+        return b.append('"').toString();
+    }
+
+    static String jn(double v) {
+        if (Double.isNaN(v) || Double.isInfinite(v)) return "-1";
+        String s = String.format(java.util.Locale.US, "%.4f", v);
+        if (s.indexOf('.') >= 0) { while (s.endsWith("0")) s = s.substring(0, s.length() - 1); if (s.endsWith(".")) s = s.substring(0, s.length() - 1); }
+        return s.equals("-0") ? "0" : s;
+    }
+
+    /** huella de la oferta: mismos datos = misma oferta (la lectura se repite cada 1,5 s mientras se ve en pantalla) */
+    static String tripSig(OfferAnalyzer.Result r) {
+        return Math.round(r.estNet * 100) + "|" + Math.round(r.price * 100) + "|" + Math.round(r.tripKm * 10) + "|" + Math.round(r.tripMin) + "|"
+            + Math.round(r.pickupKm * 10) + "|" + Math.round(r.pickupMin);
+    }
+
+    static String tripJson(OfferAnalyzer.Result r, long seq, long now) {
+        StringBuilder b = new StringBuilder("{");
+        b.append("\"seq\":").append(seq).append(",\"ts\":").append(now);
+        b.append(",\"est\":").append(r.estimated ? "true" : "false");
+        b.append(",\"verdict\":").append(jq(r.verdict));
+        b.append(",\"price\":").append(jn(r.price));
+        b.append(",\"net\":").append(jn(r.estNet)).append(",\"gross\":").append(jn(r.estGross)).append(",\"comm\":").append(jn(r.estComm)).append(",\"commPct\":").append(jn(r.estCommPct));
+        b.append(",\"fee\":").append(jn(r.estFee)).append(",\"mult\":").append(jn(r.estMult)).append(",\"offerMult\":").append(jn(r.estOfferMult));
+        b.append(",\"lo\":").append(jn(r.estRange ? r.estNetLo : -1)).append(",\"hi\":").append(jn(r.estRange ? r.estNetHi : -1)).append(",\"alt\":").append(jn(r.estAlt));
+        b.append(",\"zone\":").append(r.estZone).append(",\"zoneName\":").append(jq(OfferAnalyzer.zoneName(r.estZone))).append(",\"zoneSrc\":").append(jq(r.estZoneSrc)).append(",\"area\":").append(jq(r.estArea));
+        b.append(",\"peak\":").append(r.estPeakUsed ? "true" : "false").append(",\"weekend\":").append(r.estWeekend ? "true" : "false").append(",\"peakShort\":").append(r.estPeakShort ? "true" : "false");
+        b.append(",\"disc\":").append(jn(r.estDisc)).append(",\"event\":").append(jq(r.estEvent)).append(",\"fine\":").append(jn(r.estFine)).append(",\"airport\":").append(jq(r.estAirport));
+        b.append(",\"tripKm\":").append(jn(r.tripKm)).append(",\"tripMin\":").append(jn(r.tripMin)).append(",\"pickupKm\":").append(jn(r.pickupKm)).append(",\"pickupMin\":").append(jn(r.pickupMin));
+        return b.append("}").toString();
+    }
+
+    /** apunta la oferta de Bolt que se esta viendo (una sola vez por oferta) si el interruptor «Viajes guardados» esta encendido */
+    private void logTripOffer(OfferAnalyzer.Result r, long now) {
+        try {
+            if (r == null || !r.offer || !r.isBolt || r.unreadable) return;
+            SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);
+            if (sp.getInt("trip_on", 1) != 1) return;
+            String sig = tripSig(r);
+            boolean isNew = !sig.equals(sp.getString("trip_sig", "")) || now - sp.getLong("trip_ts", 0L) > 90000L;
+            SharedPreferences.Editor ed = sp.edit().putLong("trip_ts", now);
+            if (isNew) {
+                long seq = sp.getLong("trip_seq", 0L) + 1L;
+                ed.putString("trip_sig", sig).putLong("trip_seq", seq).putString("trip_cur", tripJson(r, seq, now));
+            }
+            ed.apply();
         } catch (Exception e) { }
     }
 
