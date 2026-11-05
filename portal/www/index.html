@@ -2247,7 +2247,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.35';
+const APP_VERSION='v3.38';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -4508,11 +4508,11 @@ const SL=(d,a,b)=>({on:true,d,a,b});
 const slotsM=()=>[SL(31,420,600),SL(31,1020,1200),SL(96,0,1440)];         // lunes a viernes 07-10 y 17-20, sábado y domingo todo el día
 const slotsHi=()=>[SL(31,480,600),SL(31,1020,1200),SL(96,0,1440)];        // zona alta: por la mañana desde las 08:00 (visto el 29-10; sin confirmar)
 const HOLS=()=>['01-01','01-06','05-01','05-02','08-15','10-12','11-01','12-06','12-08','12-25'];
-const defaults=()=>({on:true,mode:'auto',comm:25,peakApplies:true,round5:true,fine:0,peakKm:6.5,longKm:10,longDisc:13,eventOn:true,v:CFG_VER,zoneForce:'auto',zoneDef:'mid',
+const defaults=()=>({on:true,mode:'auto',comm:25,peakApplies:true,round5:true,fine:0,peakKm:6.5,longKm:10,longDisc:13,eventOn:true,v:CFG_VER,cpv:337,zoneForce:'auto',zoneDef:'mid',
   short:{km:6,from:1.2,lo:0,hi:0},airOn:true,airFee:2.57,airFlatKm:11,holidaysWe:true,holidays:HOLS(),slots:slotsM(),slotsH:slotsHi(),
   cards:{lv:CARD(2.02,0.79,0.13,6.30),lp:CARD(3.03,0.80,0.16,8.85),mv:CARD(2.10,0.77,0.15,6.75),mp:CARD(2.68,0.84,0.20,7.65),
          hv:CARD(2.39,0.85,0.16,6.70),hp:CARD(3.56,0.91,0.21,8.35),av:CARD(2.89,0.82,0.15,13.50),ap:CARD(2.89,0.82,0.15,13.50)},
-  zone:{zones:[],postal:{h:'28023 28033 28034 28035 28042 28043 28049 28050 28055 28100 28108 28109 28220 28221 28222 28223 28224 28230 28231 28232 28250 28701 28702 28703 28760 28761 28762'.split(' '),m:'28001 28002 28003 28004 28005 28006 28007 28008 28009 28010 28012 28013 28014 28015 28016 28020 28028 28029 28036 28039 28045'.split(' '),l:'28022 28037 28801 28802 28803 28804 28805 28806 28807 28821 28822 28823 28830 28850 28018 28019 28021 28025 28026 28030 28031 28032 28038 28041 28044 28047 28054 28901 28902 28903 28904 28905 28906 28907 28911 28912 28913 28914 28915 28916 28917 28918 28919 28921 28922 28923 28924 28925 28931 28932 28933 28934 28935 28936 28937 28938 28940 28941 28942 28943 28944 28945 28946 28947 28980 28981 28982 28983 28984 28300 28311 28312 28320 28341 28342 28343'.split(' ')}}});
+  zone:{zones:[],postal:{h:'28023 28033 28034 28035 28042 28043 28049 28050 28055 28100 28108 28109 28220 28221 28222 28223 28224 28230 28231 28232 28250 28701 28702 28703 28760 28761 28762'.split(' '),m:'28001 28002 28003 28004 28005 28006 28007 28008 28009 28010 28012 28013 28014 28015 28016 28020 28028 28029 28036 28039 28045 28040 28046 28048'.split(' '),l:'28022 28037 28801 28802 28803 28804 28805 28806 28807 28821 28822 28823 28830 28850 28018 28019 28021 28025 28026 28030 28031 28032 28038 28041 28044 28047 28054 28901 28902 28903 28904 28905 28906 28907 28911 28912 28913 28914 28915 28916 28917 28918 28919 28921 28922 28923 28924 28925 28931 28932 28933 28934 28935 28936 28937 28938 28940 28941 28942 28943 28944 28945 28946 28947 28980 28981 28982 28983 28984 28300 28311 28312 28320 28341 28342 28343 28011 28017 28024 28027 28051 28052 28053'.split(' ')}}});
 P.boltDefaults=defaults;
 const clone=o=>JSON.parse(JSON.stringify(o));
 const isN=v=>typeof v==='number'&&Number.isFinite(v);
@@ -4563,9 +4563,12 @@ function norm(o){const c=defaults();if(!isObj(o))return c;
   }
   if(Array.isArray(o.holidays)){const h=[];for(const x of o.holidays)if(typeof x==='string'){const y=x.trim();if(/^(\d{4}-\d{2}-\d{2}|\d{2}-\d{2})$/.test(y)&&!h.includes(y))h.push(y)}c.holidays=h}
   c.zone=normZone(o.zone,c.zone);
+  /* v3.37: códigos postales de Madrid que faltaban de fábrica (baja: 28011 28017 28024 28027 28051 28052 28053; media: 28040 28046 28048): se añaden, una sola vez, los que no están en NINGUNA lista */
+  if(rng(o.cpv,0,0,100000)<337){const pz=c.zone.postal,seen=new Set([].concat(pz.h,pz.m,pz.l));
+    for(const [k,l] of [['l',['28011','28017','28024','28027','28051','28052','28053']],['m',['28040','28046','28048']]])for(const x of l)if(!seen.has(x)&&pz[k].length<400){pz[k].push(x);seen.add(x)}}
   /* v3.34: los ajustes guardados con las reglas anteriores pasan a las nuevas (la punta sube el precio en viajes cortos; sin el extra de cortos de fábrica) */
   if(rng(o.v,0,0,100000)<CFG_VER){c.peakApplies=true;if(c.short.km===6&&c.short.from===1.2&&c.short.lo===0&&c.short.hi===2.5)c.short.hi=0}
-  c.v=CFG_VER;
+  c.v=CFG_VER;c.cpv=337;
   return c}
 P.boltNorm=norm;
 
@@ -4952,9 +4955,11 @@ function zonesHtml(){
      +'<button type="button" class="secondary bz-adel" id="'+id('del')+'" onclick="boltZoneDel('+i+')" aria-label="Borrar la zona">🗑</button></div></div>'}).join('');
 }
 /* v3.20 · códigos postales de la recogida: tres listas (alta, media, baja) */
-function postalParse(txt){const ok=[],bad=[];for(const t of String(txt==null?'':txt).split(/[\s,;]+/)){if(!t)continue;if(/^\d{5}$/.test(t)){if(ok.indexOf(t)<0)ok.push(t)}else bad.push(t)}return {ok,bad}}
+function postalParse(txt){const ok=[],bad=[];for(const t0 of String(txt==null?'':txt).split(/[\s,;.]+/)){if(!t0)continue;
+  const ts=/^\d+$/.test(t0)&&t0.length>5&&t0.length%5===0?t0.match(/\d{5}/g):[t0];   /* v3.37: códigos escritos uno detrás de otro («2801128024») se parten de 5 en 5 */
+  for(const t of ts){if(/^\d{5}$/.test(t)){if(ok.indexOf(t)<0)ok.push(t)}else bad.push(t)}}return {ok,bad}}
 function postalBox(k,label){const l=B.cfg.zone.postal[k];
-  return '<label class="bz-f bz-w"><span>'+label+' · <b id="bz_cp_n_'+k+'">'+l.length+'</b> códigos</span><textarea id="bz_cp_'+k+'" rows="2" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="numeric" oninput="boltPostal(\''+k+'\',this)">'+esc(l.join(' '))+'</textarea></label>'}
+  return '<label class="bz-f bz-w"><span>'+label+' · <b id="bz_cp_n_'+k+'">'+l.length+'</b> códigos</span><textarea id="bz_cp_'+k+'" rows="2" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text" oninput="boltPostal(\''+k+'\',this)">'+esc(l.join(' '))+'</textarea></label>'}
 function postalMsg(){
   const out=[],seen={};
   for(const k of ['h','m','l']){const el=document.getElementById('bz_cp_'+k);if(!el)continue;const r=postalParse(el.value);
@@ -4984,7 +4989,7 @@ function pZones(){
    +'<div class="bz-out" id="bz_z_loc">'+esc(zoneLastTxt(B.zoneLast)||'Pulsa «Probar ubicación» para ver en qué zona cree la app que estás.')+'</div>'
    +'<div class="bz-hint">Si el móvil no da la ubicación (sin permiso o sin datos recientes), se usa la zona por defecto y el aviso lo dice.</div>'
    +'<b class="bz-sub">Códigos postales de la recogida</b>'
-   +'<small>Si la tarjeta de Bolt trae el código postal de la recogida (por ejemplo «Madrid 28001») y está en una de estas listas, esa zona manda sobre el GPS. Si no sale o no está en ninguna lista, se usa el GPS y tus zonas como siempre (la zona forzada de arriba manda sobre todo). Escribe los códigos separados por espacios o comas.</small>'
+   +'<small>Si la tarjeta de Bolt trae el código postal de la recogida (por ejemplo «Madrid 28001») y está en una de estas listas, esa zona manda sobre el GPS. Si no sale o no está en ninguna lista, se usa el GPS y tus zonas como siempre (la zona forzada de arriba manda sobre todo). Escribe los códigos separados por espacios, comas o puntos, o uno detrás de otro (de 5 cifras cada uno).</small>'
    +postalBox('h','Zona alta')+postalBox('m','Zona media')+postalBox('l','Zona baja')
    +'<div class="bz-hint" id="bz_cp_msg"></div>';
 }
@@ -6960,7 +6965,7 @@ function rememberRaw(pkgs,texts){try{localStorage.setItem(LS_RAW,JSON.stringify(
 function lastRaw(){try{return JSON.parse(localStorage.getItem(LS_RAW)||'null')}catch(e){return null}}
 function rawText(){
   const r=lastRaw();if(!r)return '';
-  return 'Portal v3.35 · lectura de Bolt · '+new Date(r.at).toISOString()+'\nVentanas vistas: '+(r.pkgs.join(', ')||'ninguna')+'\nTextos de Bolt: '+r.texts.length+'\n----\n'+r.texts.map((x,i)=>(i+1)+': '+x).join('\n');
+  return 'Portal v3.38 · lectura de Bolt · '+new Date(r.at).toISOString()+'\nVentanas vistas: '+(r.pkgs.join(', ')||'ninguna')+'\nTextos de Bolt: '+r.texts.length+'\n----\n'+r.texts.map((x,i)=>(i+1)+': '+x).join('\n');
 }
 /** lee los textos de la pantalla de Bolt y saca el desglose del albarán */
 function parseAlbaran(texts){
@@ -7027,8 +7032,8 @@ function parseAlbaran(texts){
   // comprobaciones
   const parts=['base','demand','wait','airport','toll','tip'].reduce((a,k)=>a+(out[k]||0),0)+out.other.reduce((a,x)=>a+x.v,0);
   const known=['base','demand','wait','airport','toll','tip'].some(k=>out[k]!=null)||out.other.length>0;
-  if(out.paid!=null&&known&&Math.abs(parts-out.paid)>0.05)out.flags.push('sum');
-  if(out.paid!=null&&out.comm!=null&&out.net!=null&&Math.abs(out.paid+out.comm-out.net)>0.05)out.flags.push('net');
+  if(out.paid!=null&&known&&Math.abs(parts-out.paid)>0.05&&!(out.airport!=null&&Math.abs(parts-out.airport-out.paid)<=0.05))out.flags.push('sum');
+  if(out.paid!=null&&out.comm!=null&&out.net!=null&&Math.abs(out.paid+out.comm-out.net)>0.05&&!(out.airport!=null&&Math.abs(out.paid-out.airport+out.comm-out.net)<=0.05))out.flags.push('net');
   out.found=['paid','base','demand','wait','airport','toll','tip','comm','net'].filter(k=>out[k]!=null).length;
   return out;
 }
@@ -7189,6 +7194,35 @@ function paint(){
   sheet.innerHTML=h;
 }
 function kv(a,b){return '<div class="kv"><span>'+a+'</span><b>'+b+'</b></div>'}
+/** Bruto REAL de un viaje de aeropuerto, con y sin la tasa. Con TARJETA el albarán final viene SIN la tasa (lo que ves al principio, p. ej. 18,35, ya la lleva);
+ *  en EFECTIVO el albarán la enseña como una línea más. Se mira cuál de las dos cosas es sumando las líneas del albarán; si no cuadra, no se inventa nada. */
+const r2=x=>Math.round(x*100)/100;
+function realGross(t){
+  const al=t.alb||{},man=t.man||{},o=t.offer||{};
+  if(!fin(al.paid)||al.paid<=0)return null;
+  const parts=['base','demand','wait','airport','toll','tip'].reduce((a,k)=>a+(fin(al[k])?al[k]:0),0)+(al.other||[]).reduce((a,x)=>a+(fin(x.v)?x.v:0),0);
+  if(fin(al.airport)&&al.airport>0){
+    const f=al.airport;
+    if(Math.abs(al.paid-parts)<=0.05)return {src:'alb',fee:f,withFee:al.paid,noFee:r2(al.paid-f)};
+    if(Math.abs(al.paid-(parts-f))<=0.05)return {src:'alb',fee:f,withFee:r2(al.paid+f),noFee:al.paid};
+    return null;
+  }
+  const mf=fin(man.airport)&&man.airport>0?man.airport:0,f=mf||(fin(o.fee)&&o.fee>0?o.fee:0);
+  if(!(f>0))return null;
+  const src=mf?'man':'est';
+  if(parts>0&&Math.abs(al.paid-(parts+f))<=0.05)return {src,fee:f,withFee:al.paid,noFee:r2(al.paid-f)};
+  return {src,fee:f,withFee:r2(al.paid+f),noFee:al.paid};
+}
+/** caja «Bruto con y sin tasa de aeropuerto» del detalle del albarán (vacía si no hay viaje de aeropuerto o no se puede calcular); se repinta sola al editar un campo */
+function grossBox(t){
+  const o=t.offer,rg=realGross(t);
+  if(!rg)return '<div id="tripRg"></div>';
+  const g=o&&fin(o.gross)&&o.gross>0?o.gross:null;
+  const pc=d=>' <small style="white-space:nowrap">('+(d>=0?'+':'−')+new Intl.NumberFormat('es-ES',{maximumFractionDigits:1}).format(Math.abs(d/g*100))+' %)</small>';
+  return '<div id="tripRg" class="box"><h4>Bruto con y sin tasa de aeropuerto</h4>'+(g!=null?kv('Estimado (calculadora)',eur(g)):'')+kv('Albarán, sin tasa',eur(rg.noFee))+kv('Con la tasa ('+eur(rg.fee)+')',eur(rg.withFee))
+    +(g!=null?kv('Real sin tasa − estimado',seur(rg.noFee-g)+pc(rg.noFee-g))+kv('Real con tasa − estimado',seur(rg.withFee-g)+pc(rg.withFee-g)):'')
+    +'<div class="sub">'+(rg.src==='alb'?'La tasa sale en el albarán (efectivo).':rg.src==='man'?'La tasa es la que escribiste a mano.':'La tasa es la de la estimación: con tarjeta el albarán final ya viene sin ella. Si fue otra, escríbela abajo en «Tarifa aeropuerto».')+'</div></div>';
+}
 function detailCalc(t){
   const o=t.offer;
   if(!o)return '<div class="sub" style="font-size:14px">Este viaje se añadió desde el albarán: no tiene datos de la oferta.</div>';
@@ -7196,7 +7230,7 @@ function detailCalc(t){
   let h='<div class="box"><h4>Datos del viaje (Bolt)</h4>';
   h+=kv('Precio estimado',(net==null?'—':eur(net))+(fin(o.lo)&&o.lo>=0&&fin(o.hi)&&o.hi>o.lo?' <small>(entre '+eur(o.lo)+' y '+eur(o.hi)+')</small>':''));
   h+=kv('Tiempo de recogida',mn(o.pickupMin))+kv('Km de recogida',k1(o.pickupKm))+kv('Tiempo con cliente',mn(o.tripMin))+kv('Km con cliente',k1(o.tripKm));
-  h+=kv('Zona',esc(o.zoneName||'—')+(o.area?' ('+esc(o.area)+')':''))+kv('Hora del viaje',hhmm(t.ts))+kv('Tarifa',o.peak?'Punta':'Valle')+kv('Demanda',fin(o.offerMult)&&o.offerMult>0?'×'+new Intl.NumberFormat('es-ES',{maximumFractionDigits:2}).format(o.offerMult):'sin demanda');
+  h+=kv('Zona',esc(o.zoneName||'—')+(o.area?' ('+esc(o.area)+')':'')+(o.zoneSrc==='manual'?' · elegida a mano':'')+(o.cpUnlisted?' · CP '+esc(o.cpUnlisted)+' sin zona en tus listas':''))+kv('Hora del viaje',hhmm(t.ts))+kv('Tarifa',o.peak?'Punta':'Valle')+kv('Demanda',fin(o.offerMult)&&o.offerMult>0?'×'+new Intl.NumberFormat('es-ES',{maximumFractionDigits:2}).format(o.offerMult):'sin demanda');
   h+='</div>';
   let x='';
   if(fin(o.gross)&&o.gross>=0)x+=kv('Bruto estimado',eur(o.gross));
@@ -7220,7 +7254,8 @@ function detailAlb(t){
   if(al.other&&al.other.length)h+='<div class="box"><h4>Otros conceptos del albarán</h4>'+al.other.map(x=>kv(esc(x.label),eur(x.v))).join('')+'</div>';
   const en=o?offerNet(o):null;
   if(al.net!=null&&en!=null)h+='<div class="box"><h4>Estimado contra real</h4>'+kv('Estimado',eur(en))+kv('Real (albarán)',eur(al.net))+kv('Diferencia',seur(al.net-en))+(en>0?kv('En %',(al.net-en>=0?'+':'−')+new Intl.NumberFormat('es-ES',{maximumFractionDigits:1}).format(Math.abs((al.net-en)/en*100))+' %'):'')+'</div>';
-  if(al.paid!=null&&al.comm!=null&&al.net!=null&&Math.abs(al.paid+al.comm-al.net)>0.05)h+='<div class="warn">⚠ Bruto + comisión no da el neto: revisa los importes.</div>';
+  h+=grossBox(t);
+  if(al.paid!=null&&al.comm!=null&&al.net!=null&&Math.abs(al.paid+al.comm-al.net)>0.05&&!(fin(al.airport)&&Math.abs(al.paid-al.airport+al.comm-al.net)<=0.05))h+='<div class="warn">⚠ Bruto + comisión no da el neto: revisa los importes.</div>';
   if(al.hdr||al.min!=null)h+='<div class="sub">Albarán leído: '+esc(al.hdr||'')+(al.min!=null?' · ruta '+pad(Math.floor(al.t0/60))+':'+pad(al.t0%60)+' → '+pad(Math.floor(al.t1/60))+':'+pad(al.t1%60)+' ('+al.min+' min)':'')+'</div>';
   h+='<div class="box"><h4>Datos que a veces faltan / editar</h4>'+kv('Tiempo de espera (min)',inp('m.waitMin',man.waitMin))+kv('Tarifa aeropuerto (€)',inp('m.airport',man.airport))+'</div>';
   h+='<button class="bt" style="width:100%;margin-bottom:10px" data-a="raw">Ver lo que leyó de Bolt</button>';
@@ -7238,6 +7273,7 @@ function onChange(e){
   if(f.startsWith('m.')){t.man=t.man||{};if(v==null)delete t.man[f.slice(2)];else t.man[f.slice(2)]=v}
   else{t.alb=t.alb||{};if(v==null)delete t.alb[f];else t.alb[f]=(f==='comm'&&v>0)?-v:v;t.alb.at=t.alb.at||Date.now()}
   save();
+  const gx=document.getElementById('tripRg');if(gx)gx.outerHTML=grossBox(t);
 }
 function onClick(e){
   const b=e.target.closest&&e.target.closest('[data-a]');if(!b||!sheet.contains(b))return;
@@ -7291,13 +7327,13 @@ function csvCell(v){
 function csvText(){
   const s=state();
   const cols=['Jornada','Nº','Fecha','Hora','Neto estimado','Bruto estimado','Comisión est.','Comisión est. %','Tasa aeropuerto est.','Demanda','Tarifa','Zona','Zona (nombre)','Min recogida','Km recogida','Min con cliente','Km con cliente','Viaje largo -%','Evento','Aeropuerto',
-    'Albarán: bruto','Albarán: tarifa base','Albarán: alta demanda','Albarán: espera €','Albarán: aeropuerto €','Albarán: peajes','Albarán: propina','Albarán: comisión','Albarán: neto','Real − estimado €','Albarán: hora','Albarán: min de ruta','Espera (min) manual','Aeropuerto € manual','Añadido a mano'];
+    'Albarán: bruto','Albarán: tarifa base','Albarán: alta demanda','Albarán: espera €','Albarán: aeropuerto €','Albarán: peajes','Albarán: propina','Albarán: comisión','Albarán: neto','Real − estimado €','Albarán: hora','Albarán: min de ruta','Espera (min) manual','Aeropuerto € manual','Añadido a mano','Aeropuerto: tasa usada','Aeropuerto: de dónde sale la tasa','Bruto real sin tasa','Bruto real con tasa','Real sin tasa − bruto est.','Real con tasa − bruto est.','Zona: de dónde sale','CP sin zona en tus listas'];
   const rows=[cols.join(';')];
   const add=(label,trips)=>trips.forEach((t,i)=>{
-    const o=t.offer||{},al=t.alb||{},m=t.man||{},en=offerNet(t.offer);
+    const o=t.offer||{},al=t.alb||{},m=t.man||{},en=offerNet(t.offer),rg=realGross(t),gg=fin(o.gross)&&o.gross>0?o.gross:null;
     rows.push([label,i+1,dkey(t.ts),hhmm(t.ts),en,fin(o.gross)&&o.gross>=0?o.gross:null,fin(o.comm)&&o.comm>=0?o.comm:null,fin(o.commPct)&&o.commPct>=0?o.commPct:null,fin(o.fee)?o.fee:null,fin(o.offerMult)&&o.offerMult>0?o.offerMult:null,t.offer?(o.peak?'Punta':'Valle'):'',t.offer?o.zone:'',o.zoneName||'',
       fin(o.pickupMin)&&o.pickupMin>=0?o.pickupMin:null,fin(o.pickupKm)&&o.pickupKm>=0?o.pickupKm:null,fin(o.tripMin)&&o.tripMin>=0?o.tripMin:null,fin(o.tripKm)&&o.tripKm>=0?o.tripKm:null,fin(o.disc)&&o.disc>0?o.disc:null,o.event||'',o.airport||'',
-      al.paid,al.base,al.demand,al.wait,al.airport,al.toll,al.tip,al.comm,al.net,(al.net!=null&&en!=null)?al.net-en:null,al.hdr||'',al.min,m.waitMin,m.airport,t.manual?'sí':''].map(csvCell).join(';'));
+      al.paid,al.base,al.demand,al.wait,al.airport,al.toll,al.tip,al.comm,al.net,(al.net!=null&&en!=null)?al.net-en:null,al.hdr||'',al.min,m.waitMin,m.airport,t.manual?'sí':'',rg?rg.fee:null,rg?({alb:'albarán',man:'escrita a mano',est:'estimación'})[rg.src]:'',rg?rg.noFee:null,rg?rg.withFee:null,rg&&gg!=null?r2(rg.noFee-gg):null,rg&&gg!=null?r2(rg.withFee-gg):null,t.offer?({area:'zona dibujada',default:'por defecto',forced:'forzada en Ajustes',postal:'código postal',manual:'elegida a mano'})[o.zoneSrc]||'':'',o.cpUnlisted||''].map(csvCell).join(';'));
   });
   add('Sin cerrar',s.open);
   for(const d of s.days)add(dshow(d.date),d.trips);
@@ -7328,6 +7364,18 @@ function injectCard(){
 }
 
 /* ---------------- arranque ---------------- */
+/** v3.38: la oferta ya apuntada llega otra vez con otra cifra (elegiste otra zona en el aviso): se cambian sus datos allí donde esté (pendiente, en la lista, sin decidir o en una jornada cerrada).
+ *  El albarán y lo escrito a mano no se tocan. Si ya la habías descartado con ✗, no hay nada que actualizar. */
+function reviseOffer(o){
+  const s=state();
+  const all=[cur].concat(s.open,s.pend);for(const d of s.days)for(const t of d.trips)all.push(t);
+  const t=all.find(x=>x&&x.offer&&x.ts===o.ts);
+  if(!t){save();return false}
+  t.offer=o;save();
+  if(cur&&t===cur)showBar();
+  lastPaintSig='';refresh();
+  return true;
+}
 let polling=false;
 async function poll(){
   if(document.hidden||polling||!enabled())return;
@@ -7339,8 +7387,9 @@ async function poll(){
     let o=null;try{o=JSON.parse(r.json)}catch(e){}
     if(!o||!fin(o.ts))return;
     const s=state();
+    if(o.ts===s.lastTs&&fin(o.rev)&&o.rev>(s.lastRev||0)){s.lastRev=o.rev;reviseOffer(o);return}   // v3.38: misma oferta con otra cifra (elegiste otra zona en el aviso): se actualiza, no se apunta otra
     if(!(o.ts>s.lastTs))return;
-    s.lastTs=o.ts;save();
+    s.lastTs=o.ts;s.lastRev=fin(o.rev)?o.rev:0;save();
     if(Date.now()-o.ts>120000)return;       // oferta vieja (el Portal estaba cerrado): no se ofrece ✓/✗
     newOffer(o);
   }catch(e){}finally{polling=false}

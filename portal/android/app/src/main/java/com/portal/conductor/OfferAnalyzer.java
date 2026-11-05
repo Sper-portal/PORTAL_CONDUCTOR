@@ -17,6 +17,8 @@ public class OfferAnalyzer {
         public BoltCfg bolt = new BoltCfg();     // estimacion de Bolt cuando la oferta no trae precio
         public long nowMs = 0;                   // v3.20-cp: hora (ms) para decidir la punta de la zona por codigo postal; 0 = ahora
         public boolean weekendNow = false;       // v3.15h: \u00abahora es hora punta\u00bb para la zona actual (lo decide quien llama con isWeekend)
+        public int manualKind = -1;              // v3.37: zona de la recogida elegida a mano en el aviso (0 baja, 1 media, 2 alta; -1 = ninguna)
+        public String manualSig = "";            // v3.37: huella de la oferta (sin zona) a la que vale esa eleccion; si no coincide, se ignora
     }
 
     public static class Result {
@@ -44,7 +46,13 @@ public class OfferAnalyzer {
         public double estFee = 0;                   // tasa del aeropuerto restada antes de la comision
         public int estZone = 1;                     // zona de la recogida: 0 baja, 1 media, 2 alta
         public String estArea = "";                 // nombre de la zona dibujada donde se detecto la ubicacion
-        public String estZoneSrc = "";              // "area" (dibujada) | "default" (fuera de tus zonas) | "forced" (forzada en Ajustes)
+        public String estZoneSrc = "";              // "area" (dibujada) | "default" (fuera de tus zonas) | "forced" (forzada en Ajustes) | "postal" (codigo postal) | "manual" (elegida por ti en el aviso)
+        public String estCpUnlisted = "";           // v3.37: codigo postal de la recogida que NO esta en ninguna lista de Ajustes (se uso la ubicacion); "" si no hay
+        public String baseSig = "";                 // v3.37: huella de la oferta SIN la zona (viaje y recogida)
+        public double estNetAuto = -1;              // v3.37: neto con la zona de la ubicacion (sin tu eleccion); -1 si no hay estimacion
+        public int zoneAuto = -1;                   // v3.37: zona que sale de la ubicacion; -1 si no hay botones de zona
+        public int[] zoneKinds = new int[0];        // v3.37: zonas que se pueden elegir en el aviso (0 baja, 1 media, 2 alta); vacio = no hay duda que resolver
+        public double[] zoneNets = new double[0];   // v3.37: neto estimado con cada una de ellas
     }
 
     // =====================================================================
@@ -144,8 +152,8 @@ public class OfferAnalyzer {
         public List<Area> good = new ArrayList<Area>();   // sin zonas al principio
         // v3.20-cp: codigos postales de la RECOGIDA por tipo de zona. De fabrica (lista del conductor): alta = norte y noroeste; media = dentro de la M-30; baja = este y sur
         public List<String> postH = new ArrayList<String>(java.util.Arrays.asList("28023 28033 28034 28035 28042 28043 28049 28050 28055 28100 28108 28109 28220 28221 28222 28223 28224 28230 28231 28232 28250 28701 28702 28703 28760 28761 28762".split(" ")));
-        public List<String> postM = new ArrayList<String>(java.util.Arrays.asList("28001 28002 28003 28004 28005 28006 28007 28008 28009 28010 28012 28013 28014 28015 28016 28020 28028 28029 28036 28039 28045".split(" ")));
-        public List<String> postL = new ArrayList<String>(java.util.Arrays.asList("28022 28037 28801 28802 28803 28804 28805 28806 28807 28821 28822 28823 28830 28850 28018 28019 28021 28025 28026 28030 28031 28032 28038 28041 28044 28047 28054 28901 28902 28903 28904 28905 28906 28907 28911 28912 28913 28914 28915 28916 28917 28918 28919 28921 28922 28923 28924 28925 28931 28932 28933 28934 28935 28936 28937 28938 28940 28941 28942 28943 28944 28945 28946 28947 28980 28981 28982 28983 28984 28300 28311 28312 28320 28341 28342 28343".split(" ")));
+        public List<String> postM = new ArrayList<String>(java.util.Arrays.asList("28001 28002 28003 28004 28005 28006 28007 28008 28009 28010 28012 28013 28014 28015 28016 28020 28028 28029 28036 28039 28045 28040 28046 28048".split(" ")));
+        public List<String> postL = new ArrayList<String>(java.util.Arrays.asList("28022 28037 28801 28802 28803 28804 28805 28806 28807 28821 28822 28823 28830 28850 28018 28019 28021 28025 28026 28030 28031 28032 28038 28041 28044 28047 28054 28901 28902 28903 28904 28905 28906 28907 28911 28912 28913 28914 28915 28916 28917 28918 28919 28921 28922 28923 28924 28925 28931 28932 28933 28934 28935 28936 28937 28938 28940 28941 28942 28943 28944 28945 28946 28947 28980 28981 28982 28983 28984 28300 28311 28312 28320 28341 28342 28343 28011 28017 28024 28027 28051 28052 28053".split(" ")));
         public Zone copy() {
             Zone z = new Zone();
             z.good = new ArrayList<Area>();
@@ -220,6 +228,8 @@ public class OfferAnalyzer {
         public double longKm = 10, longDisc = 13;   // v3.34: viajes largos (desde longKm km) con demanda: la tarjeta baja longDisc % (0 = sin descuento)
         public boolean eventOn = true;       // v3.34: en lugares de eventos (IFEMA, Bernabeu...) no se aplica ese descuento
         public boolean atEvent = false;      // lo pone el servicio en cada lectura segun la ubicacion (no se guarda)
+        public boolean fixOk = false;        // v3.37: hay ubicacion reciente (la pone ZoneLocator; no se guarda)
+        public double fixLat = 0, fixLon = 0, fixAcc = -1;   // v3.37: esa ubicacion y su precision en metros
         public String eventName = "";
         public double shortKm = 6, shortFrom = 1.2, bumpLo = 0, bumpHi = 0;   // viajes cortos con demanda: rango (menos de shortKm km y demanda desde shortFrom; el inicial real sube entre bumpLo y bumpHi euros)
         // zona baja / media / alta x valle / punta
@@ -572,6 +582,100 @@ public class OfferAnalyzer {
 
     /** isBolt: la oferta viene de Bolt (paquete bolt/mtakso). Solo en ese caso, y sin precio visible, se estima el precio. */
     public static Result analyze(List<String> rawNodes, Params p, boolean lenient, boolean isBolt) {
+        Result r = analyzeCore(rawNodes, p, lenient, isBolt);
+        try { addZoneChoices(r, rawNodes, p, lenient, isBolt); }
+        catch (Throwable t) { r.zoneAuto = -1; r.zoneKinds = new int[0]; r.zoneNets = new double[0]; }
+        return r;
+    }
+
+    /** v3.37: la zona de la recogida solo se ofrece a elegir si cambia el neto al menos esto (euros) */
+    public static final double ZONE_MIN_DIFF = 0.25;
+
+    /** v3.37: la recogida esta como mucho a (km de la oferta x este numero) en linea recta de ti (los km de la oferta son por carretera) */
+    public static final double ZONE_STRAIGHT = 0.8;
+
+    /** v3.37: huella de la oferta SIN la zona (viaje y recogida): la zona elegida a mano en el aviso solo vale para la oferta con esta huella */
+    public static String baseSig(Result r) {
+        return Math.round(r.tripKm * 10) + "|" + Math.round(r.tripMin) + "|" + Math.round(r.pickupKm * 10) + "|" + Math.round(r.pickupMin) + "|e";
+    }
+
+    /** v3.37: zonas (0 baja, 1 media, 2 alta) que hay en los alrededores de la ubicacion hasta donde puede estar la recogida; marca true en reach */
+    public static void reachKinds(BoltCfg b, double pickupKm, boolean[] reach) {
+        double acc = b.fixAcc > 0 ? Math.min(b.fixAcc, 300) : 0;
+        double rM = (pickupKm > 0 ? pickupKm * 1000.0 * ZONE_STRAIGHT : 300.0) + acc;
+        rM = Math.min(rM, 4000.0);
+        double step = Math.max(120.0, rM / 12.0);
+        int n = (int) Math.ceil(rM / step);
+        double mLat = 1.0 / 111320.0, mLon = 1.0 / (111320.0 * Math.max(0.2, Math.cos(Math.toRadians(b.fixLat))));
+        for (int i = -n; i <= n; i++) {
+            for (int j = -n; j <= n; j++) {
+                double dx = i * step, dy = j * step;
+                if (dx * dx + dy * dy > rM * rM) continue;
+                Area a = areaAt(b.zone, b.fixLat + dy * mLat, b.fixLon + dx * mLon);
+                int k = a != null ? a.kind : b.zoneDef;
+                if (k >= Z_LOW && k <= Z_HIGH) reach[k] = true;
+            }
+        }
+    }
+
+    /** v3.37: neto de la oferta con la zona "kind" (la de la ubicacion si kind == auto); -1 si no se puede */
+    private static double netWith(List<String> rawNodes, Params p, boolean lenient, boolean isBolt, int kind, int auto, String sig) {
+        int k0 = p.manualKind; String s0 = p.manualSig;
+        try {
+            p.manualKind = kind == auto ? -1 : kind;
+            p.manualSig = sig;
+            Result q = analyzeCore(rawNodes, p, lenient, isBolt);
+            if (!q.estimated || q.estNet < 0) return -1;
+            if (kind != auto && !"manual".equals(q.estZoneSrc)) return -1;
+            return q.estNet;
+        } finally { p.manualKind = k0; p.manualSig = s0; }
+    }
+
+    /**
+     * v3.37: si la zona de la recogida salio de la UBICACION (no del codigo postal ni de Ajustes) y cerca hay otra zona (o el codigo postal de la oferta no esta en tus listas),
+     * deja en el resultado las zonas entre las que elegir y el neto de cada una. Solo se ofrecen las que cambian el neto al menos ZONE_MIN_DIFF euros.
+     */
+    private static void addZoneChoices(Result r, List<String> rawNodes, Params p, boolean lenient, boolean isBolt) {
+        if (r == null || !r.offer || !r.estimated || p == null || p.bolt == null) return;
+        BoltCfg b = p.bolt;
+        r.baseSig = baseSig(r);
+        r.estNetAuto = r.estNet;
+        String src = r.estZoneSrc == null ? "" : r.estZoneSrc;
+        boolean manual = "manual".equals(src);
+        int auto = b.zoneKind;
+        if (auto < Z_LOW || auto > Z_HIGH) return;
+        if (manual) { double na = netWith(rawNodes, p, lenient, isBolt, auto, auto, r.baseSig); if (na >= 0) r.estNetAuto = na; }
+        if (!(manual || "area".equals(src) || "default".equals(src))) return;       // codigo postal o zona forzada: no hay duda que resolver
+        if ("pickup".equals(r.estAirport)) return;                                   // recogida en el aeropuerto: usa su propia tarjeta, la zona no cuenta
+        boolean[] reach = new boolean[3];
+        reach[auto] = true;
+        if (r.estCpUnlisted != null && r.estCpUnlisted.length() > 0) { reach[0] = true; reach[1] = true; reach[2] = true; }
+        else if (b.fixOk) reachKinds(b, r.pickupKm, reach);
+        else return;
+        if (manual && r.estZone >= Z_LOW && r.estZone <= Z_HIGH) reach[r.estZone] = true;
+        int cnt = 0;
+        for (int k = 0; k < 3; k++) if (reach[k]) cnt++;
+        if (cnt < 2) return;
+        double base = manual ? r.estNetAuto : r.estNet;
+        double[] net = new double[3];
+        for (int k = 0; k < 3; k++) {
+            if (!reach[k]) { net[k] = -1; continue; }
+            if (k == r.estZone) net[k] = r.estNet;
+            else if (k == auto && manual) net[k] = r.estNetAuto;
+            else net[k] = netWith(rawNodes, p, lenient, isBolt, k, auto, r.baseSig);
+        }
+        int[] ks = new int[3]; int m = 0;
+        for (int k = 0; k < 3; k++) {
+            if (!reach[k] || net[k] < 0) continue;
+            if (k == auto || k == r.estZone || Math.abs(net[k] - base) >= ZONE_MIN_DIFF - 1e-9) ks[m++] = k;
+        }
+        if (m < 2) return;
+        r.zoneAuto = auto;
+        r.zoneKinds = new int[m]; r.zoneNets = new double[m];
+        for (int i = 0; i < m; i++) { r.zoneKinds[i] = ks[i]; r.zoneNets[i] = net[ks[i]]; }
+    }
+
+    private static Result analyzeCore(List<String> rawNodes, Params p, boolean lenient, boolean isBolt) {
         List<String> nodes = new ArrayList<String>();
         for (String x : rawNodes) for (String line : clean(x).split("\\n")) if (line.trim().length() > 0 && !DEST_CHIP.matcher(norm(line).trim()).find()) nodes.add(line.trim());
         Result r = new Result();
@@ -673,6 +777,14 @@ public class OfferAnalyzer {
                         if (kz >= 0) {
                             p.bolt.zoneKind = kz; p.bolt.zoneName = "c\u00F3digo postal " + cpZ; p.bolt.zoneSrc = "postal";
                             if (kz != zk0) { java.util.Calendar calZ = java.util.Calendar.getInstance(); if (p.nowMs > 0) calZ.setTimeInMillis(p.nowMs); peakZ = isPeak(p.bolt, kz, calZ); }
+                        } else if (cpZ != null) {
+                            r.estCpUnlisted = cpZ;      // v3.37: la oferta trae codigo postal pero no esta en tus listas: se usa la ubicacion y se avisa
+                        }
+                        // v3.37: zona elegida a mano en el aviso: solo vale para ESTA oferta y solo si la zona salia de la ubicacion (no de un codigo postal de tus listas ni de Ajustes)
+                        if (kz < 0 && p.manualKind >= Z_LOW && p.manualKind <= Z_HIGH && p.manualSig != null && p.manualSig.length() > 0 && p.manualSig.equals(baseSig(r))) {
+                            p.bolt.zoneKind = p.manualKind; p.bolt.zoneName = ""; p.bolt.zoneSrc = "manual";
+                            java.util.Calendar calM = java.util.Calendar.getInstance(); if (p.nowMs > 0) calM.setTimeInMillis(p.nowMs);
+                            peakZ = isPeak(p.bolt, p.manualKind, calM);
                         }
                     }
                 } catch (Exception ex) { p.bolt.zoneKind = zk0; p.bolt.zoneName = zn0; p.bolt.zoneSrc = zs0; peakZ = p.weekendNow; }

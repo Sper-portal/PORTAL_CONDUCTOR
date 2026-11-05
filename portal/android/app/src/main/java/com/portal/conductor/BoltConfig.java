@@ -171,6 +171,14 @@ public class BoltConfig {
     }
 
     /** Lista de codigos postales: solo de cinco cifras, sin repetir y hasta 400; si no es una lista se queda la que habia. */
+    /** v3.37: codigos postales de Madrid que faltaban de fabrica (baja: 28011 28017 28024 28027 28051 28052 28053; media: 28040 28046 28048). Solo se anade el que no esta en NINGUNA lista. */
+    static void addCpv337(OfferAnalyzer.Zone z) {
+        String[] low = {"28011", "28017", "28024", "28027", "28051", "28052", "28053"};
+        String[] mid = {"28040", "28046", "28048"};
+        for (String c : low) if (!z.postH.contains(c) && !z.postM.contains(c) && !z.postL.contains(c) && z.postL.size() < 400) z.postL.add(c);
+        for (String c : mid) if (!z.postH.contains(c) && !z.postM.contains(c) && !z.postL.contains(c) && z.postM.size() < 400) z.postM.add(c);
+    }
+
     private static List<String> postalList(Object o, List<String> def) {
         if (!(o instanceof List)) return def;
         List<String> l = new ArrayList<String>();
@@ -262,6 +270,7 @@ public class BoltConfig {
                 c.holidays = h;
             }
             c.zone = zone(m.get("zone"), c.zone);
+            if (dbl(m.get("cpv"), 0, 0, 100000) < 337) addCpv337(c.zone);   // v3.37: los ajustes guardados antes de la v3.37 reciben los codigos que faltaban (la marca cpv la escribe Java al guardar los ajustes)
             // v3.34: los ajustes guardados con las reglas anteriores pasan a las nuevas (la punta sube el precio en viajes cortos; sin el extra de cortos de fabrica)
             if (dbl(m.get("v"), 0, 0, 100000) < CFG_VER) {
                 c.peakApplies = true;
@@ -342,7 +351,7 @@ public class BoltConfig {
         StringBuilder b = new StringBuilder("{");
         b.append("\"on\":").append(c.on).append(",\"mode\":\"").append(c.mode).append("\",\"comm\":").append(n(c.comm));
         b.append(",\"peakApplies\":").append(c.peakApplies).append(",\"round5\":").append(c.round5).append(",\"fine\":").append(n(c.fine));
-        b.append(",\"peakKm\":").append(n(c.peakKm)).append(",\"longKm\":").append(n(c.longKm)).append(",\"longDisc\":").append(n(c.longDisc)).append(",\"eventOn\":").append(c.eventOn).append(",\"v\":").append(CFG_VER);
+        b.append(",\"peakKm\":").append(n(c.peakKm)).append(",\"longKm\":").append(n(c.longKm)).append(",\"longDisc\":").append(n(c.longDisc)).append(",\"eventOn\":").append(c.eventOn).append(",\"v\":").append(CFG_VER).append(",\"cpv\":337");
         b.append(",\"zoneForce\":\"").append(c.zoneForce).append("\",\"zoneDef\":\"").append(kindWordKey(c.zoneDef)).append('"');
         b.append(",\"short\":{\"km\":").append(n(c.shortKm)).append(",\"from\":").append(n(c.shortFrom)).append(",\"lo\":").append(n(c.bumpLo)).append(",\"hi\":").append(n(c.bumpHi)).append('}');
         b.append(",\"airOn\":").append(c.airOn).append(",\"airFee\":").append(n(c.airFee)).append(",\"airFlatKm\":").append(n(c.airFlatKm));

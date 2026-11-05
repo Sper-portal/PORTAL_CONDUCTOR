@@ -453,6 +453,13 @@ public class ScreenReaderService extends AccessibilityService {
     private LinearLayout alertView;
     private TextView aChip, aMain, aDetail;
     private boolean alertShown = false;
+    private int manualKind = -1;            // v3.37: zona de la recogida elegida a mano en el aviso (-1 = la de la ubicacion)
+    private String manualSig = "";          // v3.37: oferta a la que vale esa eleccion (huella sin zona)
+    private long manualTs = 0;
+    private LinearLayout zcView;            // v3.37: botones de zona: ventana aparte (esta SI se toca) justo debajo del aviso
+    private WindowManager.LayoutParams zcp;
+    private boolean zcShown = false, zcListen = false;
+    private String zcSig = "";
     private boolean forced = false;
     private WindowManager.LayoutParams alp;
     private final Runnable evalRun = new Runnable() { @Override public void run() { evalPending = false; evaluateOffer(); } };
@@ -582,6 +589,7 @@ public class ScreenReaderService extends AccessibilityService {
         p.tolPickup = sp.getFloat("rent_tolPickup", 1f);
         p.bolt = boltCfg();
         p.weekendNow = OfferAnalyzer.isWeekend(p.bolt, java.util.Calendar.getInstance());
+        if (manualKind >= 0 && manualSig.length() > 0 && System.currentTimeMillis() - manualTs < 120000L) { p.manualKind = manualKind; p.manualSig = manualSig; }   // v3.37
         return p;
     }
 
@@ -777,11 +785,16 @@ public class ScreenReaderService extends AccessibilityService {
 
     /** huella de la oferta: mismos datos = misma oferta (la lectura se repite cada 1,5 s mientras se ve en pantalla) */
     static String tripSig(OfferAnalyzer.Result r) {
-        return Math.round(r.estNet * 100) + "|" + Math.round(r.price * 100) + "|" + Math.round(r.tripKm * 10) + "|" + Math.round(r.tripMin) + "|"
+        double net = r.estNetAuto >= 0 ? r.estNetAuto : r.estNet;     // v3.37: con la zona de la ubicacion: elegir otra zona en el aviso NO cambia la huella (es la misma oferta)
+        double pr = r.estimated ? net : r.price;
+        return Math.round(net * 100) + "|" + Math.round(pr * 100) + "|" + Math.round(r.tripKm * 10) + "|" + Math.round(r.tripMin) + "|"
             + Math.round(r.pickupKm * 10) + "|" + Math.round(r.pickupMin);
     }
 
-    static String tripJson(OfferAnalyzer.Result r, long seq, long now) {
+    static String tripJson(OfferAnalyzer.Result r, long seq, long now) { return tripJson(r, seq, now, 0); }
+
+    /** rev: 0 la primera vez; sube cada vez que la MISMA oferta cambia de cifra porque elegiste otra zona en el aviso (el Portal la actualiza en vez de apuntar otra) */
+    static String tripJson(OfferAnalyzer.Result r, long seq, long now, int rev) {
         StringBuilder b = new StringBuilder("{");
         b.append("\"seq\":").append(seq).append(",\"ts\":").append(now);
         b.append(",\"est\":").append(r.estimated ? "true" : "false");
@@ -794,6 +807,7 @@ public class ScreenReaderService extends AccessibilityService {
         b.append(",\"peak\":").append(r.estPeakUsed ? "true" : "false").append(",\"weekend\":").append(r.estWeekend ? "true" : "false").append(",\"peakShort\":").append(r.estPeakShort ? "true" : "false");
         b.append(",\"disc\":").append(jn(r.estDisc)).append(",\"event\":").append(jq(r.estEvent)).append(",\"fine\":").append(jn(r.estFine)).append(",\"airport\":").append(jq(r.estAirport));
         b.append(",\"tripKm\":").append(jn(r.tripKm)).append(",\"tripMin\":").append(jn(r.tripMin)).append(",\"pickupKm\":").append(jn(r.pickupKm)).append(",\"pickupMin\":").append(jn(r.pickupMin));
+        b.append(",\"rev\":").append(rev).append(",\"cpUnlisted\":").append(jq(r.estCpUnlisted));
         return b.append("}").toString();
     }
 
@@ -805,10 +819,15 @@ public class ScreenReaderService extends AccessibilityService {
             if (sp.getInt("trip_on", 1) != 1) return;
             String sig = tripSig(r);
             boolean isNew = !sig.equals(sp.getString("trip_sig", "")) || now - sp.getLong("trip_ts", 0L) > 90000L;
+            long cents = Math.round(r.estNet * 100);
             SharedPreferences.Editor ed = sp.edit().putLong("trip_ts", now);
             if (isNew) {
                 long seq = sp.getLong("trip_seq", 0L) + 1L;
-                ed.putString("trip_sig", sig).putLong("trip_seq", seq).putString("trip_cur", tripJson(r, seq, now));
+                ed.putString("trip_sig", sig).putLong("trip_seq", seq).putLong("trip_first", now).putInt("trip_rev", 0).putLong("trip_cents", cents).putString("trip_cur", tripJson(r, seq, now, 0));
+            } else if (cents != sp.getLong("trip_cents", cents)) {
+                // v3.37: es la MISMA oferta con otra cifra (elegiste otra zona en el aviso): se actualiza la ya apuntada, no se apunta otra
+                int rev = sp.getInt("trip_rev", 0) + 1;
+                ed.putInt("trip_rev", rev).putLong("trip_cents", cents).putString("trip_cur", tripJson(r, sp.getLong("trip_seq", 0L), sp.getLong("trip_first", now), rev));
             }
             ed.apply();
         } catch (Exception e) { }
@@ -891,6 +910,7 @@ public class ScreenReaderService extends AccessibilityService {
     private void showAlert(OfferAnalyzer.Result r) {
         if (r.estimated) { showEstimateAlert(r); return; }
         resetEstimateViews();
+        hideZoneChips();
         try {
             if (alertView == null) buildAlert();
             final float d = getResources().getDisplayMetrics().density;
@@ -937,6 +957,7 @@ public class ScreenReaderService extends AccessibilityService {
 
     private void hideAlert() {
         stopSpeech();
+        hideZoneChips();
         try { if (alertShown && alertView != null) wm.removeView(alertView); } catch (Exception e) { }
         alertShown = false;
     }
@@ -1055,10 +1076,12 @@ public class ScreenReaderService extends AccessibilityService {
     /** linea de la zona de la recogida del aviso: cual es y de donde sale (zona dibujada, forzada en Ajustes o la de por defecto) */
     static String zoneLine(OfferAnalyzer.Result r) {
         String z = "Zona " + OfferAnalyzer.zoneName(r.estZone);
+        String cp = r.estCpUnlisted != null && r.estCpUnlisted.length() > 0 ? " \u00B7 CP " + r.estCpUnlisted + " sin zona en tus listas" : "";
         if ("forced".equals(r.estZoneSrc)) return z + " (forzada en Ajustes)";
-        if ("area".equals(r.estZoneSrc) || "postal".equals(r.estZoneSrc)) return z + (r.estArea != null && r.estArea.length() > 0 ? " (" + r.estArea + ")" : "");
+        if ("manual".equals(r.estZoneSrc)) return z + " (elegida por ti" + (r.zoneAuto >= 0 ? "; por ubicaci\u00F3n: " + OfferAnalyzer.zoneName(r.zoneAuto) : "") + ")" + cp;
+        if ("area".equals(r.estZoneSrc) || "postal".equals(r.estZoneSrc)) return z + (r.estArea != null && r.estArea.length() > 0 ? " (" + r.estArea + ")" : "") + cp;
         String w = ZoneLocator.why();
-        return z + " (" + (w.length() > 0 ? w + " \u2192 zona por defecto" : "fuera de tus zonas dibujadas") + ")";
+        return z + " (" + (w.length() > 0 ? w + " \u2192 zona por defecto" : "fuera de tus zonas dibujadas") + ")" + cp;
     }
 
     /** linea de la tarjeta usada: la del aeropuerto (recogidas) o la de la zona de la recogida, de valle o de hora punta */
@@ -1169,6 +1192,105 @@ public class ScreenReaderService extends AccessibilityService {
             dt.append("\nPrecio ESTIMADO con tarifas aproximadas (no son las oficiales de Bolt)");
             aDetail.setText(dt.toString());
             if (!alertShown) { wm.addView(alertView, alp); alertShown = true; }
+            updateZoneChips(r);
+        } catch (Exception e) { }
+    }
+
+    // ===================== v3.37: botones de zona (solo Bolt, solo cuando hay duda) =====================
+    // Si la zona de la recogida sale de TU ubicacion y cerca hay otra zona (o el codigo postal de la oferta no esta en tus listas), debajo del aviso salen
+    // unos botones con las zonas posibles y el neto con cada una. Tocas uno y se recalcula al momento. Es una ventana aparte, pequena, porque la del aviso no se toca.
+    private void hideZoneChips() {
+        try { if (zcShown && zcView != null) wm.removeView(zcView); } catch (Exception e) { }
+        zcShown = false;
+        zcSig = "";
+    }
+
+    private void placeZoneChips() {
+        try {
+            if (!zcShown || zcView == null || zcp == null || alertView == null || alp == null) return;
+            final float d = getResources().getDisplayMetrics().density;
+            int y = alp.y + alertView.getHeight() + (int) (6 * d);
+            if (zcp.y != y) { zcp.y = y; wm.updateViewLayout(zcView, zcp); }
+        } catch (Exception e) { }
+    }
+
+    private void chooseZone(int kind, int auto, String sig) {
+        try {
+            manualKind = kind == auto ? -1 : kind;
+            manualSig = manualKind < 0 || sig == null ? "" : sig;
+            manualTs = System.currentTimeMillis();
+            zcSig = "";
+            evaluateOffer();      // se vuelve a leer la oferta que sigue en pantalla y se recalcula con la zona elegida
+        } catch (Exception e) { }
+    }
+
+    private void updateZoneChips(final OfferAnalyzer.Result r) {
+        try {
+            if (r == null || r.zoneKinds == null || r.zoneKinds.length < 2 || r.zoneNets == null || r.zoneNets.length != r.zoneKinds.length || r.baseSig == null || r.baseSig.length() == 0) { hideZoneChips(); return; }
+            final float d = getResources().getDisplayMetrics().density;
+            StringBuilder sg = new StringBuilder(r.baseSig).append('#').append(r.estZone).append('#').append(r.zoneAuto);
+            for (int i = 0; i < r.zoneKinds.length; i++) sg.append('#').append(r.zoneKinds[i]).append(':').append(Math.round(r.zoneNets[i] * 100));
+            String sig = sg.toString();
+            if (zcView == null) {
+                zcView = new LinearLayout(this);
+                zcView.setOrientation(LinearLayout.HORIZONTAL);
+                zcView.setGravity(Gravity.CENTER);
+                GradientDrawable bgz = new GradientDrawable();
+                bgz.setColor(Color.parseColor("#F00A2E70"));
+                bgz.setCornerRadius(22 * d);
+                zcView.setBackground(bgz);
+                zcView.setPadding((int) (8 * d), (int) (6 * d), (int) (8 * d), (int) (6 * d));
+                zcp = new WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+                        WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                        PixelFormat.TRANSLUCENT);
+                zcp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+                zcp.y = (alp != null ? alp.y : (int) (70 * d)) + (int) (200 * d);
+            }
+            if (!zcListen && alertView != null) {
+                alertView.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+                    @Override public void onLayoutChange(View v, int l, int t, int rr, int bb, int ol, int ot, int orr, int obb) { placeZoneChips(); }
+                });
+                zcListen = true;
+            }
+            if (!sig.equals(zcSig) || !zcShown) {
+                zcView.removeAllViews();
+                TextView lab = new TextView(this);
+                lab.setText("Zona:");
+                lab.setTextColor(Color.parseColor("#DCEBFF"));
+                lab.setTextSize(13);
+                lab.setTypeface(Typeface.DEFAULT_BOLD);
+                lab.setGravity(Gravity.CENTER);
+                lab.setPadding((int) (4 * d), 0, (int) (4 * d), 0);
+                zcView.addView(lab);
+                final String sigC = r.baseSig;
+                final int autoC = r.zoneAuto;
+                for (int i = 0; i < r.zoneKinds.length; i++) {
+                    final int kind = r.zoneKinds[i];
+                    boolean sel = kind == r.estZone;
+                    String nm = OfferAnalyzer.zoneName(kind);
+                    TextView c = new TextView(this);
+                    c.setText(Character.toUpperCase(nm.charAt(0)) + nm.substring(1) + "  " + OfferAnalyzer.money(r.zoneNets[i]) + " \u20AC");
+                    c.setTextColor(Color.WHITE);
+                    c.setTextSize(15);
+                    c.setTypeface(Typeface.DEFAULT_BOLD);
+                    c.setGravity(Gravity.CENTER);
+                    c.setMinHeight((int) (44 * d));
+                    c.setPadding((int) (12 * d), (int) (6 * d), (int) (12 * d), (int) (6 * d));
+                    GradientDrawable g = new GradientDrawable();
+                    g.setCornerRadius(16 * d);
+                    g.setColor(Color.parseColor(sel ? "#2563EB" : "#1E3A8A"));
+                    g.setStroke((int) (2 * d), Color.parseColor(sel ? "#FFFFFF" : "#60A5FA"));
+                    c.setBackground(g);
+                    c.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { chooseZone(kind, autoC, sigC); } });
+                    LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                    clp.setMargins((int) (3 * d), 0, (int) (3 * d), 0);
+                    zcView.addView(c, clp);
+                }
+                zcSig = sig;
+            }
+            if (!zcShown) { wm.addView(zcView, zcp); zcShown = true; }
+            placeZoneChips();
         } catch (Exception e) { }
     }
 
@@ -1180,6 +1302,7 @@ public class ScreenReaderService extends AccessibilityService {
             OfferAnalyzer.Result r = OfferAnalyzer.analyze(n, rentParams(), false, true);
             lastVoice = null;
             showAlert(r);
+            hideZoneChips();
             speakOffer(r);
             rh.removeCallbacks(hideRun);
             rh.postDelayed(hideRun, 9000);

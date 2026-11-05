@@ -83,6 +83,7 @@ public class ZoneLocator {
      */
     public static void resolve(OfferAnalyzer.BoltCfg c, Fix f) {
         c.zoneKind = c.zoneDef; c.zoneName = ""; c.zoneSrc = "default";
+        c.fixOk = f != null; c.fixLat = f != null ? f.lat : 0; c.fixLon = f != null ? f.lon : 0; c.fixAcc = f != null ? f.acc : -1;   // v3.37: para los botones de zona del aviso
         try {
             if ("low".equals(c.zoneForce)) { c.zoneKind = OfferAnalyzer.Z_LOW; c.zoneSrc = "forced"; return; }
             if ("mid".equals(c.zoneForce)) { c.zoneKind = OfferAnalyzer.Z_MID; c.zoneSrc = "forced"; return; }
