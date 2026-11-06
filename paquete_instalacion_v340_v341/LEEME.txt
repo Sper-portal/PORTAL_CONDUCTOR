@@ -1,0 +1,28 @@
+SUPER PORTAL DEL CONDUCTOR · v3.40 + v3.41  (dos parches: v340.py y v341.py, se pasan en ese orden)
+
+QUE HACE
+v3.40 · MENOS INTERNET DEL MOVIL
+- Antes la app subia tus datos a la nube cada ~45 segundos mientras hubiera cambios: unos 3 GB al mes por conductor.
+- Ahora sube COMO MUCHO UNA VEZ POR HORA, y ademas cuando dejas la app o la pasas a segundo plano (si hace mas de 5 minutos de la ultima subida).
+- «Cerrar sesion» sube primero lo pendiente (espera como mucho 4 segundos si la nube va lenta) y luego pregunta.
+- «Sincronizar ahora» sigue subiendo al momento. Sin cobertura no pasa nada: lo pendiente queda marcado y sube al volver.
+- La copia de la nube puede ir hasta 1 hora por detras del movil. En el movil nunca se pierde nada.
+
+v3.41 · LECTURA DE UBER MAS SEGURA (Bolt y Cabify no cambian; las formulas tampoco)
+- Tus tres fotos de las 10:15, 10:18 y 10:19: la segunda fallaba porque la etiqueta «Viaje largo (mas de 30 minutos)» se tomaba por el viaje. Arreglado.
+- Uber lo lee la app con la camara (OCR) y la camara se equivoca a veces: «kn» en vez de «km», «rnin» en vez de «min», una «l» en vez de un «1», o el km separado del minuto por la direccion.
+  Ahora esas lecturas se arreglan (solo en la lectura por camara; el texto normal no se toca).
+- Probado con tus 3 fotos y con 60.000 pantallas de Uber inventadas con esos fallos: se leen las 4 cifras bien (el codigo anterior fallaba en 35.000).
+
+LO QUE NO SE (honesto)
+- Las fotos 1 y 3 no se me reproducen con las lineas «limpias»: en las dos la app perdio un km del viaje o de la recogida; lo mas probable es la camara («kn» o parecido). No he visto las lineas exactas que leyo, por eso mi arreglo cubre las confusiones habituales, no «todas».
+- Si la camara pierde un digito (en la foto 2 la recogida salio 4,0 km y era 1,4 km) NO se puede arreglar sin ver la imagen.
+- NO probado en un movil real ni con Gradle (la compilacion de GitHub). Probado con simuladores en mi entorno: baterias de pantalla, roturas a proposito, cadena de instalacion.
+
+COMO INSTALAR
+- Sigue pegar_instalacion.txt. Necesita la v3.39 puesta. Si algo no encaja en tus archivos, NO toca NADA y lo dice claro, para que me mandes captura.
+- Hay que volver a compilar la APK (van dentro el index.html y un Java).
+
+PENDIENTE (tuyo)
+- Cambia la clave de Ticketmaster: esta escrita en tu repositorio PUBLICO de GitHub.
+- Cuando tengas el Excel actualizado (martes/miercoles), me lo mandas y miro la regla del 13 % de viajes largos con datos.

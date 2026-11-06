@@ -484,6 +484,14 @@ public class OfferAnalyzer {
     private static final Pattern KM = Pattern.compile("(\\d+(?:[.,]\\d+)?)\\s*km\\b", Pattern.CASE_INSENSITIVE);
     // «A 46 min del destino» / «A 12 km de tu destino»: distancia hasta TU destino (filtro de destino de Uber). No es un dato del viaje.
     private static final Pattern DEST_CHIP = Pattern.compile("^a\\s+\\d[\\d.,]*\\s*(?:min\\w*|km|kilometros?|h\\w*)\\b.*\\bdestino\\b");
+    // v3.41: etiquetas de Uber con minutos que NO son un tramo: \u00ABViaje largo (m\u00E1s de 30 minutos)\u00BB. Solo se ignoran si la l\u00EDnea no trae km.
+    private static final Pattern INFO_CHIP = Pattern.compile("^viaje largo\\b|^\\(?mas de \\d+\\s*(?:min|h)\\w*\\)?$");
+    // v3.41 (solo lectura por imagen): unidades que el OCR confunde
+    private static final Pattern OCR_KM = Pattern.compile("(?i)(\\d)\\s*(?:kn|krn|kin|kr|kmn|lkm|ikm|k\\s+m|km[.,;:])(?![a-z0-9])");
+    private static final Pattern OCR_MIN = Pattern.compile("(?i)(\\d)\\s*(?:rnin|mln|m1n|m\\u00EDn|mim|rmin)(?![a-z0-9])");
+    private static final Pattern OCR_TOK = Pattern.compile("(?i)(?<![A-Za-z0-9.,])([0-9OolI|]+(?:[.,][0-9OolI|]+)?)(\\s*(?:km|min)\\b)");
+    private static final Pattern OCR_LONEKM = Pattern.compile("^[^\\d]{0,3}(\\d{1,3}[.,]\\d{1,2})\\s*([li]?k[mnrli]{0,2})[^A-Za-z0-9]*$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern OCR_MINKM = Pattern.compile("^(.*\\d\\s*min\\b[^A-Za-z0-9]{0,4})(\\d{1,3}[.,]\\d{1,2})\\s*([li]?k[mnrli]{0,2})[^A-Za-z0-9]*$", Pattern.CASE_INSENSITIVE);
     private static final Pattern MET = Pattern.compile("(?<![\\d.,])(\\d{2,4})\\s*m(?![a-zA-Z])");
     private static final Pattern MIN = Pattern.compile("(?:(\\d+)\\s*h(?:ora)?s?\\s*)?(\\d+)\\s*min", Pattern.CASE_INSENSITIVE);
     private static final Pattern HOURS = Pattern.compile("(?<![\\d.,])(\\d+)\\s*h(?:ora)?s?\\b(?!\\s*\\d+\\s*min)", Pattern.CASE_INSENSITIVE);
@@ -504,6 +512,32 @@ public class OfferAnalyzer {
     }
 
     private static boolean has(String s, String[] kws) { for (String k : kws) if (s.contains(k)) return true; return false; }
+
+    /** v3.41: arregla lo que el OCR suele leer mal en una linea de la oferta (solo se usa con lectura por imagen) */
+    static String fixOcr(String s) {
+        String x = s;
+        x = x.replaceAll("(?i)(?<![A-Za-z0-9.,])[lI|](\\s*(?:min|rnin|mln|m1n|m\u00EDn|mim|rmin)(?![a-z0-9]))", "1$1");   // "l min" = "1 min" (tambien con la unidad mal leida)
+        x = OCR_MIN.matcher(x).replaceAll("$1 min");
+        x = OCR_KM.matcher(x).replaceAll("$1 km");
+        // cifras con letras: l0 min -> 10 min, O,5 km -> 0,5 km (solo pegadas a km / min y con alguna cifra de verdad)
+        Matcher m = OCR_TOK.matcher(x);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            String tok = m.group(1);
+            boolean real = false;
+            for (int i = 0; i < tok.length(); i++) if (tok.charAt(i) >= '0' && tok.charAt(i) <= '9') real = true;
+            String fixed = real ? tok.replace('O', '0').replace('o', '0').replace('l', '1').replace('I', '1').replace('|', '1') : tok;
+            m.appendReplacement(sb, Matcher.quoteReplacement(fixed + m.group(2)));
+        }
+        m.appendTail(sb);
+        x = sb.toString();
+        // "5 min \u2022 2.4 kn": lo que sobra es un decimal + 1-3 letras raras = km
+        Matcher a = OCR_MINKM.matcher(x);
+        if (a.find() && !a.group(3).toLowerCase(Locale.ROOT).matches("min|mi|h")) return a.group(1) + a.group(2) + " km";
+        Matcher b = OCR_LONEKM.matcher(x);
+        if (b.find() && !b.group(2).toLowerCase(Locale.ROOT).matches("min|mi|h")) return b.group(1) + " km";
+        return x;
+    }
 
     private static String clean(String t) {
         String x = t == null ? "" : t.replace('\u00A0', ' ').replace('\u202F', ' ').replace('\u2009', ' ').replace('\u200A', ' ').replace('\u2007', ' ');
@@ -668,7 +702,12 @@ public class OfferAnalyzer {
 
     private static Result analyzeCore(List<String> rawNodes, Params p, boolean lenient, boolean isBolt) {
         List<String> nodes = new ArrayList<String>();
-        for (String x : rawNodes) for (String line : clean(x).split("\\n")) if (line.trim().length() > 0 && !DEST_CHIP.matcher(norm(line).trim()).find()) nodes.add(line.trim());
+        for (String x : rawNodes) for (String line0 : clean(x).split("\\n")) {
+            String line = lenient ? fixOcr(line0) : line0;
+            if (line.trim().length() == 0 || DEST_CHIP.matcher(norm(line).trim()).find()) continue;
+            if (INFO_CHIP.matcher(norm(line).trim()).find() && !KM.matcher(line).find()) continue;     // v3.41: "Viaje largo (m\u00E1s de 30 min)"
+            nodes.add(line.trim());
+        }
         Result r = new Result();
         // ---- precio: primer importe en euros razonable (sin contar los importes de peaje)
         List<String> priceNodes = withoutTolls(nodes);
@@ -710,6 +749,15 @@ public class OfferAnalyzer {
                 if (b.kind == 'm' && !b.used && b.node == a.node) { a.used = true; b.used = true; pairs.add(new Item[]{a, b}); break; }
             }
         }
+        // v3.41 (solo lectura por imagen): en Uber el minuto va SIEMPRE antes del km; si hay una direcci\u00F3n en medio, se busca hacia atr\u00E1s (hasta 3 nodos) antes de mirar el nodo siguiente
+        if (lenient) {
+            for (Item a : items) {
+                if (a.kind != 'k' || a.used) continue;
+                Item best = null;
+                for (int d = 1; d <= 3 && best == null; d++) for (Item b : items) if (b.kind == 'm' && !b.used && b.node == a.node - d) { best = b; break; }
+                if (best != null) { a.used = true; best.used = true; pairs.add(new Item[]{a, best}); }
+            }
+        }
         // fase B: el minuto va justo antes del km (tambien con un "\u2022" entre medias) o, si no, justo despues
         for (Item a : items) {
             if (a.kind != 'k' || a.used) continue;
@@ -738,6 +786,12 @@ public class OfferAnalyzer {
             if (b.kind == 'm' && !b.used) { Seg s = new Seg(); s.min = b.v; s.first = b.node; s.ctx = norm(nodes.get(b.node)) + (b.node > 0 ? " " + norm(nodes.get(b.node - 1)) : ""); segs.add(s); }
         }
         java.util.Collections.sort(segs, new java.util.Comparator<Seg>() { public int compare(Seg x, Seg y) { return x.first - y.first; } });
+        // v3.41: si ya hay dos tramos completos (km y minutos), los trozos sueltos que sobran no cuentan como recogida ni como viaje
+        int completeSegs = 0;
+        for (Seg s : segs) if (s.km > 0 && s.min > 0) completeSegs++;
+        if (lenient && completeSegs >= 2) {
+            for (java.util.Iterator<Seg> itS = segs.iterator(); itS.hasNext(); ) { Seg s = itS.next(); if (!(s.km > 0 && s.min > 0)) itS.remove(); }
+        }
         // ---- recogida o viaje
         Seg pick = null, trip = null;
         for (Seg s : segs) {

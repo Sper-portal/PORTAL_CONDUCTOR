@@ -1,0 +1,33 @@
+INSTALACION v3.40 + v3.41  (dos parches, UNA sola compilacion)
+  v340.py = la app sube tus datos a la nube como mucho 1 vez por hora (gasta mucho menos internet del movil)
+  v341.py = lectura de Uber mas segura («Viaje largo» ya no la rompe y aguanta lecturas de la camara mal hechas)
+Se pasan encima de lo que tienes (sin desinstalar). Necesitan que ya tengas puesta la v3.39 (lista por dias + voz corta).
+Si no la tienes, el instalador NO toca nada y te lo dice.
+
+PASO 1 - Sube DOS archivos a /workspaces/PORTAL_CONDUCTOR/ (arrastralos al explorador de Codespaces):
+v340.py
+v341.py
+(Si al subirlos se llaman «v340 (1).py», no pasa nada: el paso 2 los renombra solos.)
+
+PASO 2 - COMPROBAR. Pega esto en el terminal:
+
+cd /workspaces/PORTAL_CONDUCTOR/portal ; for f in v340 v341 ; do [ -f "../$f (1).py" ] && mv -n "../$f (1).py" ../$f.py ; done ; python3 ../v340.py && python3 ../v341.py ; echo "---- COMPROBACION: debe salir 1 en las 5 lineas (la ultima 2 o mas) ----" ; echo "version v3.41: $(grep -c "APP_VERSION='v3.41'" www/index.html)" ; echo "subida cada hora: $(grep -c 'gap:3600000' www/index.html)" ; echo "al dejar la app: $(grep -c 'leaveMin:300000' www/index.html)" ; echo "Uber camara (java): $(grep -c 'static String fixOcr' android/app/src/main/java/com/portal/conductor/OfferAnalyzer.java)" ; echo "Uber Viaje largo (java): $(grep -c 'INFO_CHIP' android/app/src/main/java/com/portal/conductor/OfferAnalyzer.java)"
+
+Cada parche debe terminar en «RESULTADO: todo aplicado o ya estaba». Las lineas dicen «OK» (o «ya» si ya estaba puesto).
+Si sale algun «NO», NO sigas: captura de TODO y mandamela (no ha cambiado nada).
+
+PASO 3 - COMPILAR:
+
+cd /workspaces/PORTAL_CONDUCTOR && git add -A && git commit -m "v3.40: subida a la nube cada hora; v3.41: lectura de Uber mas segura" && git push && SHA=$(git rev-parse HEAD) && echo "Esperando a GitHub..." && until [ -n "$(gh run list --commit $SHA --json databaseId -q '.[0].databaseId')" ]; do sleep 5; done && gh run watch $(gh run list --commit $SHA --json databaseId -q '.[0].databaseId') --exit-status && echo "COMPILADO OK"
+
+PASO 4 - SACAR EL APK:
+
+cd /workspaces/PORTAL_CONDUCTOR && gh run download $(gh run list -L 1 --status success --json databaseId -q '.[0].databaseId') -D apk_v341 && ls -R apk_v341
+
+Instala el .apk encima de la app.
+
+DESPUES (para probarlo en el movil):
+1) Una oferta de Uber con la etiqueta «Viaje largo (mas de 30 minutos)»: el aviso tiene que dar el veredicto con los km del viaje (antes decia «No se pudo leer la distancia del viaje»).
+2) Mas ofertas de Uber (Emparejar y Aceptar): tienen que leer recogida y viaje, con km y minutos.
+3) Si alguna oferta de Uber sigue sin leerse bien: justo despues, en Ajustes -> lectura de ofertas pulsa «Enviar ultima lectura» (o haz captura de lo que pone) y mandamelo. Asi veo lo que lee la camara.
+4) Subida cada hora: no se nota nada en la app. En «Sincronizar ahora» sigue subiendo al momento.

@@ -2191,10 +2191,10 @@ const J_KB=[
 ['rentab','📈','€/hora, €/viaje y €/km','euro hora,por hora,por viaje,rentabil,media,por km,eur/h','Son tu rendimiento del día: lo que facturas por hora trabajada, por viaje y por kilómetro. El €/km se actualiza en vivo si tienes el GPS activo.'],
 ['ojo','👁️','Ocultar la facturación','ojo,ocult^4,esconder^4,tapar,privacidad','Toca el ojo junto al Total facturación diaria para ocultar o mostrar los importes, por si llevas a alguien en el coche.'],
 ['ajustes','⚙️','Ajustes','ajuste,configur,objetivo,meta,prioritari,personalizar','En Ajustes están tu comisión, la tasa del aeropuerto, los objetivos, los horarios prioritarios, el Tema (claro, oscuro o automático) y los interruptores de la burbuja y del GPS.'],
-['cuenta','👤','Cuenta y sincronización','cuenta,sincroniz,nube,sesion,contrasena,login,correo','Con tu cuenta tus datos se guardan en la nube y los tienes en cualquier dispositivo. Se sincronizan solos cuando dejas de usar la app unos segundos o la cierras.'],
+['cuenta','👤','Cuenta y sincronización','cuenta,sincroniz,nube,sesion,contrasena,login,correo','Con tu cuenta tus datos se guardan en la nube y los tienes en cualquier dispositivo. Se sincronizan solos como mucho una vez por hora y también al dejar o cerrar la app.'],
 ['cambiomovil','📱','Cambié de móvil','cambie de telefono^5,cambie de movil^5,cambiar de movil^5,cambiar de telefono^5,telefono nuevo^4,movil nuevo^4,nuevo movil^4,nuevo telefono^4,otro movil^4,mis datos^3,recuper,perdi,reinstal','Instala la app, inicia sesión con tu misma cuenta y tus datos vuelven solos desde la nube. No tienes que hacer nada más.'],
 ['copia','💾','Copia de seguridad','copia,seguridad,backup,exportar','Con tu cuenta tus datos ya están a salvo en la nube. En Ajustes también puedes crear una copia de seguridad local cuando quieras.'],
-['consumo','🔋','Batería e internet','bateria,consume,internet,datos moviles,gasta,megas,lento','La app sube los datos solo cuando dejas de usarla unos segundos y solo si algo cambió, así que gasta muy poco internet. Lo que más batería usa es el GPS: si no lo necesitas, apágalo.'],
+['consumo','🔋','Batería e internet','bateria,consume,internet,datos moviles,gasta,megas,lento','La app sube los datos como mucho una vez por hora (y al dejarla o cerrarla), y solo si algo cambió, así que gasta muy poco internet. Lo que más batería usa es el GPS: si no lo necesitas, apágalo.'],
 ['actualizar','⬆️','Actualizar la app','actualiz,version,nueva version,instalar,apk','Cuando hay versión nueva te llega el archivo y lo instalas encima de la anterior, sin desinstalar y sin perder datos. En Información ves qué versión tienes.'],
 ['recordatorios','🔔','Avisos y recordatorios','notific,record,aviso,alarma','La app puede recordarte cosas como generar el informe del mes. Mira que Android no tenga bloqueadas las notificaciones de la app.'],
 ['nocuadra','🤔','Los totales no me cuadran','cuadr^4,no coincide^4,diferencia,distinto,falta dinero,sobra','Repasa por orden: 1) que los viajes estén en el día correcto, 2) que el pago (tarjeta o efectivo) sea el real y 3) las compensaciones y propinas. Con las flechas de fecha revisa el día en Facturación.'],
@@ -2247,7 +2247,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.39';
+const APP_VERSION='v3.41';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -2255,7 +2255,7 @@ async function saveDataCopy(){const json=JSON.stringify(currentDbSnapshot(),null
 function lastSyncText(){try{const v=localStorage.getItem('pdc_last_sync');if(!v)return'Todavía no se ha sincronizado en este móvil.';const d=new Date(v);return d.toLocaleDateString('es-ES')+' a las '+d.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}catch(e){return'—'}}
 async function syncNow(){if(typeof hasRealCloud!=='function'||!hasRealCloud()){alert('No hay una cuenta iniciada. Inicia sesión para sincronizar.');return}const before=localStorage.getItem('pdc_last_sync');window.__pdcLastSig=null;await cloudPushData();const after=localStorage.getItem('pdc_last_sync');alert(after&&after!==before?'✅ Datos sincronizados.':'No se ha podido sincronizar. Revisa tu conexión e inténtalo de nuevo.');renderSyncInfo()}
 function infoPage(title,paras,extra){jPanel('Información','renderInfo()','<div class="help-hero"><h2>'+title+'</h2>'+paras.map(p=>'<p style="margin-top:9px;line-height:1.5">'+escapeHtml(p)+'</p>').join('')+'</div>'+(extra||''))}
-function renderSyncInfo(){infoPage('☁️ Datos y sincronización',['Tus datos se guardan en tu móvil y, si has iniciado sesión, también en la nube. Así puedes trabajar sin internet y no los pierdes si cambias de móvil: inicias sesión con tu cuenta y vuelven solos.','La sincronización es automática: se hace cuando dejas de usar la app unos segundos o la cierras, y solo si algo ha cambiado.','Última sincronización: '+lastSyncText()],'<button class="action" style="width:100%" onclick="syncNow()">☁️ Sincronizar ahora</button><button class="secondary" style="width:100%;margin-top:10px" onclick="saveDataCopy()">💾 Guardar copia de mis datos en el móvil</button>')}
+function renderSyncInfo(){infoPage('☁️ Datos y sincronización',['Tus datos se guardan en tu móvil y, si has iniciado sesión, también en la nube. Así puedes trabajar sin internet y no los pierdes si cambias de móvil: inicias sesión con tu cuenta y vuelven solos.','La sincronización es automática: se hace como mucho una vez por hora y también cuando dejas la app o la cierras, y solo si algo ha cambiado. Si quieres subirlo al momento, pulsa «Sincronizar ahora».','Última sincronización: '+lastSyncText()],'<button class="action" style="width:100%" onclick="syncNow()">☁️ Sincronizar ahora</button><button class="secondary" style="width:100%;margin-top:10px" onclick="saveDataCopy()">💾 Guardar copia de mis datos en el móvil</button>')}
 function showInfoDetail(type){const T='✈ Abrir Telegram (@'+PORTAL_TG+')',tg='<button class="action" style="width:100%" onclick="openTelegramSupport(\'\')">'+T+'</button>';
 if(type==='sincronizacion')return renderSyncInfo();
 if(type==='actualizar')return infoPage('↻ Versión y actualizaciones',['Tienes instalada la versión '+APP_VERSION+'. La ves también arriba del todo, en Información.','Esta app se instala desde un archivo, no desde una tienda. Cuando hay una versión nueva te llega el archivo y lo instalas encima de la actual: no hace falta desinstalar y no pierdes tus datos.','Si te falta la última versión o algo no funciona tras actualizar, escribe a soporte.'],tg);
@@ -2564,7 +2564,14 @@ try{
 // antes de cerrar sesión o borrar la cuenta se guarda lo pendiente (así nada se pierde ni se «resucita» después)
 for(const fn of ['logoutV33','deleteAccountV33']){
   const o=window[fn];
-  if(typeof o==='function')window[fn]=function(){flushNow();return o.apply(this,arguments)};
+  if(typeof o==='function')window[fn]=function(){
+    flushNow();
+    const self=this,args=arguments;
+    if(fn!=='logoutV33'||typeof window.__pdcPushNow!=='function')return o.apply(self,args);
+    let w=null;try{w=window.__pdcPushNow()}catch(e){}
+    if(!w||typeof w.then!=='function')return o.apply(self,args);       // nada pendiente: igual que antes
+    return Promise.race([w.catch(()=>{}),new Promise(r=>setTimeout(r,4000))]).then(()=>o.apply(self,args));   // v3.40: lo pendiente sube antes de cerrar la sesión
+  };
 }
 
 /* ---------- copias diarias de viajes: fuera de la base de datos (no se sincronizan ni duplican espacio) ---------- */
@@ -4140,7 +4147,9 @@ try{
 (function(){
 const P=window.PDC314;if(!P||P.sync)return;P.sync=true;
 const DIRTY='pdc_sync_dirty',BASE='pdc_cloud_base',PRE='pdc_pre_merge_backup';
-const cfg=()=>Object.assign({pull:4000,sess:5000,gap:45000,boot:3000,debounce:20000},window.__pdcSyncCfg||{});
+/* v3.40: menos datos del movil. Antes se subia el paquete entero cada ~45 s mientras hubiera cambios (855 subidas de 114 KB en un dia = unos 3 GB al mes).
+   Ahora: como mucho 1 subida por hora (gap) y, ademas, al dejar la app (si hace mas de 5 min de la ultima subida: leaveMin). «Sincronizar ahora» sube siempre. */
+const cfg=()=>Object.assign({pull:4000,sess:5000,gap:3600000,boot:3000,debounce:20000,leaveMin:300000},window.__pdcSyncCfg||{});
 const nm=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
 const hasNum=v=>v!==''&&v!=null&&Number.isFinite(Number(v));
 const jget=k=>{try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}};
@@ -4369,7 +4378,7 @@ for(const fn of ['cloudLogin','cloudRegister']){
 }
 
 /* ---------- subir: sin perder subidas, con reintentos y sin gastar datos de más ---------- */
-let pushing=null,retryT=null,gapT=null,fails=0,force=false;
+let pushing=null,retryT=null,gapT=null,fails=0,force=false,leaving=false;
 P.pushCount=0;P.lastPayloadBytes=0;
 function scheduleRetry(){
   clearTimeout(retryT);
@@ -4389,15 +4398,15 @@ async function cloudFull(uid){
   return r&&r.data||null;
 }
 window.cloudPushData=function(){
-  const f=force;force=false;
+  const f=force,lv=leaving;force=false;leaving=false;
   if(!hasRealCloud())return Promise.resolve();
   if(pushing){if(!f)window.scheduleCloudPush();else force=true;return pushing}
   if(navigator.onLine===false)return Promise.resolve();                       // al volver la conexión se sube (evento «online»)
   if(pullsInFlight>0&&Date.now()-pullStart<90000){                              // primero termina la lectura de la nube
-    clearTimeout(gapT);gapT=setTimeout(()=>window.cloudPushData(),3000);if(f)force=true;return Promise.resolve();
+    clearTimeout(gapT);gapT=setTimeout(()=>window.cloudPushData(),3000);if(f)force=true;if(lv)leaving=true;return Promise.resolve();
   }
   const wait=lastUpload+cfg().gap-Date.now();
-  if(!f&&fails===0&&wait>0){clearTimeout(gapT);gapT=setTimeout(()=>window.cloudPushData(),wait+50);return Promise.resolve()}   // mínimo entre subidas
+  if(!f&&!lv&&fails===0&&wait>0){clearTimeout(gapT);gapT=setTimeout(()=>window.cloudPushData(),wait+50);return Promise.resolve()}   // mínimo entre subidas (1 hora); al dejar la app se sube ya
   pushing=(async()=>{
     try{
       const s=await pdcSupabase.auth.getSession();const user=s&&s.data&&s.data.session&&s.data.session.user;if(!user)return;
@@ -4454,7 +4463,18 @@ window.scheduleCloudPush=function(){
 const _sn=window.syncNow;
 if(typeof _sn==='function')window.syncNow=function(){force=true;return _sn.apply(this,arguments)};   // «Sincronizar ahora» sube siempre
 window.addEventListener('online',()=>{fails=0;if(isCloudProfile()&&needsPush(owner()))window.cloudPushData()});
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&isCloudProfile()&&navigator.onLine!==false&&!pushing&&P.syncDirty())window.cloudPushData()});
+/* al dejar la app se sube lo pendiente (solo si algo cambió y hace más de «min» ms de la última subida) */
+function leaveNow(min){
+  if(!isCloudProfile()||navigator.onLine===false||pushing||!P.syncDirty())return;
+  if(Date.now()-lastUpload<min)return;
+  leaving=true;return window.cloudPushData();
+}
+window.__pdcPushNow=()=>leaveNow(0);   // «Cerrar sesión» sube antes lo pendiente
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){leaveNow(cfg().leaveMin);return}
+  if(isCloudProfile()&&navigator.onLine!==false&&!pushing&&P.syncDirty())window.cloudPushData();   // como antes
+});
+try{const A=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.App;if(A&&A.addListener)A.addListener('pause',()=>leaveNow(cfg().leaveMin))}catch(e){}
 // cambios pendientes de una vez anterior (la app se cerró antes de subirlos)
 setTimeout(()=>{if(isCloudProfile()&&navigator.onLine!==false&&P.syncDirty())window.cloudPushData()},cfg().boot);
 
@@ -6962,7 +6982,7 @@ function rememberRaw(pkgs,texts){try{localStorage.setItem(LS_RAW,JSON.stringify(
 function lastRaw(){try{return JSON.parse(localStorage.getItem(LS_RAW)||'null')}catch(e){return null}}
 function rawText(){
   const r=lastRaw();if(!r)return '';
-  return 'Portal v3.39 · lectura de Bolt · '+new Date(r.at).toISOString()+'\nVentanas vistas: '+(r.pkgs.join(', ')||'ninguna')+'\nTextos de Bolt: '+r.texts.length+'\n----\n'+r.texts.map((x,i)=>(i+1)+': '+x).join('\n');
+  return 'Portal v3.41 · lectura de Bolt · '+new Date(r.at).toISOString()+'\nVentanas vistas: '+(r.pkgs.join(', ')||'ninguna')+'\nTextos de Bolt: '+r.texts.length+'\n----\n'+r.texts.map((x,i)=>(i+1)+': '+x).join('\n');
 }
 /** lee los textos de la pantalla de Bolt y saca el desglose del albarán */
 function parseAlbaran(texts){
