@@ -2247,7 +2247,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.38';
+const APP_VERSION='v3.39';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -4668,12 +4668,9 @@ function rhu(v,dec){
 const money=v=>rhu(v,2).replace('.',',');
 const spoken=(v,dec)=>{let s=rhu(v,dec);if(s.indexOf('.')>=0)s=s.replace(/0+$/,'').replace(/\.$/,'');return s.replace('.',',')};
 P.boltMoney=money;
-function voiceText(e,km,min){
-  const m=Math.round(min),k=spoken(km,1);
-  return 'Bolt. '+(e.airport==='pickup'?'Recogida en el aeropuerto. ':e.airport==='dest'?'Hacia el aeropuerto. ':'')+'Viaje de '+k+(k==='1'?' kilómetro y ':' kilómetros y ')+m+(m===1?' minuto':' minutos')
-    +(e.zone===Z_HIGH?', zona alta':e.zone===Z_LOW?', zona baja':'')+(e.peakUsed?', tarifa de hora punta':'')+(Math.abs(e.mult-1)>1e-9?', demanda por '+spoken(e.mult,2):'')+
-    '. Bruto estimado: '+money(e.gross)+' euros. '+(e.fee>0?'Tasa del aeropuerto: '+money(e.fee)+' euros. ':'')+'Comisión estimada: '+money(e.comm)+' euros. Neto estimado: '+money(e.net)+' euros'
-    +(e.range&&e.netLo>=0&&e.netHi>e.netLo+1e-9?', entre '+money(e.netLo)+' y '+money(e.netHi):'')+'.';
+function voiceText(e,km,min){   /* v3.39: primero el neto estimado (y el rango), luego solo los km del viaje */
+  const k=spoken(km,1);
+  return 'Neto estimado: '+money(e.net)+' euros'+(e.range&&e.netLo>=0&&e.netHi>e.netLo+1e-9?', entre '+money(e.netLo)+' y '+money(e.netHi):'')+'. Viaje de '+k+(k==='1'?' kilómetro':' kilómetros')+'.';
 }
 P.boltVoice=voiceText;
 /* franjas de hora punta (igual que Slot.contains de Java): el principio cuenta, el final no */
@@ -5080,7 +5077,7 @@ function pGen(){
    +'<div class="bz-btns"><button type="button" class="secondary" id="bz_all_def" onclick="boltReset(\'all\')">↺ Valores iniciales de todo</button></div>';
 }
 function pVoice(){
-  return sw('Leer en voz alta la estimación','«Bolt. Viaje de 8,3 kilómetros y 10 minutos. Bruto estimado… Neto estimado…»','bz_voice','#voice',B.voice)
+  return sw('Leer en voz alta la estimación','Dice primero «Neto estimado» y el importe, y luego los kilómetros. Por ejemplo: «Neto estimado: 8,74 euros. Viaje de 8,3 kilómetros.»','bz_voice','#voice',B.voice)
    +'<label class="bz-f"><span>Volumen de la voz</span><input type="range" id="bz_vol" min="0.1" max="1" step="0.1" value="'+B.vol+'" data-p="#vol" oninput="boltIn(this)"></label>'
    +'<div class="bz-out bz-voice" id="bz_voice_ex"></div>'
    +'<div class="bz-btns"><button type="button" class="secondary" id="bz_test_voice" onclick="boltTestVoice()">🔊 Probar aviso de Bolt</button></div>';
@@ -6965,7 +6962,7 @@ function rememberRaw(pkgs,texts){try{localStorage.setItem(LS_RAW,JSON.stringify(
 function lastRaw(){try{return JSON.parse(localStorage.getItem(LS_RAW)||'null')}catch(e){return null}}
 function rawText(){
   const r=lastRaw();if(!r)return '';
-  return 'Portal v3.38 · lectura de Bolt · '+new Date(r.at).toISOString()+'\nVentanas vistas: '+(r.pkgs.join(', ')||'ninguna')+'\nTextos de Bolt: '+r.texts.length+'\n----\n'+r.texts.map((x,i)=>(i+1)+': '+x).join('\n');
+  return 'Portal v3.39 · lectura de Bolt · '+new Date(r.at).toISOString()+'\nVentanas vistas: '+(r.pkgs.join(', ')||'ninguna')+'\nTextos de Bolt: '+r.texts.length+'\n----\n'+r.texts.map((x,i)=>(i+1)+': '+x).join('\n');
 }
 /** lee los textos de la pantalla de Bolt y saca el desglose del albarán */
 function parseAlbaran(texts){
@@ -7131,30 +7128,53 @@ function ensureSheet(){
    +'#tripSheet .tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}#tripSheet .tab{border:1px solid #2b4d85;background:#0b1a33;border-radius:12px;padding:10px 4px;font-weight:700;font-size:13px}#tripSheet .tab.on{background:#1d4ed8;border-color:#60a5fa}'
    +'#tripSheet input[type=text]{width:120px;text-align:right;background:#0b1a33;color:#fff;border:1px solid #2b4d85;border-radius:10px;padding:8px;font:600 15px system-ui}'
    +'#tripSheet .box{border:1px solid #1e3a66;border-radius:14px;padding:6px 12px;margin-bottom:10px;background:#081426}#tripSheet .box h4{margin:8px 0 2px;font-size:14px;color:#9cc3ff}'
-   +'#tripSheet .warn{color:#fbbf24;font-size:13px;margin:6px 2px}';
+   +'#tripSheet .warn{color:#fbbf24;font-size:13px;margin:6px 2px}'
+   +'#tripSheet .dh{display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;cursor:pointer;user-select:none;text-align:left;border:1px solid #2b4d85;background:#0d2342;color:#cfe0ff;border-radius:12px;padding:10px 12px;margin:4px 0 8px;font-weight:700}'
+   +'#tripSheet .dh .dl{flex:1}#tripSheet .dh .dc{color:#9cb4d6;font-weight:600;font-size:12px}#tripSheet .dh .dm{font-weight:800;color:#fff}';
   document.head.appendChild(st);
   document.body.appendChild(sheet);
   sheet.addEventListener('click',onClick);
   sheet.addEventListener('change',onChange);
   return sheet;
 }
-function openList(){if(!enabled())return;ensureSheet();view={name:'list'};sheet.style.display='flex';paint()}
+function openList(){if(!enabled())return;ensureSheet();view={name:'list'};listExp=new Set();listScroll=null;lastPaintName='';sheet.style.display='flex';paint()}
 function closeSheet(){if(sheet)sheet.style.display='none';refresh()}
 function head(title,sub,back){return '<div class="th"><button class="tx" data-a="'+(back||'close')+'" aria-label="'+(back?'Volver':'Cerrar')+'">'+(back?'←':'×')+'</button><div><b>'+title+'</b>'+(sub?'<small>'+sub+'</small>':'')+'</div></div>'}
 function rowHtml(t,i,tag){
   const net=offerNet(t.offer),done=t.alb&&t.alb.net!=null;
   return '<button class="row" data-a="trip" data-id="'+esc(t.id)+'"><span class="n">'+(tag||('Viaje '+(i+1)))+'</span><span class="h">'+hhmm(t.ts)+'</span><span class="m">'+eur(net)+'</span><span class="'+(done?'ok':'no')+'" title="'+(done?'con albarán':'sin albarán')+'">'+(done?'✓':'○')+'</span><span class="no">›</span></button>';
 }
+/** v3.39: la lista del día sale agrupada por días (cada hora cae en su día natural). Los viajes de cada día van bajo una cabecera con el día, cuántos son y el total;
+ *  solo el ÚLTIMO día sale abierto (los anteriores, recogidos; se abren tocando su cabecera). La numeración «Viaje N» no cambia (es la misma del aviso y del detalle). */
+let listExp=new Set(),listScroll=null,lastPaintName='',keepPos=false;
+const WD=['dom','lun','mar','mié','jue','vie','sáb'],MO=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function dayName(k){
+  const p=String(k).split('-'),d=new Date(+p[0],+p[1]-1,+p[2]);
+  if(!(d.getTime()===d.getTime()))return String(k);
+  const now=Date.now(),yd=new Date(now);yd.setDate(yd.getDate()-1);
+  return (k===dkey(now)?'Hoy · ':k===dkey(yd.getTime())?'Ayer · ':'')+WD[d.getDay()]+' '+d.getDate()+' '+MO[d.getMonth()];
+}
+function listRows(list){
+  const gs=[];
+  list.forEach((t,i)=>{const k=dkey(t.ts);let g=gs[gs.length-1];if(!g||g.k!==k){g={k,items:[]};gs.push(g)}g.items.push([t,i])});
+  return gs.map((g,gi)=>{
+    const open=(gi===gs.length-1)!==listExp.has(g.k),n=g.items.length;
+    return '<div class="dh" role="button" tabindex="0" data-a="dayh" data-k="'+esc(g.k)+'" aria-expanded="'+(open?'true':'false')+'"><span class="dl">'+(open?'▾ ':'▸ ')+dayName(g.k)+'</span><span class="dc">'+n+(n===1?' viaje':' viajes')+'</span><span class="dm">'+eur(sumEst(g.items.map(x=>x[0])))+'</span></div>'
+      +(open?g.items.map(x=>rowHtml(x[0],x[1])).join(''):'');
+  }).join('');
+}
 function paint(){
   if(!sheet)return;
   const s=state();let h='';
+  const tb0=sheet.querySelector('.tb');
+  if(lastPaintName==='list'&&tb0){listScroll=(!keepPos&&tb0.scrollTop+tb0.clientHeight>=tb0.scrollHeight-24)?null:tb0.scrollTop;keepPos=false}   // sigues en la lista: se recuerda dónde estabas (abajo del todo = seguir abajo; al abrir o recoger un día, la lista no se mueve)
   lastPaintSig=s.open.length+'/'+s.pend.length+'/'+s.days.length;
   if(view.name==='list'){
     const n=s.open.length;
     h+=head('Viajes pre-guardados ('+n+')','Viajes estimados del día (sin cerrar)');
     h+='<div class="tb">';
     if(!n)h+='<div class="sub" style="font-size:14px;margin:18px 4px">Todavía no hay viajes. Cuando salga una oferta de Bolt, arriba aparecerá la lengüeta con ✗ y ✓: pulsa ✓ si aceptas el viaje.</div>';
-    h+=s.open.map((t,i)=>rowHtml(t,i)).join('');
+    h+=listRows(s.open);
     if(n){
       const conAlb=s.open.filter(t=>t.alb&&t.alb.net!=null).length;
       h+='<div class="sub">Estimado: <b>'+eur(sumEst(s.open))+'</b>'+(conAlb?' · Albarán ('+conAlb+' de '+n+'): <b>'+eur(sumReal(s.open))+'</b>':'')+'</div>';
@@ -7192,6 +7212,8 @@ function paint(){
     h+='</div><div class="tf"><button class="bt b" style="grid-column:1/3" data-a="cap" data-id="'+esc(t.id)+'">Capturar albarán</button><button class="bt g" data-a="save-trip">Guardar viaje</button><button class="bt r" data-a="del-trip" data-id="'+esc(t.id)+'">Eliminar</button></div>';
   }
   sheet.innerHTML=h;
+  lastPaintName=view.name;
+  if(view.name==='list'){const tb=sheet.querySelector('.tb');if(tb)tb.scrollTop=listScroll==null?tb.scrollHeight:listScroll}
 }
 function kv(a,b){return '<div class="kv"><span>'+a+'</span><b>'+b+'</b></div>'}
 /** Bruto REAL de un viaje de aeropuerto, con y sin la tasa. Con TARJETA el albarán final viene SIN la tasa (lo que ves al principio, p. ej. 18,35, ya la lleva);
@@ -7285,6 +7307,7 @@ function onClick(e){
   if(a==='raw-copy'){const t=rawText();if(!t)return;try{navigator.clipboard.writeText(t).then(()=>toast('Copiado'),()=>toast('No se pudo copiar: usa «Guardar como archivo».'))}catch(e){toast('No se pudo copiar: usa «Guardar como archivo».')}return}
   if(a==='back'&&view.name==='raw'){view=view.prev||{name:'list'};return paint()}
   if(a==='back'){view=view.from==='day'?{name:'day',id:view.fromId}:{name:'list'};return paint()}
+  if(a==='dayh'){const k=b.dataset.k;if(listExp.has(k))listExp.delete(k);else listExp.add(k);keepPos=true;return paint()}
   if(a==='days'){view={name:'days'};return paint()}
   if(a==='day'){view={name:'day',id};return paint()}
   if(a==='trip'){view={name:'detail',id,tab:'calc',from:view.name==='day'?'day':'list',fromId:view.id};return paint()}
@@ -7301,7 +7324,7 @@ function onClick(e){
   if(a==='auto')return captureAuto();
   if(a==='new'){
     const t={id:'t'+Date.now()+'_'+Math.floor(Math.random()*1e5),ts:Date.now(),offer:null,alb:null,man:{},st:'ok',okAt:Date.now(),manual:true};
-    s.open.push(t);save();refresh();view={name:'detail',id:t.id,tab:'alb',from:'list'};return paint();
+    s.open.push(t);save();refresh();view={name:'detail',id:t.id,tab:'alb',from:'list'};paint();listScroll=null;return;
   }
   if(a==='pend-ok'){const t=s.pend.find(x=>x.id===id);if(t){s.pend=s.pend.filter(x=>x!==t);t.okAt=Date.now();s.open.push(t);s.open.sort((x,y)=>x.ts-y.ts);save();refresh();toast('Viaje añadido a la lista')}return}
   if(a==='pend-del'){s.pend=s.pend.filter(x=>x.id!==id);save();return paint()}

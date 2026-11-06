@@ -463,20 +463,11 @@ public class OfferAnalyzer {
     public static String voiceText(Result r) {
         if (r == null || !r.isBolt || !r.offer) return null;
         if (r.estimated) {
-            long min = Math.round(r.tripMin);
+            // v3.39: la voz dice primero el neto estimado (y el rango, si lo hay) y luego solo los km del viaje; corta, para que se oiga entera aunque rechaces enseguida
             String km = spokenNum(r.tripKm, 1);
-            StringBuilder b = new StringBuilder("Bolt. ");
-            if ("pickup".equals(r.estAirport)) b.append("Recogida en el aeropuerto. ");
-            else if ("dest".equals(r.estAirport)) b.append("Hacia el aeropuerto. ");
-            b.append("Viaje de ").append(km).append("1".equals(km) ? " kil\u00F3metro y " : " kil\u00F3metros y ").append(min).append(min == 1 ? " minuto" : " minutos");
-            if (r.estZone == Z_HIGH) b.append(", zona alta");
-            else if (r.estZone == Z_LOW) b.append(", zona baja");
-            if (r.estPeakUsed) b.append(", tarifa de hora punta");
-            if (Math.abs(r.estMult - 1.0) > 1e-9) b.append(", demanda por ").append(spokenNum(r.estMult, 2));
-            b.append(". Bruto estimado: ").append(money(r.estGross)).append(" euros. ");
-            if (r.estFee > 0) b.append("Tasa del aeropuerto: ").append(money(r.estFee)).append(" euros. ");
-            b.append("Comisi\u00F3n estimada: ").append(money(r.estComm)).append(" euros. Neto estimado: ").append(money(r.estNet)).append(" euros");
+            StringBuilder b = new StringBuilder("Neto estimado: ").append(money(r.estNet)).append(" euros");
             if (r.estRange && r.estNetLo >= 0 && r.estNetHi > r.estNetLo + 1e-9) b.append(", entre ").append(money(r.estNetLo)).append(" y ").append(money(r.estNetHi));
+            b.append(". Viaje de ").append(km).append("1".equals(km) ? " kil\u00F3metro" : " kil\u00F3metros");
             b.append(".");
             return b.toString();
         }
