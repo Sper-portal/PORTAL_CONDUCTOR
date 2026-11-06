@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ScreenReaderPlugin.class);
         registerPlugin(GpsOdometerPlugin.class);
         registerPlugin(ShareFilePlugin.class);
+        registerPlugin(TripRecorderPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

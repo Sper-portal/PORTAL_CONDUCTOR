@@ -2200,6 +2200,7 @@ const J_KB=[
 ['nocuadra','🤔','Los totales no me cuadran','cuadr^4,no coincide^4,diferencia,distinto,falta dinero,sobra','Repasa por orden: 1) que los viajes estén en el día correcto, 2) que el pago (tarjeta o efectivo) sea el real y 3) las compensaciones y propinas. Con las flechas de fecha revisa el día en Facturación.'],
 ['tablet','🖥️','Tablet y pantalla dividida','tablet,pantalla dividida,multiventana,ventana,dos apps','Con pantalla dividida puedes tener Bolt a un lado y el Portal al otro. El lector lee el precio de la otra ventana y lo mete en el Portal.'],
 ['frase','💬','Frase del día','frase,impulso,motivac,cita','Arriba, en Calculadora, tienes cada día una frase distinta. Hay 365, una para cada día del año.'],
+['grabar','🎥','Grabar vídeo del viaje','grabar,grabacion,video,camara,dashcam,interior,audio,microfono','Arriba, en la frase del día de Calculadora, hay un botón pequeño con una cámara. Púlsalo, elige 15 o 30 minutos y con o sin audio. Graba el interior del coche en Full HD y el vídeo se queda solo en tu móvil: no se sube a internet ni gasta datos. Al acabar eliges Guardar (queda en la Galería, en Películas, carpeta Portal del Conductor) o Eliminar. Unos 30 minutos ocupan alrededor de 1,4 GB, así que mira que tengas sitio. Mientras graba, Android enseña un aviso y un punto verde: es normal y no se puede quitar. Si llevas pasajeros y grabas con audio, avísalos con un cartel visible en el coche.'],
 ['freenow','💗','Free Now y Pide Taxi','free now^4,freenow^4,pide taxi^4,pidetaxi^4','En Calculadora tienes los botones Free Now (rosa) y Pide Taxi (amarillo) en la segunda fila, junto a Aeropuerto y Cancelaciones. Escribe el importe y púlsalo: se guarda el importe entero, sin comisión de la app, y suma a tu facturación, al informe y a la nómina. También puedes elegirlos como aplicación prioritaria en Control, cargar sus importes a mano en Facturación y apuntar sus cancelaciones.'],
 ['tema','🎨','Tema claro, oscuro o automático','tema claro^4,tema oscuro^4,tema automatico^4,cambiar el tema^4,el tema^3,modo oscuro^4,modo claro^4,modo noche^4,modo dia^3,fondo oscuro^3,fondo claro^3,pantalla oscura^3,pantalla clara^3,oscuro^3,oscura^3','En Ajustes → Tema eliges cómo se ve la app: Automático (claro de día y oscuro de noche, según el sol en Madrid; cambia solo), Claro u Oscuro fijo. Afecta a Calculadora, Control, Facturación e Informe; Ajustes, el menú y Madrid hoy son siempre oscuros. Se guarda en este aparato.'],
 ['appprio','🎯','Aplicación prioritaria','app prioritaria^4,aplicacion prioritaria^4,ahora trabajo con^4,horas prioritarias^4,otras apps^3,prioritaria^3','En Control, «Aplicación prioritaria» elige tu app principal: Bolt, Uber, Cabify, Free Now o Pide Taxi. Sus horas y kilómetros salen en el bloque «Solo …» y las del resto en «Otras apps». Con «Ahora trabajo con» marcas con cuál empiezas la jornada. Todo lo prioritario toma el color de esa app (verde, negro, morado, rosa o amarillo).'],
@@ -2247,7 +2248,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.41';
+const APP_VERSION='v3.42';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -2259,7 +2260,7 @@ function renderSyncInfo(){infoPage('☁️ Datos y sincronización',['Tus datos 
 function showInfoDetail(type){const T='✈ Abrir Telegram (@'+PORTAL_TG+')',tg='<button class="action" style="width:100%" onclick="openTelegramSupport(\'\')">'+T+'</button>';
 if(type==='sincronizacion')return renderSyncInfo();
 if(type==='actualizar')return infoPage('↻ Versión y actualizaciones',['Tienes instalada la versión '+APP_VERSION+'. La ves también arriba del todo, en Información.','Esta app se instala desde un archivo, no desde una tienda. Cuando hay una versión nueva te llega el archivo y lo instalas encima de la actual: no hace falta desinstalar y no pierdes tus datos.','Si te falta la última versión o algo no funciona tras actualizar, escribe a soporte.'],tg);
-if(type==='privacidad')return infoPage('🔐 Privacidad y datos',['Tus datos son tuyos. Se usan solo para que la app funcione: calcular tu facturación, tus horas, tu gasolina y tus kilómetros.','El GPS solo suma los metros recorridos mientras tienes la jornada iniciada. No guarda tus rutas ni tus posiciones.','El lector de pantalla solo busca el importe del viaje y si se paga con tarjeta o efectivo. No guarda ni envía nada más de lo que ves en pantalla. Si activas Rentabilidad de viajes, también lee la distancia y el tiempo de la oferta para avisarte; no se guarda ni se envía (en tu móvil solo se guarda el último texto de oferta leído, para poder revisarlo). Para leer las ofertas de Uber, que esconde esa información al lector normal, la app hace capturas de la zona de Uber y las lee en el momento dentro del móvil; las capturas no se guardan ni se envían.','Tus datos no se venden ni se comparten con nadie.']);
+if(type==='privacidad')return infoPage('🔐 Privacidad y datos',['Tus datos son tuyos. Se usan solo para que la app funcione: calcular tu facturación, tus horas, tu gasolina y tus kilómetros.','El GPS solo suma los metros recorridos mientras tienes la jornada iniciada. No guarda tus rutas ni tus posiciones.','El lector de pantalla solo busca el importe del viaje y si se paga con tarjeta o efectivo. No guarda ni envía nada más de lo que ves en pantalla. Si activas Rentabilidad de viajes, también lee la distancia y el tiempo de la oferta para avisarte; no se guarda ni se envía (en tu móvil solo se guarda el último texto de oferta leído, para poder revisarlo). Para leer las ofertas de Uber, que esconde esa información al lector normal, la app hace capturas de la zona de Uber y las lee en el momento dentro del móvil; las capturas no se guardan ni se envían.','La cámara y el micrófono solo se usan cuando tú pulsas Grabar vídeo. El vídeo se guarda en tu móvil: no se sube a internet ni a la nube, y puedes borrarlo cuando quieras.','Tus datos no se venden ni se comparten con nadie.']);
 if(type==='funciona')return infoPage('📖 Cómo funciona Portal del Conductor',['Calculadora: apunta tus viajes de Bolt, Uber, Cabify, Privados, Free Now y Pide Taxi (también con Importe automático) y tus cancelaciones; desde Últimos viajes puedes añadir propina, editar o borrar cada viaje.','Facturación: tus ingresos por día, semana y mes, con la facturación manual por plataforma, compensaciones y nómina.','Control: tu jornada, horas, gasolina y kilómetros (con GPS automático) y tu aplicación prioritaria.','Informe: resumen por periodos que puedes guardar o compartir en PDF o imagen.','Ajustes: comisión, tasa de aeropuerto, objetivos, burbuja, GPS, Tema (claro, oscuro o automático) y Rentabilidad de viajes (te avisa si una oferta compensa).','Madrid hoy (menú de las tres rayitas): el tiempo y los eventos del día de Ticketmaster e IFEMA.'],'<button class="action" style="width:100%" onclick="renderHelpCarga()">📥 Ver la guía completa</button>');
 if(type==='soporte')return infoPage('🛠️ Ayuda y soporte',['En Ayuda tienes una guía para cargar datos, preguntas frecuentes y a Jenny, que responde al momento a dudas sobre la app.','Si Jenny no sabe algo, te lo dice y puedes escribir a una persona por Telegram.'],'<button class="action" style="width:100%" onclick="renderHelp()">🛟 Ir a Ayuda</button><button class="secondary" style="width:100%;margin-top:10px" onclick="openTelegramSupport(\'\')">'+T+'</button>');
 if(type==='condiciones')return infoPage('📄 Condiciones de uso',['Portal del Conductor es una herramienta de organización personal para conductores. Es gratuita y se ofrece tal cual, sin garantía de disponibilidad.','Las cifras las introduces tú o las lee la app de tu pantalla: revísalas siempre. La app no es asesoría fiscal ni laboral, y no sustituye a tu gestor.','Portal del Conductor no tiene relación con Bolt, Uber, Cabify, Free Now ni Pide Taxi. Sus nombres pertenecen a sus propietarios y se usan solo para identificar las plataformas.','Cuida tu cuenta y tu contraseña: eres responsable de lo que se haga con ellas.']);
@@ -6982,7 +6983,7 @@ function rememberRaw(pkgs,texts){try{localStorage.setItem(LS_RAW,JSON.stringify(
 function lastRaw(){try{return JSON.parse(localStorage.getItem(LS_RAW)||'null')}catch(e){return null}}
 function rawText(){
   const r=lastRaw();if(!r)return '';
-  return 'Portal v3.41 · lectura de Bolt · '+new Date(r.at).toISOString()+'\nVentanas vistas: '+(r.pkgs.join(', ')||'ninguna')+'\nTextos de Bolt: '+r.texts.length+'\n----\n'+r.texts.map((x,i)=>(i+1)+': '+x).join('\n');
+  return 'Portal v3.42 · lectura de Bolt · '+new Date(r.at).toISOString()+'\nVentanas vistas: '+(r.pkgs.join(', ')||'ninguna')+'\nTextos de Bolt: '+r.texts.length+'\n----\n'+r.texts.map((x,i)=>(i+1)+': '+x).join('\n');
 }
 /** lee los textos de la pantalla de Bolt y saca el desglose del albarán */
 function parseAlbaran(texts){
@@ -7453,6 +7454,304 @@ syncNative();
 setInterval(tick,1500);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick()});
 setTimeout(tick,300);
+})();
+</script>
+<script id="pdc-trec">
+/* v3.42 · Grabadora de viaje (tipo dashcam): botón pequeño en la tarjeta «Tu impulso de hoy». El vídeo se queda en el móvil. */
+(function(){
+'use strict';
+if(window.PDCREC)return;
+var CSS=''
++'.daily-motivation{position:relative}'
++'.trec-btn{position:absolute;top:5px;right:6px;z-index:2;display:flex;align-items:center;justify-content:center;gap:5px;min-width:26px;height:22px;padding:0 6px;margin:0;border-radius:11px;border:1px solid #f4c66b88;background:#0b1d2ccc;color:#f6c96d;font:800 11px/1 system-ui,-apple-system,sans-serif;cursor:pointer;-webkit-tap-highlight-color:transparent;box-sizing:border-box}'
++'.trec-btn::before{content:"";position:absolute;inset:-9px -7px}'
++'.trec-btn svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}'
++'.trec-btn.rec{background:#7a1020e6;border-color:#ff6b7f;color:#fff;font-variant-numeric:tabular-nums}'
++'.trec-btn .rd{width:8px;height:8px;border-radius:50%;background:#ff3b52;animation:trecp 1.2s ease-in-out infinite}'
++'.trec-btn.pend{border-color:#ffd25e;color:#ffd25e}'
++'.trec-btn.pend::after{content:"";position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:#ff3b52}'
++'@keyframes trecp{0%,100%{opacity:1}50%{opacity:.25}}'
++'#trecFloat{position:fixed;top:calc(env(safe-area-inset-top,0px) + 6px);right:8px;z-index:99990;height:22px;width:76px}'
++'#trecFloat .trec-btn{top:0;right:0}'
++'html body.lt #content .trec-btn:not(.rec){background:#fff3c4;border-color:#ffd25e;color:#c97a00}'
++'#trecModal{position:fixed;inset:0;z-index:100000;background:#000b;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}'
++'#trecModal .trec-card{background:#0f2236;border:1px solid #2f6fa3;border-radius:18px;padding:18px 16px 14px;max-width:420px;width:100%;max-height:92vh;overflow:auto;color:#eaf4ff;box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}'
++'#trecModal h3{margin:0 0 8px;font-size:20px;line-height:1.25;color:#fff}'
++'#trecModal p{margin:0 0 12px;font-size:16px;line-height:1.45;color:#cfe3f5}'
++'#trecModal .trec-s{display:block;margin:0 0 6px;font-size:13px;line-height:1.4;color:#9fb8cf}'
++'#trecModal .trec-w{margin:0 0 12px;padding:10px 12px;border-radius:12px;background:#4a3410;border:1px solid #ffd25e88;color:#ffe9b0;font-size:14px;line-height:1.4}'
++'#trecModal .trec-row{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid #2f4a63;font-size:16px}'
++'#trecModal .trec-row b{color:#fff}'
++'#trecModal button.trec-b{display:block;width:100%;margin:9px 0 0;padding:15px 12px;border-radius:13px;border:0;font-size:17px;font-weight:800;color:#fff;background:#1d6fb8;font-family:inherit}'
++'#trecModal button.trec-b.sec{background:transparent;border:1px solid #4b6a88;color:#cfe3f5;font-weight:700}'
++'#trecModal button.trec-b.red{background:#c0283d}'
++'#trecModal button.trec-b.grn{background:#12a36b}'
++'#trecModal button.trec-b[disabled]{opacity:.5}'
++'body.lt #trecModal .trec-card{background:#fff;border-color:#cfe0f3;color:#0f172a}'
++'body.lt #trecModal h3{color:#0f172a}body.lt #trecModal p{color:#334155}body.lt #trecModal .trec-s{color:#64748b}'
++'body.lt #trecModal .trec-row{border-color:#e2e8f0}body.lt #trecModal .trec-row b{color:#0f172a}'
++'body.lt #trecModal .trec-w{background:#fff6dd;color:#7a5200}'
++'body.lt #trecModal button.trec-b.sec{color:#334155;border-color:#94a3b8}';
+
+var CAM='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.4"/></svg>';
+var VIDEO_BPS=6000000, AUDIO_BPS=96000;
+
+var S={st:'idle',planned:0,remaining:0,at:0,audio:false,pending:null,minutes:30,busy:false,dismissed:-1,errKey:''};
+var _P=null,timer=null,poller=null,infoOpen=false;
+
+function P(){
+ try{
+  if(_P)return _P;
+  if(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform()){
+   _P=(Capacitor.Plugins&&Capacitor.Plugins.TripRecorder)||Capacitor.registerPlugin('TripRecorder');
+   return _P;
+  }
+ }catch(e){}
+ return null;
+}
+function pad2(n){return (n<10?'0':'')+n}
+function clock(ms){var s=Math.max(0,Math.ceil(ms/1000));return pad2(Math.floor(s/60))+':'+pad2(s%60)}
+function plural(n,one,many){return n+' '+(n===1?one:many)}
+function fmtDur(ms){
+ var t=Math.round((Number(ms)||0)/1000);
+ if(t<60)return plural(t,'segundo','segundos');
+ var m=Math.floor(t/60),s=t%60;
+ if(s>=57){m+=1;s=0}
+ if(s<=2)return plural(m,'minuto','minutos');
+ return m+' min '+s+' s';
+}
+function fmtSize(b){
+ b=Number(b)||0;
+ if(b>=1e9)return (Math.round(b/1e8)/10).toFixed(1).replace('.',',')+' GB';
+ return Math.max(1,Math.round(b/1e6))+' MB';
+}
+function estimate(min,audio){return (VIDEO_BPS+(audio?AUDIO_BPS:0))/8*min*60}
+function cur(){return S.remaining-(Date.now()-S.at)}
+function isRec(){return S.st==='recording'||S.st==='starting'}
+function clockText(){return S.st==='starting'?clock(S.planned):clock(cur())}
+
+function kind(){return isRec()?'rec':(S.st==='pending'?'pend':'idle')}
+function chipHtml(){
+ if(!P())return '';
+ if(isRec())return '<button type="button" data-k="rec" class="trec-btn rec" aria-label="Grabando vídeo. Toca para ver" onclick="PDCREC.tap()"><i class="rd"></i><span class="trec-t">'+clockText()+'</span></button>';
+ if(S.st==='pending')return '<button type="button" data-k="pend" class="trec-btn pend" aria-label="Tienes un vídeo grabado sin guardar" onclick="PDCREC.tap()">'+CAM+'</button>';
+ return '<button type="button" data-k="idle" class="trec-btn" aria-label="Grabar vídeo del viaje" onclick="PDCREC.tap()">'+CAM+'</button>';
+}
+
+function paint(){
+ try{
+  var h=chipHtml();
+  var cards=document.querySelectorAll('.daily-motivation');
+  for(var i=0;i<cards.length;i++){
+   var old=cards[i].querySelector('.trec-btn');
+   if(!h){if(old)old.remove();continue}
+   if(old){if(old.getAttribute('data-k')!==kind())old.outerHTML=h}else cards[i].insertAdjacentHTML('beforeend',h);
+  }
+  var fl=document.getElementById('trecFloat');
+  if(h&&isRec()&&!cards.length){
+   if(!fl){fl=document.createElement('div');fl.id='trecFloat';document.body.appendChild(fl)}
+   if(!fl.firstChild||fl.firstChild.getAttribute('data-k')!==kind())fl.innerHTML=h;
+  }else if(fl)fl.remove();
+ }catch(e){}
+}
+function paintClock(){
+ var t=document.querySelectorAll('.trec-t');
+ for(var i=0;i<t.length;i++)t[i].textContent=clockText();
+}
+
+/* ---------- ventanas ---------- */
+function modalOpen(){return !!document.getElementById('trecModal')}
+function M(html){
+ var m=document.getElementById('trecModal');
+ if(!m){m=document.createElement('div');m.id='trecModal';m.setAttribute('role','dialog');m.setAttribute('aria-modal','true');document.body.appendChild(m)}
+ m.innerHTML='<div class="trec-card">'+html+'</div>';
+ return m;
+}
+function closeM(){infoOpen=false;var m=document.getElementById('trecModal');if(m)m.remove()}
+function B(label,fn,cls){return '<button type="button" class="trec-b'+(cls?' '+cls:'')+'" onclick="PDCREC.'+fn+'">'+label+'</button>'}
+
+function openDuration(){
+ M('<h3>Grabar vídeo</h3><p>Selecciona la duración de la grabación (interior del vehículo)</p><span class="trec-s">El vídeo se queda solo en tu móvil. No gasta datos ni usa tu base de datos.</span>'
+  +B('Grabar 15 minutos','pickMin(15)')+B('Grabar 30 minutos','pickMin(30)')+B('Cancelar','cancel()','sec'));
+}
+function pickMin(m){S.minutes=m;openAudio()}
+function openAudio(){
+ M('<h3>Selecciona el audio</h3><p>Grabación de '+S.minutes+' minutos en Full HD. Ocupará unos '+fmtSize(estimate(S.minutes,true))+' en tu móvil.</p>'
+  +B('Con audio','go(true)')+B('Sin audio','go(false)')+B('Cancelar','cancel()','sec')
+  +'<span class="trec-s" style="margin-top:10px">Si grabas con audio y llevas pasajeros, avísalos (por ejemplo con un cartel visible en el coche). Eso es responsabilidad tuya.</span>');
+}
+function cancel(){closeM()}
+
+function reasonText(r){
+ r=r||{};
+ switch(r.reason){
+  case 'camera_denied':return 'No tengo permiso para usar la cámara. Actívalo en los Ajustes del móvil → Aplicaciones → Portal → Permisos → Cámara.';
+  case 'mic_denied':return 'No tengo permiso para usar el micrófono. Puedes grabar «Sin audio», o dar el permiso en los Ajustes del móvil → Aplicaciones → Portal → Permisos.';
+  case 'space':return 'No hay sitio en el móvil. Hacen falta unos '+fmtSize(r.needBytes)+' libres y ahora hay '+fmtSize(r.freeBytes)+'. Borra algo o elige 15 minutos.';
+  case 'busy':return 'Ya se está grabando.';
+  case 'pending':return 'Tienes un vídeo grabado sin guardar. Guárdalo o elimínalo primero.';
+  case 'fgs':return 'Android no ha dejado empezar la grabación. Deja el Portal abierto en pantalla y prueba otra vez.';
+  case 'old_android':return 'Este Android es antiguo y no deja guardar el vídeo en la galería desde aquí.';
+  case 'copy':return 'No se pudo guardar el vídeo. Sigue en tu móvil: prueba otra vez.';
+  default:return 'No se pudo hacer. Prueba otra vez.';
+ }
+}
+function errText(code){
+ switch(code){
+  case 'short':return 'La grabación duró muy poco y no se guardó nada.';
+  case 'lost':return 'La app se cerró mientras grababa y no quedó nada que se pueda guardar.';
+  case 'cam_busy':return 'Otra app está usando la cámara. Ciérrala y vuelve a probar.';
+  case 'cam_lost':return 'La cámara se desconectó y no quedó grabado nada útil.';
+  case 'space':return 'Te quedaste sin espacio en el móvil y no quedó grabado nada útil.';
+  case 'fgs':return 'Android no dejó empezar la grabación. Deja el Portal abierto en pantalla y prueba otra vez.';
+  case 'camera_denied':return reasonText({reason:'camera_denied'});
+  default:return 'No se pudo usar la cámara. Cierra otras apps que la usen y vuelve a probar.';
+ }
+}
+function whyText(w){
+ switch(w){
+  case 'space':return 'Se paró antes de tiempo porque te quedaste sin espacio en el móvil.';
+  case 'killed':return 'El móvil cerró la app mientras grababa. Puede que el vídeo no se abra bien.';
+  case 'destroyed':case 'cam_lost':case 'cam_error':case 'cam_busy':case 'rec_error':return 'Se cortó antes de tiempo. Puede que el vídeo no se abra bien.';
+  default:return '';
+ }
+}
+function note(msg,extra){
+ M('<h3>Grabar vídeo</h3><p>'+msg+'</p>'+(extra||'')+B('Entendido','cancel()','sec'));
+}
+
+async function go(audio){
+ var p=P();if(!p||S.busy)return;
+ S.busy=true;S.audio=!!audio;
+ M('<h3>Preparando la cámara…</h3><p>Si Android te pide permiso, pulsa «Permitir».</p>');
+ var r;
+ try{r=await p.start({minutes:S.minutes,audio:!!audio,camera:'front'})}catch(e){r={ok:false,reason:'error'}}
+ S.busy=false;
+ if(r&&r.ok){
+  S.st='starting';S.planned=Number(r.plannedMs)||S.minutes*60000;S.remaining=S.planned;S.at=Date.now();
+  closeM();paint();timers(true);setTimeout(poll,1200);
+  return;
+ }
+ r=r||{};
+ if(r.reason==='pending'){await poll();if(S.st==='pending'){openFinished();return}}
+ if(r.reason==='busy'){await poll();closeM();return}
+ note(reasonText(r),r.reason==='mic_denied'?B('Grabar sin audio','go(false)'):'');
+}
+
+function openRecInfo(){
+ if(S.st==='starting'){M('<h3>Preparando la cámara…</h3><p>En unos segundos empieza a grabar.</p>'+B('Cerrar','cancel()','sec'));return}
+ infoOpen=true;
+ M('<h3>● Grabando</h3><p>Quedan <b class="trec-t">'+clock(cur())+'</b>. '+(S.audio?'Con audio.':'Sin audio.')+' El vídeo se está guardando en tu móvil.</p>'
+  +B('Parar la grabación','stopRec()','red')+B('Seguir grabando','cancel()','sec'));
+}
+async function stopRec(){
+ var p=P();if(!p)return;
+ M('<h3>Cerrando el vídeo…</h3><p>Un momento.</p>');
+ try{await p.stop()}catch(e){}
+ for(var i=0;i<14;i++){
+  await new Promise(function(r){setTimeout(r,700)});
+  await poll(true);
+  if(!isRec())break;
+ }
+ closeM();
+ await poll();
+}
+
+function openFinished(){
+ var p=S.pending;if(!p){closeM();return}
+ var w=whyText(p.why),warn=(w||p.cut)?'<div class="trec-w">'+(w||'Puede que el vídeo no se abra bien.')+'</div>':'';
+ M('<h3>Grabación finalizada</h3>'+warn
+  +'<div class="trec-row"><span>Duración</span><b>'+fmtDur(p.durationMs)+'</b></div>'
+  +'<div class="trec-row"><span>Tamaño aprox.</span><b>'+fmtSize(p.sizeBytes)+'</b></div>'
+  +'<div class="trec-row"><span>Audio</span><b>'+(p.audio?'Sí':'No')+'</b></div>'
+  +B('Guardar y descargar en el móvil','save()','grn')+B('Eliminar','askDelete()','red')+B('Decidir luego','later()','sec'));
+}
+function later(){if(S.pending)S.dismissed=S.pending.at;closeM()}
+async function save(){
+ var p=P();if(!p||S.busy)return;
+ S.busy=true;
+ M('<h3>Guardando en tu móvil…</h3><p>Puede tardar unos segundos. No cierres el Portal.</p>');
+ var r;
+ try{r=await p.save()}catch(e){r={ok:false,reason:'copy'}}
+ S.busy=false;
+ if(r&&r.ok){
+  S.pending=null;S.st='idle';paint();
+  M('<h3>✅ Guardado en tu móvil</h3><p>Búscalo en la Galería (o en Google Fotos), en la carpeta «Portal del Conductor», dentro de Películas.</p><span class="trec-s">'+(r.name||'')+'</span>'+B('Listo','cancel()','sec'));
+  return;
+ }
+ r=r||{};
+ if(r.reason==='nothing'){await poll();closeM();return}
+ M('<h3>No se guardó</h3><p>'+reasonText(r)+'</p>'+B('Probar otra vez','save()','grn')+B('Volver','back()','sec'));
+}
+function back(){if(S.pending)openFinished();else closeM()}
+function askDelete(){
+ M('<h3>¿Eliminar el vídeo?</h3><p>Se borra de tu móvil y no se puede recuperar.</p>'+B('Sí, eliminar','del()','red')+B('No, volver','back()','sec'));
+}
+async function del(){
+ var p=P();if(!p)return;
+ var r;try{r=await p.discard()}catch(e){r={ok:false}}
+ if(r&&r.ok){S.pending=null;S.st='idle';paint();closeM();return}
+ note(reasonText(r||{}));
+}
+
+function tap(){
+ if(!P())return;
+ if(isRec())return openRecInfo();
+ if(S.st==='pending')return openFinished();
+ openDuration();
+}
+
+/* ---------- estado ---------- */
+async function poll(quiet){
+ var p=P();if(!p)return;
+ var r;try{r=await p.status()}catch(e){return}
+ if(!r)return;
+ S.st=r.state||'idle';S.at=Date.now();
+ S.planned=Number(r.plannedMs)||S.planned;
+ S.remaining=Number(r.remainingMs)||0;
+ S.audio=!!r.audio;
+ S.pending=r.pending||null;
+ paint();
+ paintClock();
+ if(isRec())timers(true);else timers(false);
+ if(!isRec()&&infoOpen)closeM();
+ if(!quiet&&!document.hidden&&!modalOpen()){
+  if(S.st==='pending'&&S.pending&&S.pending.at!==S.dismissed){openFinished();return}
+  if(S.st==='idle'&&r.error){
+   var key=r.error+':'+(r.errorAt||0);
+   if(key!==S.errKey){S.errKey=key;try{p.ackError()}catch(e){}note(errText(r.error))}
+  }
+ }
+}
+function tick(){
+ paintClock();
+ if(S.st==='recording'&&cur()<-2500)poll();
+}
+function timers(on){
+ if(on){
+  if(!timer)timer=setInterval(tick,1000);
+  if(!poller)poller=setInterval(function(){poll()},3000);
+ }else{
+  if(timer){clearInterval(timer);timer=null}
+  if(poller){clearInterval(poller);poller=null}
+ }
+}
+
+/* ---------- arranque ---------- */
+var st=document.createElement('style');st.id='trec-css';st.textContent=CSS;(document.head||document.documentElement).appendChild(st);
+window.PDCREC={tap:tap,pickMin:pickMin,go:go,cancel:cancel,stopRec:stopRec,save:save,askDelete:askDelete,del:del,later:later,back:back,
+ chipHtml:chipHtml,poll:poll,paint:paint,state:S,fmtDur:fmtDur,fmtSize:fmtSize,estimate:estimate};
+try{
+ var host=document.getElementById('content')||document.body;
+ new MutationObserver(function(){
+  if(!P())return;
+  var c=document.querySelector('.daily-motivation');
+  if((c&&!c.querySelector('.trec-btn'))||(!c&&document.getElementById('trecFloat')===null&&isRec()))paint();
+ }).observe(host,{childList:true});
+}catch(e){}
+document.addEventListener('visibilitychange',function(){if(!document.hidden)poll()});
+paint();
+setTimeout(poll,2500);
 })();
 </script>
 </body></html><style>
