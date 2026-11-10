@@ -311,7 +311,7 @@ public class TripRecorderService extends Service {
             rec.setAudioEncodingBitRate(TripRecorderStore.AUDIO_BITRATE);
             rec.setAudioSamplingRate(44100);
         }
-        rec.setOrientationHint(TripRecorderStore.orientationHint(sensor, rotation));
+        rec.setOrientationHint(TripRecorderStore.finalHint(sensor, rotation, TripRecorderStore.readFix(getSharedPreferences(TripRecorderStore.PREFS, Context.MODE_PRIVATE))));
         rec.setMaxDuration((int) planned);
         rec.setMaxFileSize(MAX_BYTES);
         rec.setOnInfoListener(new MediaRecorder.OnInfoListener() {

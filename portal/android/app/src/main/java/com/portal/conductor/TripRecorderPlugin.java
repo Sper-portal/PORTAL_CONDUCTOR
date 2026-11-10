@@ -9,6 +9,12 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.os.SystemClock;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.provider.MediaStore;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
@@ -112,6 +118,44 @@ public class TripRecorderPlugin extends Plugin {
         }
     }
 
+    /** How the phone is really turned (0..3), from the accelerometer. The screen rotation is used when the phone lies flat or has no sensor. */
+    private int physicalRotation(int fallback) {
+        HandlerThread ht = null;
+        SensorManager sm = null;
+        SensorEventListener l = null;
+        try {
+            sm = (SensorManager) getContext().getSystemService(Context.SENSOR_SERVICE);
+            Sensor s = sm == null ? null : sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+            if (s == null) return fallback;
+            final float[] sum = new float[2];
+            final int[] n = new int[1];
+            final java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1);
+            l = new SensorEventListener() {
+                @Override public void onSensorChanged(SensorEvent e) {
+                    synchronized (sum) {
+                        sum[0] += e.values[0];
+                        sum[1] += e.values[1];
+                        if (++n[0] >= 6) done.countDown();
+                    }
+                }
+                @Override public void onAccuracyChanged(Sensor sensor, int accuracy) { }
+            };
+            ht = new HandlerThread("rec-orient");
+            ht.start();
+            if (!sm.registerListener(l, s, SensorManager.SENSOR_DELAY_GAME, new Handler(ht.getLooper()))) return fallback;
+            try { done.await(500, java.util.concurrent.TimeUnit.MILLISECONDS); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            synchronized (sum) {
+                if (n[0] == 0) return fallback;
+                return TripRecorderStore.rotationFromGravity(sum[0] / n[0], sum[1] / n[0], fallback);
+            }
+        } catch (Throwable t) {
+            return fallback;
+        } finally {
+            try { if (sm != null && l != null) sm.unregisterListener(l); } catch (Throwable t) { }
+            try { if (ht != null) ht.quitSafely(); } catch (Throwable t) { }
+        }
+    }
+
     private void begin(PluginCall call) {
         int minutes = TripRecorderStore.clampMinutes(call.getInt("minutes", 30));
         boolean audio = call.getBoolean("audio", false);
@@ -135,7 +179,7 @@ public class TripRecorderPlugin extends Plugin {
         i.putExtra("minutes", minutes);
         i.putExtra("audio", audio);
         i.putExtra("camera", camera);
-        i.putExtra("rotation", displayRotation());
+        i.putExtra("rotation", physicalRotation(displayRotation()));
         TripRecorderService.busy = true;
         try {
             if (Build.VERSION.SDK_INT >= 26) getContext().startForegroundService(i);
@@ -208,6 +252,28 @@ public class TripRecorderPlugin extends Plugin {
         TripRecorderStore.clearError(prefs());
         JSObject r = new JSObject();
         r.put("ok", true);
+        call.resolve(r);
+    }
+
+    // ------------------------------------------------------------------ turn a video that came out upside down (v3.43)
+
+    /** flip({degrees}) turns the picture of the finished video (default 180) and remembers the turn for the next recordings. */
+    @PluginMethod
+    public void flip(PluginCall call) {
+        sync();
+        if (TripRecorderService.busy) { refuse(call, "busy"); return; }
+        SharedPreferences sp = prefs();
+        TripRecorderStore.Pending p = TripRecorderStore.readPending(sp);
+        if (p == null) { refuse(call, "nothing"); return; }
+        int deg = call.getInt("degrees", 180);
+        if (deg != 90 && deg != 270) deg = 180;
+        int now = Mp4Rotate.rotate(new File(p.path), deg);
+        if (now < 0) { refuse(call, "rotate"); return; }
+        int fix = TripRecorderStore.addFix(sp, deg);
+        JSObject r = new JSObject();
+        r.put("ok", true);
+        r.put("turn", now);
+        r.put("fix", fix);
         call.resolve(r);
     }
 

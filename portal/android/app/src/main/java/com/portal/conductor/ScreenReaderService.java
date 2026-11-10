@@ -719,6 +719,7 @@ public class ScreenReaderService extends AccessibilityService {
             SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);
             long now = System.currentTimeMillis();
             OfferAnalyzer.Result found = null, unreadable = null;
+            boolean foundNfx = false;
             for (int i = 0; i < wins.length(); i++) {
                 JSONObject w = wins.getJSONObject(i);
                 String pkg = w.optString("pkg");
@@ -741,7 +742,7 @@ public class ScreenReaderService extends AccessibilityService {
                     String info = r.offer ? ("veredicto=" + r.verdict + (r.estimated ? " netoEstimadoBolt=" : " precio=") + r.price + " viajeKm=" + r.tripKm + " viajeMin=" + r.tripMin + " recogidaKm=" + r.pickupKm + " recogidaMin=" + r.pickupMin + (r.orderAssumed ? " (orden asumido)" : "")) : "no reconocida como oferta";
                     sp.edit().putString("rent_lastText", pkg + "\n" + all).putString("rent_lastInfo", info).apply();
                 }
-                if (r.offer) { found = r; break; }
+                if (r.offer) { found = r; foundNfx = r.isBolt && (RateNotice.noEffect(nodes) || RateNotice.farBooking(nodes, r.pickupKm)); break; }
                 else if (r.acceptSeen && unreadable == null) { r.unreadable = true; r.verdict = "DATA"; r.reason = "No pude leer los datos de esta oferta."; unreadable = r; }
             }
             if (now - lastSnapTs > 3000) lastSnapTs = now;
@@ -751,7 +752,7 @@ public class ScreenReaderService extends AccessibilityService {
             if (found == null && ocrFound != null && now - ocrFoundTs < 4500) found = ocrFound;
             if (found != null) {
                 lastOfferSeen = now;
-                logTripOffer(found, now);
+                logTripOffer(found, now, foundNfx);
                 showAlert(found);
                 speakOffer(found);
                 rh.removeCallbacks(hideRun);
@@ -812,7 +813,7 @@ public class ScreenReaderService extends AccessibilityService {
     }
 
     /** apunta la oferta de Bolt que se esta viendo (una sola vez por oferta) si el interruptor «Viajes guardados» esta encendido */
-    private void logTripOffer(OfferAnalyzer.Result r, long now) {
+    private void logTripOffer(OfferAnalyzer.Result r, long now, boolean nfx) {
         try {
             if (r == null || !r.offer || !r.isBolt || r.unreadable) return;
             SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);
@@ -828,6 +829,12 @@ public class ScreenReaderService extends AccessibilityService {
                 // v3.37: es la MISMA oferta con otra cifra (elegiste otra zona en el aviso): se actualiza la ya apuntada, no se apunta otra
                 int rev = sp.getInt("trip_rev", 0) + 1;
                 ed.putInt("trip_rev", rev).putLong("trip_cents", cents).putString("trip_cur", tripJson(r, sp.getLong("trip_seq", 0L), sp.getLong("trip_first", now), rev));
+            }
+            // v3.43: aviso «Fuera del radio / no te afectara»: se marca la oferta actual y se cuenta UNA sola vez (el aviso puede leerse un poco despues que el precio)
+            if (nfx && (isNew || !sp.getBoolean("trip_nofx", false))) {
+                ed.putBoolean("trip_nofx", true).putLong("trip_nofx_n", sp.getLong("trip_nofx_n", 0L) + 1L);
+            } else if (isNew) {
+                ed.putBoolean("trip_nofx", false);
             }
             ed.apply();
         } catch (Exception e) { }

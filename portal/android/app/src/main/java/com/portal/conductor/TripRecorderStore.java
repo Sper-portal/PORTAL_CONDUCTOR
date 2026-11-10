@@ -211,6 +211,39 @@ final class TripRecorderStore {
         return true;
     }
 
+    // ------------------------------------------------------------------ video turn (v3.43)
+
+    private static final String FIX = "rec_fix";
+
+    /** Extra turn (0, 90, 180 or 270 degrees) the driver asked for with "girar 180" after a video came out upside down. It is added to every new recording. */
+    static int readFix(SharedPreferences sp) {
+        int f = sp.getInt(FIX, 0);
+        return (((f % 360) + 360) % 360) / 90 * 90;
+    }
+
+    /** adds a turn to the remembered correction and returns the new one (0, 90, 180 or 270) */
+    static int addFix(SharedPreferences sp, int deg) {
+        int f = ((readFix(sp) + (deg % 360) + 360) % 360) / 90 * 90;
+        sp.edit().putInt(FIX, f).commit();
+        return f;
+    }
+
+    /** the hint written in the MP4: the one for the way the phone is turned, plus the driver's correction */
+    static int finalHint(int sensor, int rotation, int fix) {
+        return (orientationHint(sensor, rotation) + (((fix % 360) + 360) % 360)) % 360;
+    }
+
+    /**
+     * How the phone is REALLY turned (0 upright, 1 turned left = top to the left, 2 upside down, 3 turned right), from gravity on the x and y axes (m/s2).
+     * The screen rotation can lie (rotation lock, a car mount); gravity does not. When the phone lies flat, or gravity is unreadable, {@code fallback} is used.
+     */
+    static int rotationFromGravity(float ax, float ay, int fallback) {
+        if (Float.isNaN(ax) || Float.isNaN(ay)) return fallback;
+        if (Math.hypot(ax, ay) < 3.5) return fallback;
+        if (Math.abs(ay) >= Math.abs(ax)) return ay >= 0 ? 0 : 2;
+        return ax > 0 ? 1 : 3;
+    }
+
     /** Deletes recordings in dir that nobody refers to (leftovers of failed attempts). Never touches the active or pending one. */
     static int cleanOrphans(File dir, SharedPreferences sp) {
         File[] fs = dir.listFiles();

@@ -2200,6 +2200,7 @@ const J_KB=[
 ['nocuadra','🤔','Los totales no me cuadran','cuadr^4,no coincide^4,diferencia,distinto,falta dinero,sobra','Repasa por orden: 1) que los viajes estén en el día correcto, 2) que el pago (tarjeta o efectivo) sea el real y 3) las compensaciones y propinas. Con las flechas de fecha revisa el día en Facturación.'],
 ['tablet','🖥️','Tablet y pantalla dividida','tablet,pantalla dividida,multiventana,ventana,dos apps','Con pantalla dividida puedes tener Bolt a un lado y el Portal al otro. El lector lee el precio de la otra ventana y lo mete en el Portal.'],
 ['frase','💬','Frase del día','frase,impulso,motivac,cita','Arriba, en Calculadora, tienes cada día una frase distinta. Hay 365, una para cada día del año.'],
+['tasa','📊','Mi tasa de finalización','tasa,finalizacion,aceptacion,cancelacion,cancelar,bolt,calidad,servicio,limite,ajustes,semana,mes','En Ajustes → Tasa de finalización ves tu cuenta propia, de lunes a domingo y por meses: viajes hechos ÷ ofertas que cuentan. Toda oferta que lee la app suma a Recibidas; si trae el cartel «Fuera del radio / no te afectará» suma también a Con aviso y no cuenta (si la aceptas con ✓, pasa a contar). Las reservas (etiqueta «Reservado») con la recogida a más de 2 km se tratan igual aunque no traigan el cartel; a 2 km o menos cuentan como una oferta normal. Sin cartel y sin ✓ baja tu tasa. ✓ y la haces: sube. ✓ y luego la borras de la lista: es una cancelación y baja; si el cliente cancela en pocos minutos (los eliges en la página) no penaliza. Cada día se puede corregir con − + ✎ y puedes cargar días pasados. Avisos: naranja al bajar de 90 % y rojo por debajo de 85 % (se cambian). Es una estimación tuya: Bolt no enseña su tasa interna. Los datos se quedan en el móvil. La barra ✗ / ✓ va abajo, encima del menú.'],
 ['grabar','🎥','Grabar vídeo del viaje','grabar,grabacion,video,camara,dashcam,interior,audio,microfono','Arriba, en la frase del día de Calculadora, hay un botón pequeño con una cámara. Púlsalo, elige 15 o 30 minutos y con o sin audio. Graba el interior del coche en Full HD y el vídeo se queda solo en tu móvil: no se sube a internet ni gasta datos. Al acabar eliges Guardar (queda en la Galería, en Películas, carpeta Portal del Conductor) o Eliminar. Unos 30 minutos ocupan alrededor de 1,4 GB, así que mira que tengas sitio. Mientras graba, Android enseña un aviso y un punto verde: es normal y no se puede quitar. Si llevas pasajeros y grabas con audio, avísalos con un cartel visible en el coche.'],
 ['freenow','💗','Free Now y Pide Taxi','free now^4,freenow^4,pide taxi^4,pidetaxi^4','En Calculadora tienes los botones Free Now (rosa) y Pide Taxi (amarillo) en la segunda fila, junto a Aeropuerto y Cancelaciones. Escribe el importe y púlsalo: se guarda el importe entero, sin comisión de la app, y suma a tu facturación, al informe y a la nómina. También puedes elegirlos como aplicación prioritaria en Control, cargar sus importes a mano en Facturación y apuntar sus cancelaciones.'],
 ['tema','🎨','Tema claro, oscuro o automático','tema claro^4,tema oscuro^4,tema automatico^4,cambiar el tema^4,el tema^3,modo oscuro^4,modo claro^4,modo noche^4,modo dia^3,fondo oscuro^3,fondo claro^3,pantalla oscura^3,pantalla clara^3,oscuro^3,oscura^3','En Ajustes → Tema eliges cómo se ve la app: Automático (claro de día y oscuro de noche, según el sol en Madrid; cambia solo), Claro u Oscuro fijo. Afecta a Calculadora, Control, Facturación e Informe; Ajustes, el menú y Madrid hoy son siempre oscuros. Se guarda en este aparato.'],
@@ -2248,7 +2249,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.42';
+const APP_VERSION='v3.43';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -6852,6 +6853,13 @@ const dshow=k=>{const p=String(k).split('-');return p.length===3?p[2]+'/'+p[1]+'
 let SR=null;
 function plugin(){try{if(SR)return SR;if(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform()){SR=(Capacitor.Plugins&&Capacitor.Plugins.ScreenReader)||Capacitor.registerPlugin('ScreenReader');return SR}}catch(e){}return null}
 
+/* v3.43: avisa a «Mi tasa de finalización» (otro módulo, pdc-rate) de lo que pasa con las ofertas y las listas */
+function rh(ev,t){try{window.dispatchEvent(new CustomEvent('pdc-trip',{detail:{ev:ev,t:t}}))}catch(e){}if(ev==='paint')barPlace()}
+/* la barra ✗ ✓ va abajo, encima del menú (arriba la tapa el aviso del neto estimado). Con la lista de viajes abierta se queda arriba para no tapar sus botones de abajo */
+function barPlace(){try{const b=document.getElementById('tripBar');if(!b)return;const sh=document.getElementById('tripSheet');
+  if(sh&&getComputedStyle(sh).display!=='none'){b.style.bottom='auto';b.style.top='calc(env(safe-area-inset-top,0px) + 6px)'}
+  else{const n=document.querySelector('nav.neon-nav');b.style.top='auto';b.style.bottom=((n&&n.offsetHeight?n.offsetHeight:64)+8)+'px'}}catch(e){}}
+
 /* ---------------- guardado en el móvil ---------------- */
 function uid(){
   try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(/^sb-.*-auth-token$/.test(k)){const s=JSON.parse(localStorage.getItem(k)||'null');const u=s&&((s.currentSession||s).user);if(u&&u.id)return String(u.id).replace(/[^a-zA-Z0-9]/g,'').slice(0,16)}}}catch(e){}
@@ -6902,15 +6910,15 @@ function decide(ok){
   const s=state(),t=cur;
   s.dec={k:tripKey(t.offer),ts:Date.now()};
   cur=null;s.cur=null;
-  if(ok){t.okAt=Date.now();s.open.push(t);save();hideBar();refresh();toast('Viaje '+s.open.length+' guardado')}
-  else{save();hideBar();refresh()}
+  if(ok){t.okAt=Date.now();s.open.push(t);rh('yes',t);save();hideBar();refresh();toast('Viaje '+s.open.length+' guardado')}
+  else{rh('no',t);save();hideBar();refresh()}
 }
 function showBar(){
   if(!enabled()||!cur)return;
   let b=$('#tripBar');
   if(!b){
     b=document.createElement('div');b.id='tripBar';
-    b.style.cssText='position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 6px);width:min(92%,420px);z-index:100000;display:flex;align-items:center;gap:10px;background:#0b1a33f5;border:1px solid #3b82f6;border-radius:20px;padding:8px 10px;box-shadow:0 8px 26px #000a;font:600 15px system-ui;color:#fff';
+    b.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:72px;width:min(92%,420px);z-index:100000;display:flex;align-items:center;gap:10px;background:#0b1a33f5;border:1px solid #3b82f6;border-radius:20px;padding:8px 10px;box-shadow:0 8px 26px #000a;font:600 15px system-ui;color:#fff';
     const bs='flex:none;width:70px;height:54px;border:none;border-radius:16px;color:#fff;font:700 30px system-ui;cursor:pointer;';
     b.innerHTML='<button id="tripNo" aria-label="No hice este viaje" style="'+bs+'background:#dc2626">✗</button><div id="tripBarTxt" style="flex:1;text-align:center;line-height:1.3"></div><button id="tripYes" aria-label="Acepté este viaje" style="'+bs+'background:#16a34a">✓</button>';
     document.body.appendChild(b);
@@ -6919,6 +6927,8 @@ function showBar(){
   const o=cur.offer,n=state().open.length+1,net=offerNet(o);
   $('#tripBarTxt').innerHTML='<div style="font-size:13px;color:#9cc3ff">Viaje '+n+' · '+hhmm(cur.ts)+'</div><div style="font-size:19px">'+(net==null?'sin precio':eur(net))+'</div>';
   b.style.display='flex';
+  barPlace();
+  rh('bar',cur);
 }
 function hideBar(){const b=$('#tripBar');if(b)b.style.display='none'}
 
@@ -6983,7 +6993,7 @@ function rememberRaw(pkgs,texts){try{localStorage.setItem(LS_RAW,JSON.stringify(
 function lastRaw(){try{return JSON.parse(localStorage.getItem(LS_RAW)||'null')}catch(e){return null}}
 function rawText(){
   const r=lastRaw();if(!r)return '';
-  return 'Portal v3.42 · lectura de Bolt · '+new Date(r.at).toISOString()+'\nVentanas vistas: '+(r.pkgs.join(', ')||'ninguna')+'\nTextos de Bolt: '+r.texts.length+'\n----\n'+r.texts.map((x,i)=>(i+1)+': '+x).join('\n');
+  return 'Portal v3.43 · lectura de Bolt · '+new Date(r.at).toISOString()+'\nVentanas vistas: '+(r.pkgs.join(', ')||'ninguna')+'\nTextos de Bolt: '+r.texts.length+'\n----\n'+r.texts.map((x,i)=>(i+1)+': '+x).join('\n');
 }
 /** lee los textos de la pantalla de Bolt y saca el desglose del albarán */
 function parseAlbaran(texts){
@@ -7120,7 +7130,7 @@ async function captureAuto(){
   const ts=hdrTs(a.hdr);
   if(confirm('No encuentro en tu lista ningún viaje de esa hora'+(ts!=null?' ('+hhmm(ts)+')':'')+'.\n\n¿Lo añado como viaje nuevo, solo con los datos del albarán?')){
     const nt={id:'t'+(ts||Date.now())+'_'+Math.floor(Math.random()*1e5),ts:ts||Date.now(),offer:null,alb:null,man:{},st:'ok',okAt:Date.now(),manual:true};
-    applyAlb(nt,a);s.open.push(nt);s.open.sort((x,y)=>x.ts-y.ts);save();refresh();paint();toast('Viaje añadido a la lista.');
+    applyAlb(nt,a);s.open.push(nt);s.open.sort((x,y)=>x.ts-y.ts);rh('manual',nt);save();refresh();paint();toast('Viaje añadido a la lista.');
   }
 }
 
@@ -7159,7 +7169,7 @@ function ensureSheet(){
   return sheet;
 }
 function openList(){if(!enabled())return;ensureSheet();view={name:'list'};listExp=new Set();listScroll=null;lastPaintName='';sheet.style.display='flex';paint()}
-function closeSheet(){if(sheet)sheet.style.display='none';refresh()}
+function closeSheet(){if(sheet)sheet.style.display='none';barPlace();refresh()}
 function head(title,sub,back){return '<div class="th"><button class="tx" data-a="'+(back||'close')+'" aria-label="'+(back?'Volver':'Cerrar')+'">'+(back?'←':'×')+'</button><div><b>'+title+'</b>'+(sub?'<small>'+sub+'</small>':'')+'</div></div>'}
 function rowHtml(t,i,tag){
   const net=offerNet(t.offer),done=t.alb&&t.alb.net!=null;
@@ -7234,6 +7244,7 @@ function paint(){
   }
   sheet.innerHTML=h;
   lastPaintName=view.name;
+  rh('paint',view);
   if(view.name==='list'){const tb=sheet.querySelector('.tb');if(tb)tb.scrollTop=listScroll==null?tb.scrollHeight:listScroll}
 }
 function kv(a,b){return '<div class="kv"><span>'+a+'</span><b>'+b+'</b></div>'}
@@ -7336,6 +7347,7 @@ function onClick(e){
   if(a==='save-trip'){save();toast('Viaje guardado');view=view.from==='day'?{name:'day',id:view.fromId}:{name:'list'};return paint()}
   if(a==='del-trip'){
     if(!confirm('¿Eliminar este viaje de la lista?'))return;
+    {const dt=findTrip(id);if(dt)rh('del',dt)}
     s.open=s.open.filter(t=>t.id!==id);s.pend=s.pend.filter(t=>t.id!==id);for(const d of s.days)d.trips=d.trips.filter(t=>t.id!==id);
     s.days=s.days.filter(d=>d.trips.length);save();refresh();
     view=view.from==='day'?(s.days.some(d=>d.id===view.fromId)?{name:'day',id:view.fromId}:{name:'days'}):{name:'list'};return paint();
@@ -7345,9 +7357,9 @@ function onClick(e){
   if(a==='auto')return captureAuto();
   if(a==='new'){
     const t={id:'t'+Date.now()+'_'+Math.floor(Math.random()*1e5),ts:Date.now(),offer:null,alb:null,man:{},st:'ok',okAt:Date.now(),manual:true};
-    s.open.push(t);save();refresh();view={name:'detail',id:t.id,tab:'alb',from:'list'};paint();listScroll=null;return;
+    s.open.push(t);rh('manual',t);save();refresh();view={name:'detail',id:t.id,tab:'alb',from:'list'};paint();listScroll=null;return;
   }
-  if(a==='pend-ok'){const t=s.pend.find(x=>x.id===id);if(t){s.pend=s.pend.filter(x=>x!==t);t.okAt=Date.now();s.open.push(t);s.open.sort((x,y)=>x.ts-y.ts);save();refresh();toast('Viaje añadido a la lista')}return}
+  if(a==='pend-ok'){const t=s.pend.find(x=>x.id===id);if(t){s.pend=s.pend.filter(x=>x!==t);t.okAt=Date.now();s.open.push(t);s.open.sort((x,y)=>x.ts-y.ts);rh('yes',t);save();refresh();toast('Viaje añadido a la lista')}return}
   if(a==='pend-del'){s.pend=s.pend.filter(x=>x.id!==id);save();return paint()}
   if(a==='close-day'){
     if(!s.open.length)return;
@@ -7446,7 +7458,7 @@ function tick(){
     refresh();poll();
   }catch(e){}
 }
-window.__pdcTrips={rawText,parseAlbaran,matchTrip,amtOnly,hdrTs,state,decide,openList,closeSheet,csvText,tripKey,setEnabled,enabled,poll,tick,newOffer,releaseCur};
+window.__pdcTrips={rawText,parseAlbaran,matchTrip,amtOnly,hdrTs,state,decide,openList,closeSheet,csvText,tripKey,setEnabled,enabled,poll,tick,newOffer,releaseCur,save,findTrip,paint};
 const content=$('#content');
 let rq=0;
 if(content){new MutationObserver(()=>{injectCard();if(!rq)rq=setTimeout(()=>{rq=0;try{refresh()}catch(e){}},60)}).observe(content,{childList:true,subtree:true});injectCard()}
@@ -7454,6 +7466,729 @@ syncNative();
 setInterval(tick,1500);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick()});
 setTimeout(tick,300);
+})();
+</script>
+<script id="pdc-rate">
+/* v3.43 · MI TASA DE FINALIZACIÓN (propia, de lunes a domingo)
+   Bolt enseña su «tasa de aceptación» y su «calidad de servicio», pero la tasa interna que de verdad cuenta no la ves. Esta es la tuya, calculada con lo que pasa en tu móvil:
+     tasa = viajes hechos ÷ ofertas que cuentan
+   - Toda oferta que lee la app suma a «Recibidas». Si trae el cartel «Fuera del radio / Rechazar no afectará tu tasa de aceptación» suma también a «Con aviso» y NO cuenta
+     (parte nativa: «tripCur» trae el nº de ofertas y cuántas traían el aviso). Si la aceptas con ✓ pasa a contar.
+   - Sin cartel y sin ✓: cuenta como no aceptada (baja la tasa). ✓ y la haces: sube. ✓ y luego la borras de la lista: cancelación (baja).
+   - Si el cliente cancela a los pocos minutos (por defecto 3) no penaliza: se quita de la cuenta.
+   - Datos por DÍAS (lunes a domingo = semana; también el mes). Cada día se puede corregir a mano (− + ✎) y se pueden cargar días pasados.
+   - Aparte, los últimos 100 viajes aceptados (como calcula Bolt su calidad de servicio).
+   - Límites: naranja al bajar de 90 % y rojo por debajo de 85 % (se cambian en la página de la tasa).
+   - Todo se queda en el móvil (no va a la nube): clave pdc_rate_v1_<usuario>. */
+(function(){
+'use strict';
+if(window.__pdcRate)return;
+const KEY='pdc_rate_v1_';
+const $=s=>document.querySelector(s);
+const fin=v=>typeof v==='number'&&isFinite(v);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nf1=new Intl.NumberFormat('es-ES',{minimumFractionDigits:1,maximumFractionDigits:1});
+const pc=v=>fin(v)?nf1.format(v)+' %':'—';
+const pad=n=>String(n).padStart(2,'0');
+const dkey=ts=>{const d=new Date(ts);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+const MO=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const MONTHS=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const WD=['lunes','martes','miércoles','jueves','viernes','sábado','domingo'];
+const WDS=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+const clock=()=>Date.now();
+const kd=k=>{const p=String(k).split('-');return new Date(+p[0],(+p[1])-1,+p[2],12)};
+const addD=(k,n)=>{const d=kd(k);d.setDate(d.getDate()+n);return dkey(d.getTime())};
+const monOf=k=>{const d=kd(k);d.setDate(d.getDate()-((d.getDay()+6)%7));return dkey(d.getTime())};
+const wdi=k=>(kd(k).getDay()+6)%7;
+const weekKey=ts=>monOf(dkey(ts));
+const wkKeys=m=>[0,1,2,3,4,5,6].map(i=>addD(m,i));
+const dshort=k=>{const p=String(k).split('-');return p.length===3?(+p[2])+' '+MO[(+p[1])-1]:String(k)};
+const monthKeys=ym=>{const p=ym.split('-').map(Number),n=new Date(p[0],p[1],0).getDate(),o=[];for(let i=1;i<=n;i++)o.push(p[0]+'-'+pad(p[1])+'-'+pad(i));return o};
+const addM=(ym,n)=>{const p=ym.split('-').map(Number),d=new Date(p[0],p[1]-1+n,1,12);return d.getFullYear()+'-'+pad(d.getMonth()+1)};
+const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
+let SR=null;
+function plugin(){try{if(SR)return SR;if(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform()){SR=(Capacitor.Plugins&&Capacitor.Plugins.ScreenReader)||Capacitor.registerPlugin('ScreenReader');return SR}}catch(e){}return null}
+function TR(){return window.__pdcTrips||null}
+function uid(){
+  try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(/^sb-.*-auth-token$/.test(k)){const s=JSON.parse(localStorage.getItem(k)||'null');const u=s&&((s.currentSession||s).user);if(u&&u.id)return String(u.id).replace(/[^a-zA-Z0-9]/g,'').slice(0,16)}}}catch(e){}
+  return 'local';
+}
+
+/* ---------------- libro de cuentas (en el móvil), por días ---------------- */
+const DEF=()=>({orange:90,red:85,grace:3});
+const blank=()=>({v:1,cfg:DEF(),last:null,days:{},win:[],seed:null,bolt:{}});
+const KS=['o','nx','yin','yx','c1in','c1x','c2in','c2x','gin','gx'];
+const zero=()=>{const d={m:null};for(const k of KS)d[k]=0;return d};
+let L=null,LK=null;
+function ledger(){
+  const k=KEY+uid();
+  if(L&&LK===k)return L;
+  let j=null;try{j=JSON.parse(localStorage.getItem(k)||'null')}catch(e){}
+  L=(j&&j.v===1&&j.days&&typeof j.days==='object')?Object.assign(blank(),j):blank();
+  L.cfg=Object.assign(DEF(),L.cfg||{});
+  if(!Array.isArray(L.win))L.win=[];
+  if(!L.bolt||typeof L.bolt!=='object')L.bolt={};
+  LK=k;return L;
+}
+function save(){try{const l=ledger();const ks=Object.keys(l.days).sort();while(ks.length>400)delete l.days[ks.shift()];localStorage.setItem(LK,JSON.stringify(l))}catch(e){}}
+function D(k){const l=ledger();return l.days[k]||(l.days[k]=zero())}
+function peek(k){return ledger().days[k]||null}
+function tot(w){const t={};for(const k of KS)t[k]=(w[k]||0)+((w.m&&w.m[k])||0);return t}
+function sumKeys(keys){const l=ledger(),s=zero();for(const k of keys){const d=l.days[k];if(!d)continue;const t=tot(d);for(const f of KS)s[f]+=t[f]}return s}
+
+/** La cuenta de un día, una semana o un mes.
+ *  dentro del radio = ofertas vistas − las que traían el aviso − las canceladas sin penalización
+ *  cuentan = dentro del radio + las con aviso que aceptaste;  hechos = aceptadas − canceladas (por ti o por el pasajero) − sin penalización */
+function calc(w){
+  const t=tot(w);
+  const baseIn=Math.max(0,t.o-t.nx-t.gin);
+  const finIn=t.yin-t.c1in-t.c2in-t.gin,finX=t.yx-t.c1x-t.c2x-t.gx;
+  const num=Math.max(0,finIn+finX);
+  const accX=Math.max(0,t.yx-t.gx);
+  let den=baseIn+accX;den=Math.max(den,num);
+  return {t,baseIn,finIn,finX,num,den,rate:den>0?num/den*100:null,rej:den-num,recv:t.o,
+    nxShow:Math.max(0,t.nx-accX),nxAcc:accX,free:t.gin+t.gx,acc:t.yin+t.yx,c1:t.c1in+t.c1x,c2:t.c2in+t.c2x};
+}
+const r1=v=>Math.round(v*10)/10;
+const MINB=20;      // con menos de 20 ofertas que cuentan la cifra salta demasiado (1 oferta = 0 % o 100 %): se enseña pero sin color de aviso
+/** verde / naranja (de 90 hacia abajo) / rojo (por debajo de 85) / n = sin datos o muy pocos */
+function zone(rate,cfg,den){
+  if(!fin(rate))return 'n';
+  if(den!=null&&den<MINB)return 'n';
+  cfg=cfg||ledger().cfg;
+  const r=r1(rate);
+  if(r<cfg.red)return 'r';
+  if(r<=cfg.orange)return 'o';
+  return 'g';
+}
+/** cuántas ofertas que cuentan puedes dejar pasar y seguir en «limit» % o más (negativo: ya estás por debajo) */
+function margin(c,limit){
+  if(!(c.den>0)||!(limit>0))return null;
+  return Math.floor(c.num/(limit/100)-c.den+1e-9);
+}
+/** cuántos viajes seguidos hechos hacen falta para volver a «limit» % */
+function recover(c,limit){
+  const L0=limit/100;if(!(c.den>0)||!(L0<1))return null;
+  const m=Math.ceil((L0*c.den-c.num)/(1-L0)-1e-9);
+  return m>0?m:0;
+}
+/** la tasa si dejas pasar la oferta y si la haces (una oferta con aviso solo entra en la cuenta si la haces) */
+function whatIf(c,nx){
+  let num=c.num+1,den=nx?c.den+1:c.den;
+  den=Math.max(den,num);
+  return {leave:c.rate,doit:Math.min(100,num/den*100),nx:!!nx};
+}
+
+/* ---------------- últimos 100 viajes aceptados (como la calidad de servicio de Bolt) ---------------- */
+function winStats(){
+  const w=ledger().win.slice(-100);let f=0,c=0,p=0;
+  for(const x of w){const r=typeof x==='string'?x:(x&&x.r);if(r==='c')c++;else if(r==='p')p++;else f++}
+  const n=w.length;
+  return {n,f,c,p,q:n?f/n*100:null,cp:n?c/n*100:null,pp:n?p/n*100:null};
+}
+function pushWin(e){const l=ledger();l.win.push(e);if(l.win.length>100)l.win.splice(0,l.win.length-100)}
+/** reparte los viajes del punto de partida mezclados (no todos los cancelados juntos), para que al salir los más viejos se vayan en la misma proporción */
+function seedArr(f,c,p){
+  const n=f+c+p,out=[],q={f,c,p},got={f:0,c:0,p:0};
+  for(let i=0;i<n;i++){
+    let best=null,bd=-1e9;
+    for(const k of ['f','c','p']){if(!q[k])continue;const d=(q[k]/n)*(i+1)-got[k];if(d>bd){bd=d;best=k}}
+    got[best]++;out.push(best);
+  }
+  return out;
+}
+
+/* ---------------- ofertas con aviso (lo que dice el lector) ---------------- */
+const FLAG={};          // nº de oferta → traía el aviso
+const dayOf=rt=>(rt&&(rt.d||rt.w))||dkey(clock());
+function setFlag(seq){
+  if(FLAG[seq])return;
+  FLAG[seq]=true;
+  const ks=Object.keys(FLAG);if(ks.length>60)delete FLAG[ks[0]];
+  // un viaje ya aceptado con ✓ antes de que se leyera el aviso pasa a «aceptado con aviso»
+  const T=TR();if(!T)return;
+  const s=T.state(),all=[].concat(s.open||[],s.pend||[]);for(const d of (s.days||[]))for(const t of d.trips)all.push(t);
+  let ch=false;
+  for(const t of all){if(t&&t.rt&&!t.rt.nx&&t.offer&&Number(t.offer.seq)===Number(seq)){setNx(t,true);ch=true}}
+  if(ch){try{T.save()}catch(e){}save()}
+}
+function setNx(t,nx){
+  const rt=t.rt;if(!rt||rt.nx===nx)return;
+  const d=D(dayOf(rt)),a=rt.nx?'x':'in',b=nx?'x':'in';
+  if(rt.res!=='n'){d['y'+a]--;d['y'+b]++}
+  if(rt.res==='c1'){d['c1'+a]--;d['c1'+b]++}
+  if(rt.res==='c2'){d['c2'+a]--;d['c2'+b]++}
+  if(rt.res==='g'){d['g'+a]--;d['g'+b]++}
+  rt.nx=nx;
+}
+
+/* ---------------- recoger las ofertas nuevas ---------------- */
+let polling=null;
+function poll(){
+  if(polling)return polling;
+  polling=(async()=>{
+    const p=plugin();if(!p||!p.tripCur)return false;
+    let r;try{r=await p.tripCur()}catch(e){return false}
+    if(!r||!r.on||!fin(Number(r.seq)))return false;
+    const l=ledger(),seq=Number(r.seq),nxN=Number(r.nofxN)||0;
+    if(r.nofx)setFlag(seq);
+    if(!l.last||seq<l.last.seq||nxN<l.last.nx){l.last={seq,nx:nxN};save();return false}   // primera vez, o contadores a cero (datos de la app borrados): se empieza desde aquí
+    const ds=seq-l.last.seq,dn=nxN-l.last.nx;
+    if(ds>0||dn>0){
+      const d=D(dkey(clock()));
+      d.o+=Math.max(0,ds);d.nx+=Math.max(0,dn);
+      l.last={seq,nx:nxN};save();changed();
+    }
+    return true;
+  })().catch(()=>false).then(v=>{polling=null;return v});
+  return polling;
+}
+
+/* ---------------- lo que pasa con la lengüeta y la lista ---------------- */
+function onYes(t){
+  if(!t||t.rt)return;
+  const k=dkey(clock()),d=D(k),nx=!!(t.offer&&FLAG[t.offer.seq]);
+  t.rt={d:k,nx,res:null,at:clock()};
+  if(nx)d.yx++;else d.yin++;
+  pushWin({id:t.id,r:'f'});save();changed();
+}
+function onManual(t){
+  if(!t||t.rt)return;
+  const k=dkey(clock()),d=D(k);
+  t.rt={d:k,nx:false,res:null,man:true,at:clock()};
+  d.o++;d.yin++;pushWin({id:t.id,r:'f'});save();changed();
+}
+function unapply(t){const rt=t.rt,d=D(dayOf(rt)),a=rt.nx?'x':'in';if(rt.res==='c1')d['c1'+a]--;else if(rt.res==='c2')d['c2'+a]--;else if(rt.res==='g')d['g'+a]--;else if(rt.res==='n')d['y'+a]++}
+function apply(t,res){const rt=t.rt,d=D(dayOf(rt)),a=rt.nx?'x':'in';if(res==='c1')d['c1'+a]++;else if(res==='c2')d['c2'+a]++;else if(res==='g')d['g'+a]++;else if(res==='n')d['y'+a]--;rt.res=res||null}
+/** res: null (hecho), 'c1' (cancelé yo), 'c2' (canceló el pasajero), 'g' (canceló el pasajero enseguida: sin penalización), 'n' (me equivoqué con el ✓: no lo hice) */
+function setRes(t,res){
+  if(!t||!t.rt)return false;
+  res=res||null;const prev=t.rt.res||null;
+  if(prev===res)return false;
+  unapply(t);apply(t,res);
+  const r=res==='c1'?'c':res==='c2'?'p':'f',l=ledger();
+  const i=l.win.findIndex(x=>x&&typeof x==='object'&&x.id===t.id);
+  if(res==='n'||res==='g'){if(i>=0)l.win.splice(i,1)}
+  else if(i>=0)l.win[i].r=r;
+  else if(prev==='n'||prev==='g')pushWin({id:t.id,r});
+  save();changed();return true;
+}
+function findTrip(id){const T=TR();return T&&T.findTrip?T.findTrip(id):null}
+const isCancel=r=>r==='c1'||r==='c2';
+
+/** ✗ de la lengüeta: dejas pasar la oferta. Si era de tu radio, baja la tasa (ya contaba al entrar) */
+function onNo(t){
+  if(!t||!t.offer)return;
+  if(FLAG[t.offer.seq])return;
+  const i=weekInfo();
+  if(i.z==='o'||i.z==='r')banner('pass');
+}
+/** borrar de la lista un viaje aceptado = cancelación (salvo que sea muy antiguo: eso es limpiar la lista) */
+const OLD_MS=2*3600*1000;
+function onDelete(t){
+  if(!t||!t.rt)return;
+  if(t.rt.man){                                // un viaje apuntado a mano y borrado: era un error, se deshace entero
+    if(t.rt.res!=='n')setRes(t,'n');
+    D(dayOf(t.rt)).o--;save();changed();return;
+  }
+  if(t.rt.res)return;                          // ya marcado a mano en el detalle: se respeta
+  const el=clock()-(t.rt.at||0);
+  if(el>OLD_MS)return;                         // aceptado hace horas: se está limpiando la lista, no es una cancelación
+  setRes(t,'c1');
+  const fast=el<=ledger().cfg.grace*60000;
+  banner('cancel');ask(t,fast?'fast':'slow');
+}
+
+/* ---------------- ajustes de números y límites ---------------- */
+const int=(v,mx)=>{const n=Math.round(Number(String(v==null?'':v).replace(',','.')));return fin(n)&&n>=0?Math.min(n,mx||9999):0};
+/** lo que se ve de un día y cómo se corrige: f = finalizados, x = rechazados/cancelados, n = ofertas con aviso sin aceptar */
+function dayVals(k){const c=calc(peek(k)||zero());return {f:c.num,x:c.rej,n:c.nxShow}}
+function bump(k,which,delta){
+  delta=Math.round(Number(delta));if(!fin(delta)||!delta||!/^[fxn]$/.test(which))return false;
+  const cur=dayVals(k)[which];
+  if(cur+delta<0)delta=-cur;
+  if(!delta)return false;
+  const d=D(k),m=d.m||(d.m={});
+  const add=(f,v)=>{m[f]=(m[f]||0)+v};
+  if(which==='f'){add('o',delta);add('yin',delta)}
+  else if(which==='x'){add('o',delta)}
+  else{add('o',delta);add('nx',delta)}
+  if(KS.every(f=>!m[f]))d.m=null;
+  save();changed();return true;
+}
+function setDay(k,which,value){const cur=dayVals(k)[which];return bump(k,which,int(value,9999)-cur)}
+function setSeed(o){
+  const f=int(o.f,100),c=int(o.c,100),p=int(o.p,100),l=ledger();
+  if(!(f||c||p)){l.seed=null;l.win=l.win.filter(x=>x&&typeof x==='object');save();changed();return}
+  l.seed={f,c,p};
+  const live=l.win.filter(x=>x&&typeof x==='object');
+  l.win=seedArr(f,c,p).concat(live);
+  if(l.win.length>100)l.win.splice(0,l.win.length-100);
+  save();changed();
+}
+function setBolt(mon,n){const l=ledger(),v=int(n,99999);if(v)l.bolt[mon]=v;else delete l.bolt[mon];save();paintAll()}
+function setCfg(o){
+  const l=ledger(),c=l.cfg;
+  const v=(x,d)=>{const n=Number(String(x==null?'':x).replace(',','.'));return fin(n)&&n>=1&&n<=100?n:d};
+  if(o.orange!=null)c.orange=v(o.orange,c.orange);
+  if(o.red!=null)c.red=v(o.red,c.red);
+  if(c.red>c.orange){if(o.red!=null&&o.orange==null)c.orange=c.red;else c.red=c.orange}
+  if(o.grace!=null){const g=Math.round(Number(String(o.grace).replace(',','.')));if(fin(g)&&g>=0&&g<=15)c.grace=g}
+  save();changed();
+}
+function changed(){try{paintAll()}catch(e){}}
+
+/* ---------------- dibujo: estilos ---------------- */
+const CSS=''
++'.z-g{color:#22c55e}.z-o{color:#f59e0b}.z-r{color:#ef4444}.z-n{opacity:.75}'
++'body.lt .z-g{color:#15803d}body.lt .z-o{color:#b45309}body.lt .z-r{color:#b91c1c}'
++'body.lt #tripSheet .z-g,body.lt #tripBar .z-g{color:#4ade80}body.lt #tripSheet .z-o,body.lt #tripBar .z-o{color:#fbbf24}body.lt #tripSheet .z-r,body.lt #tripBar .z-r{color:#f87171}'
+/* línea en la lista y detalle de cada viaje */
++'#tripSheet .rt-line{display:flex;align-items:center;gap:8px;width:100%;margin:0;padding:9px 12px;border:0;border-bottom:1px solid #1e3a66;background:#0a1a30;color:#cfe0ff;font:600 14px system-ui;text-align:left;cursor:pointer}'
++'#tripSheet .rt-line b{font-size:16px}#tripSheet .rt-line .go{margin-left:auto;opacity:.7}'
++'#tripSheet .rt-line.z-o{box-shadow:inset 4px 0 0 #f59e0b}#tripSheet .rt-line.z-r{box-shadow:inset 4px 0 0 #ef4444}'
++'#tripSheet .rt-line.z-g,#tripSheet .rt-line.z-o,#tripSheet .rt-line.z-r,#tripSheet .rt-line.z-n{color:#cfe0ff;opacity:1}'
++'#tripSheet .rt-res{border:1px solid #2b4d85;background:#081426;border-radius:14px;padding:10px 12px;margin:0 0 10px}'
++'#tripSheet .rt-res .rt-h{font-weight:700;margin:0 0 8px;color:#9cc3ff;font-size:14px}'
++'#tripSheet .rt-btns{display:grid;grid-template-columns:1fr 1fr;gap:6px}'
++'#tripSheet .rt-btns button{border:1px solid #2b4d85;background:#0b1a33;border-radius:12px;padding:10px 4px;font:700 13px system-ui;color:#fff;cursor:pointer}'
++'#tripSheet .rt-btns button.on{background:#1d4ed8;border-color:#60a5fa}'
++'#tripSheet .rt-btns button.on.bad{background:#b45309;border-color:#f59e0b}'
++'#tripSheet .rt-btns button.on.free{background:#15803d;border-color:#4ade80}'
++'#tripSheet .rt-link{display:block;margin:8px 0 0;background:none;border:0;color:#9cb4d6;font:600 12px system-ui;text-decoration:underline;cursor:pointer;padding:4px 0}'
++'#tripSheet .rt-link.on{color:#fbbf24}'
++'#tripSheet .rt-tag{margin-left:6px;padding:1px 6px;border-radius:8px;background:#b45309;color:#fff;font:700 11px system-ui}'
++'#tripSheet .rt-tag.free{background:#15803d}'
++'#tripBar #tripBarTxt{min-width:0}'
++'#tripBar .rt-bar{margin-top:3px;font-size:13px;font-weight:700;line-height:1.25;overflow-wrap:anywhere}'
++'#tripBar .rt-bar span{white-space:nowrap}#tripBar .rt-bar span.z-n{white-space:normal}'
+/* aviso que salta al cancelar o dejar pasar */
++'#rateBanner{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 8px);width:min(94%,440px);box-sizing:border-box;z-index:100025;display:none;border:2px solid #f59e0b;border-radius:20px;padding:10px 12px;color:#fff;font:15px/1.3 system-ui;box-shadow:0 8px 26px #000a;cursor:pointer;background:linear-gradient(#2c1704,#150b03)}'
++'#rateBanner.rb-r{border-color:#ef4444;background:linear-gradient(#32060d,#170308)}#rateBanner.rb-g{border-color:#22c55e;background:linear-gradient(#042a12,#021508)}#rateBanner.rb-n{border-color:#3b82f6;background:linear-gradient(#0b1c44,#08163a)}'
++'#rateBanner .rb-row{display:flex;align-items:center;gap:10px}#rateBanner .rb-ico{flex:none;width:34px;text-align:center;font-size:30px;line-height:1}'
++'#rateBanner.rb-o .rb-ico{color:#f59e0b}#rateBanner.rb-r .rb-ico{color:#ef4444}#rateBanner.rb-g .rb-ico{color:#22c55e}#rateBanner.rb-n .rb-ico{color:#60a5fa}'
++'#rateBanner .rb-tx{flex:1;min-width:0}#rateBanner .rb-t{font-weight:800;font-size:16px;letter-spacing:.3px}#rateBanner .rb-s{font-size:13px;color:#e5e7eb;margin-top:2px}#rateBanner .rb-s b{color:#fbbf24}'
++'#rateBanner.rb-r .rb-s b{color:#ff8892}#rateBanner.rb-g .rb-s b{color:#86efac}'
++'#rateBanner .rb-pc{flex:none;border:2px solid currentColor;border-radius:14px;padding:5px 9px;font-weight:800;font-size:20px;white-space:nowrap}'
++'#rateBanner.rb-o .rb-pc{color:#fcd34d}#rateBanner.rb-r .rb-pc{color:#fca5a5}#rateBanner.rb-g .rb-pc{color:#bbf7d0}#rateBanner.rb-n .rb-pc{color:#bfdbfe}'
++'#rateBanner .rb-mini{display:flex;gap:8px;margin-top:8px}#rateBanner .rb-mini div{flex:1;border:1px solid #24407a;border-radius:12px;padding:5px 9px;font-size:13px;background:#08163a99}#rateBanner .rb-mini b{float:right;font-size:16px}'
+/* pregunta al borrar un viaje aceptado */
++'#rateAsk{position:fixed;left:50%;transform:translateX(-50%);width:min(94%,440px);box-sizing:border-box;z-index:100030;display:none;border:2px solid #3b82f6;border-radius:20px;background:#0b1c44;color:#fff;padding:12px;font:15px/1.3 system-ui;box-shadow:0 10px 30px #000c}'
++'#rateAsk .ra-t{font-weight:800;font-size:17px;text-align:center}#rateAsk .ra-s{text-align:center;color:#9db6e6;font-size:13px;margin:2px 0 10px}'
++'#rateAsk .ra-x{position:absolute;right:8px;top:6px;width:34px;height:34px;border:0;border-radius:10px;background:transparent;color:#cfe0ff;font-size:22px;cursor:pointer}'
++'#rateAsk .ra-b{display:block;width:100%;margin:0 0 7px;padding:10px 10px;border-radius:14px;border:2px solid #3b82f6;background:#0a2a5e;color:#d3ecff;font:800 15px system-ui;text-align:center;cursor:pointer}'
++'#rateAsk .ra-b small{display:block;font:400 12px system-ui;margin-top:1px;opacity:.9}'
++'#rateAsk .ra-b.g{border-color:#22c55e;background:#0b3a1c;color:#c8ffd8}#rateAsk .ra-b.r{border-color:#ef4444;background:#4b0f1c;color:#ffd0d5}'
++'#rateAsk .ra-b.on{box-shadow:0 0 0 3px #fff6 inset}'
++'#rateAsk .ra-f{text-align:center;color:#9db6e6;font-size:12px;margin-top:2px}'
+/* la página «Tasa de finalización» */
++'#ratePage{--bg:#050d22;--card:#0a1a3d;--card2:#08163a;--ink:#fff;--mut:#9db6e6;--ln:#24407a;--g:#22e05a;--o:#ff9f1c;--r:#ff3b4e;--b:#34c3ff;--y:#ffd21f;--trk:#1b2a4d;--bt:#0a2f6e;--btl:#2f8cff;position:fixed;inset:0;z-index:100010;background:var(--bg);color:var(--ink);overflow:auto;-webkit-overflow-scrolling:touch;font:15px/1.3 system-ui,-apple-system,sans-serif}'
++'body.lt #ratePage{--bg:#f1f6fb;--card:#fff;--card2:#f8fbff;--ink:#0f172a;--mut:#475569;--ln:#cfe0f3;--g:#15803d;--o:#b45309;--r:#b91c1c;--b:#0369a1;--y:#a16207;--trk:#dbe7f3;--bt:#e0efff;--btl:#3b82f6}'
++'#ratePage .rp{max-width:520px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 40px;box-sizing:border-box}'
++'#ratePage button{font-family:inherit;cursor:pointer}'
++'#ratePage .rp-hd{display:flex;align-items:center;gap:10px;margin:4px 0 12px}'
++'#ratePage .rp-hd h1{flex:1;text-align:center;font-size:21px;margin:0;font-weight:800}'
++'#ratePage .rp-bk,#ratePage .rp-q{width:42px;height:42px;border-radius:50%;border:2px solid var(--btl);background:transparent;color:var(--ink);font-size:22px;line-height:1;padding:0}'
++'#ratePage .rp-q{color:var(--b);border-color:var(--b);font-weight:800}'
++'#ratePage .rp-help{border:1px solid var(--ln);background:var(--card2);border-radius:16px;padding:10px 14px;margin:0 0 12px;font-size:14px;line-height:1.45}#ratePage .rp-help p{margin:4px 0}'
++'#ratePage .rp-tabs{display:flex;gap:10px;margin:0 0 12px}'
++'#ratePage .rp-tabs button{flex:1;padding:12px 0;border-radius:16px;border:2px solid var(--ln);background:var(--card2);color:var(--ink);font-size:17px}'
++'#ratePage .rp-tabs button.on{background:linear-gradient(#1b6bff,#0b45c9);border-color:#7fb3ff;color:#fff;font-weight:800}'
++'#ratePage .rp-card{border:2px solid var(--ln);border-radius:20px;background:var(--card);padding:12px 14px;margin:0 0 12px}'
++'#ratePage .rp-card.z-g{border-color:var(--g)}#ratePage .rp-card.z-o{border-color:var(--o)}#ratePage .rp-card.z-r{border-color:var(--r)}'
++'#ratePage .rp-top{display:flex;align-items:center;gap:8px;margin:0 0 10px}'
++'#ratePage .rp-ttl{flex:1;font-weight:800;font-size:16px;line-height:1.2}'
++'#ratePage .rp-nav{width:34px;height:34px;border-radius:10px;border:1px solid var(--ln);background:transparent;color:var(--ink);font-size:20px;line-height:1;padding:0}#ratePage .rp-nav:disabled{opacity:.3}'
++'#ratePage .rp-chip{flex:none;border:2px solid var(--mut);color:var(--mut);border-radius:16px;padding:3px 10px;font-size:13px;font-weight:800;white-space:nowrap}'
++'#ratePage .rp-chip.z-g{border-color:var(--g);color:var(--g)}#ratePage .rp-chip.z-o{border-color:var(--o);color:var(--o)}#ratePage .rp-chip.z-r{border-color:var(--r);color:var(--r)}'
++'#ratePage .z-g{color:var(--g)}#ratePage .z-o{color:var(--o)}#ratePage .z-r{color:var(--r)}#ratePage .z-n{color:var(--mut);opacity:1}'
++'#ratePage .rp-main{display:flex;align-items:center;gap:14px}'
++'#ratePage .rp-ring{width:124px;height:124px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;position:relative;background:conic-gradient(var(--c,var(--mut)) calc(var(--p,0)*1%),var(--trk) 0)}'
++'#ratePage .rp-ring:after{content:"";position:absolute;inset:11px;border-radius:50%;background:var(--card)}'
++'#ratePage .rp-ring .in{position:relative;z-index:1;text-align:center}#ratePage .rp-ring b{display:block;font-size:24px;line-height:1.05;font-variant-numeric:tabular-nums}#ratePage .rp-ring span{font-size:13px;color:var(--mut)}'
++'#ratePage .rp-kv{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;font-size:14px}'
++'#ratePage .rp-kv div{display:flex;align-items:center;gap:8px}#ratePage .rp-kv i{width:12px;height:12px;border-radius:50%;flex:none}#ratePage .rp-kv em{font-style:normal;flex:1;line-height:1.1}#ratePage .rp-kv b{font-size:16px;font-variant-numeric:tabular-nums}'
++'#ratePage .rp-kv small{display:block;font-size:11px;color:var(--mut)}'
++'#ratePage .rp-sm{font-size:12px;color:var(--mut);margin:8px 0 0}'
++'#ratePage .rp-mar{border:2px solid var(--mut);border-radius:14px;padding:9px 12px;font-size:14px;text-align:center;margin:0 0 12px;line-height:1.35}'
++'#ratePage .rp-mar.z-g{border-color:var(--g)}#ratePage .rp-mar.z-o{border-color:var(--o)}#ratePage .rp-mar.z-r{border-color:var(--r)}'
++'#ratePage h2{font-size:16px;margin:4px 2px 8px;font-weight:800}'
++'#ratePage .rp-days{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin:0 0 10px}'
++'#ratePage .rp-d{border:2px solid var(--ln);border-radius:12px;padding:6px 0;background:var(--card2);color:var(--mut);font-size:11px;text-align:center;line-height:1.25}'
++'#ratePage .rp-d b{display:block;font-size:14px;color:var(--ink)}#ratePage .rp-d.on{border-color:var(--b);background:var(--bt);box-shadow:0 0 10px #34c3ff66}#ratePage .rp-d.off{opacity:.4}#ratePage .rp-d.hoy:after{content:"hoy";display:block;font-size:10px;color:var(--y)}'
++'#ratePage .rp-ed{display:flex;align-items:center;gap:7px;border:2px solid var(--ln);border-radius:14px;padding:7px 9px;margin:0 0 7px;background:var(--card2)}'
++'#ratePage .rp-ed .ic{width:26px;height:26px;border-radius:50%;flex:none;text-align:center;line-height:26px;font-size:15px;font-weight:800;color:#04122e}'
++'#ratePage .rp-ed .n{flex:1;min-width:0;line-height:1.15;font-size:14px}#ratePage .rp-ed .n small{display:block;font-size:11px;color:var(--mut)}'
++'#ratePage .rp-ed .v{min-width:38px;text-align:right;font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}'
++'#ratePage .rp-ed input{width:70px;text-align:right;background:var(--card);color:var(--ink);border:2px solid var(--btl);border-radius:10px;padding:6px 8px;font:800 18px system-ui}'
++'#ratePage .bt{width:42px;height:38px;border-radius:11px;font-size:22px;font-weight:800;line-height:1;padding:0;flex:none;border:2px solid}'
++'#ratePage .bt.m{border-color:var(--r);background:#4b0f1c;color:#ff9aa5}#ratePage .bt.p{border-color:var(--g);background:#0b4a1e;color:#b8ffcb}#ratePage .bt.e,#ratePage .bt.ok{border-color:var(--btl);background:var(--bt);color:var(--ink);font-size:17px}#ratePage .bt.ok{width:auto;padding:0 12px}'
++'body.lt #ratePage .bt.m{background:#fee2e2;color:#991b1b}body.lt #ratePage .bt.p{background:#dcfce7;color:#166534}'
++'#ratePage .rp-note{border:1px solid var(--ln);border-radius:12px;padding:8px 12px;font-size:12px;color:var(--mut);text-align:center;margin:2px 0 12px}'
++'#ratePage .rp-wk{display:flex;align-items:center;gap:10px;width:100%;border:2px solid var(--ln);border-radius:14px;padding:9px 12px;margin:0 0 7px;background:var(--card2);color:var(--ink);font-size:14px;text-align:left}'
++'#ratePage .rp-wk span{width:92px;flex:none}#ratePage .rp-wk .bar{flex:1;height:12px;border-radius:6px;background:var(--trk);overflow:hidden}#ratePage .rp-wk .bar u{display:block;height:100%;background:var(--mut)}'
++'#ratePage .rp-wk .bar u.z-g{background:var(--g)}#ratePage .rp-wk .bar u.z-o{background:var(--o)}#ratePage .rp-wk .bar u.z-r{background:var(--r)}#ratePage .rp-wk b{width:62px;text-align:right}'
++'#ratePage .rp-lim{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:14px}#ratePage .rp-lim i{width:14px;height:14px;border-radius:50%;flex:none}#ratePage .rp-lim em{font-style:normal;flex:1;line-height:1.15}#ratePage .rp-lim b{min-width:56px;text-align:center;font-size:17px}'
++'#ratePage details{border:1px solid var(--ln);border-radius:14px;padding:8px 12px;margin:0 0 12px}#ratePage summary{font-weight:700;cursor:pointer;padding:4px 0}'
++'#ratePage .rp-in{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:5px 0;font-size:14px}'
++'#ratePage .rp-in input{width:84px;text-align:right;background:var(--card);color:var(--ink);border:1px solid var(--btl);border-radius:10px;padding:8px;font:700 15px system-ui}'
++'#ratePage .rp-b{display:block;width:100%;margin:8px 0 0;padding:11px;border-radius:12px;border:1px solid var(--btl);background:transparent;color:var(--ink);font-weight:700;font-size:15px}'
++'#ratePage .rp-100{display:flex;align-items:center;gap:10px}#ratePage .rp-100 b{font-size:30px;font-weight:800}'
+/* fila de Ajustes */
++'.settings-option.rateopt small b{font-weight:800}';
+function ensureCss(){if($('#rateCss'))return;const s=document.createElement('style');s.id='rateCss';s.textContent=CSS;document.head.appendChild(s)}
+
+/* ---------------- datos de la semana actual ---------------- */
+function weekInfo(){const k=weekKey(clock()),keys=wkKeys(k),c=calc(sumKeys(keys)),l=ledger();return {k,keys,c,z:zone(c.rate,l.cfg,c.den),cfg:l.cfg}}
+function marginText(c,cfg){
+  const k=margin(c,cfg.red);if(k==null)return '';
+  if(k>=1)return 'puedes dejar pasar '+k+(k===1?' oferta':' ofertas')+' más sin bajar de '+cfg.red+' %';
+  if(k===0)return 'no puedes dejar pasar ninguna más sin bajar de '+cfg.red+' %';
+  const m=recover(c,cfg.red);return 'estás por debajo de '+cfg.red+' %'+(m?': necesitas hacer '+m+(m===1?' viaje':' viajes')+' seguidos para volver':'');
+}
+const ZCHIP={g:'✓ En buen nivel',o:'⚠ Cerca del mínimo',r:'⚠ Por debajo del mínimo',n:'Pocos datos'};
+
+/* ---------------- aviso grande al cancelar o dejar pasar ---------------- */
+let bannerT=null;
+function banner(kind){
+  ensureCss();
+  const i=weekInfo(),c=i.c,z=i.z;
+  let cls,title,msg,ico;
+  if(kind==='free'){cls='g';title='SIN PENALIZACIÓN';msg='El pasajero canceló enseguida.<br><b>Tu tasa no cambia.</b>';ico='✓'}
+  else{
+    cls=z;title=z==='r'?'POR DEBAJO DEL MÍNIMO':'ACTUALIZACIÓN DE TASA';
+    const what=kind==='pass'?'Has dejado pasar una oferta que cuenta.':'Has registrado una cancelación.';
+    let extra='';
+    if(z==='r'){const m=recover(c,i.cfg.red);if(m)extra='<br><b>Necesitas '+m+(m===1?' viaje hecho':' viajes hechos')+' seguidos</b> para volver a '+i.cfg.red+' %'}
+    msg='Tasa semanal actualizada<br><b>'+what+'</b>'+extra;ico=z==='g'?'✓':z==='n'?'ⓘ':'⚠';
+  }
+  let b=$('#rateBanner');
+  if(!b){b=document.createElement('div');b.id='rateBanner';b.setAttribute('data-rt','banner');document.body.appendChild(b)}
+  b.className='rb-'+cls;
+  b.innerHTML='<div class="rb-row"><div class="rb-ico">'+ico+'</div><div class="rb-tx"><div class="rb-t">'+title+'</div><div class="rb-s">'+msg+'</div></div><div class="rb-pc">'+pc(c.rate)+'</div></div>'
+    +'<div class="rb-mini"><div>Viajes finalizados <b>'+c.num+'</b></div><div>Ofertas que cuentan <b>'+c.den+'</b></div></div>';
+  b.style.display='block';
+  clearTimeout(bannerT);bannerT=setTimeout(hideBanner,7000);
+  try{if(navigator.vibrate)navigator.vibrate(cls==='r'?[200,100,200]:cls==='o'?[120]:40)}catch(e){}
+}
+function hideBanner(){const b=$('#rateBanner');if(b)b.style.display='none';clearTimeout(bannerT)}
+
+/* ---------------- pregunta al borrar un viaje aceptado ---------------- */
+let askS=null,askT=null;
+const NAVH=()=>{const n=document.querySelector('nav.neon-nav');return n&&n.offsetHeight?n.offsetHeight:64};
+function agoText(ms){
+  const s=Math.max(0,Math.round(ms/1000));
+  if(s<60)return s+' s';
+  const m=Math.floor(s/60);
+  if(m<10)return m+' min '+(s%60)+' s';
+  if(m<60)return m+' min';
+  return Math.floor(m/60)+' h '+pad(m%60)+' min';
+}
+function askHtml(){
+  const t=askS.t,res=t.rt.res||null,fast=askS.mode==='fast',g=ledger().cfg.grace,ago=agoText(clock()-(t.rt.at||0));
+  const b=(v,cls,txt,sub)=>'<button type="button" class="ra-b '+cls+((v==='ok'?res===null:res===v)?' on':'')+'" data-rt="ask" data-v="'+v+'">'+txt+'<small>'+sub+'</small></button>';
+  let h='<button type="button" class="ra-x" data-rt="askx" aria-label="Cerrar">×</button>';
+  if(fast){
+    h+='<div class="ra-t">¿Qué pasó con este viaje?</div><div class="ra-s">Aceptado hace '+ago+'</div>';
+    h+=b('g','g','Canceló el pasajero','Menos de '+g+' min → sin penalización')+b('c1','r','Cancelé yo','Baja la tasa')+b('n','','Me equivoqué con el ✓','No cuenta nada');
+    h+='<div class="ra-f">Mientras no contestes, cuenta como «Cancelé yo».</div>';
+  }else{
+    h+='<div class="ra-t">Cuenta como «'+(res==='c2'?'Canceló el pasajero':'Cancelé yo')+'»</div><div class="ra-s">Aceptado hace '+ago+' · ¿es otra cosa?</div>';
+    h+=b('c2','r','Canceló el pasajero','Baja la tasa')+b('ok','g','Lo hice','Solo estoy limpiando la lista')+b('n','','Me equivoqué con el ✓','No cuenta nada');
+  }
+  return h;
+}
+function ask(t,mode){
+  ensureCss();
+  askS={t,mode};
+  let a=$('#rateAsk');
+  if(!a){a=document.createElement('div');a.id='rateAsk';document.body.appendChild(a)}
+  a.style.bottom=(NAVH()+8)+'px';
+  a.innerHTML=askHtml();a.style.display='block';
+  clearTimeout(askT);
+  if(mode==='slow')askT=setTimeout(closeAsk,8000);
+}
+function closeAsk(){askS=null;clearTimeout(askT);const a=$('#rateAsk');if(a)a.style.display='none'}
+function answer(v){
+  if(!askS)return;
+  const t=askS.t;
+  setRes(t,v==='ok'?null:v);
+  closeAsk();
+  if(v==='g')banner('free');
+  else if(isCancel(v))banner('cancel');
+  else hideBanner();
+}
+
+/* ---------------- lengüeta de viajes guardados: línea, detalle, barra ---------------- */
+function lineHtml(){
+  const i=weekInfo();
+  if(i.c.rate==null)return '<button id="rateLine" class="rt-line z-n" data-rt="open" type="button"><span>Tasa de finalización: aún sin datos esta semana</span><span class="go">›</span></button>';
+  const k=margin(i.c,i.cfg.red);
+  return '<button id="rateLine" class="rt-line z-'+i.z+'" data-rt="open" type="button"><span class="z-'+i.z+'">●</span><span>Semana: <b class="z-'+i.z+'">'+pc(i.c.rate)+'</b></span><span>· mín. '+i.cfg.red+(k!=null?' · margen '+k:'')+'</span><span class="go">›</span></button>';
+}
+let curView=null;
+function onPaint(view){
+  curView=view||null;
+  const sh=$('#tripSheet');if(!sh||!view)return;
+  ensureCss();
+  if(view.name==='list'){
+    const th=sh.querySelector('.th');
+    if(th&&!sh.querySelector('#rateLine'))th.insertAdjacentHTML('afterend',lineHtml());
+  }
+  if(view.name==='detail'){
+    const tb=sh.querySelector('.tb');
+    if(tb&&!sh.querySelector('#rateRes'))tb.insertAdjacentHTML('afterbegin','<div id="rateRes" class="rt-res"></div>');
+    paintRes();
+  }
+  decorateRows(sh);
+}
+function paintRes(){
+  const box=$('#rateRes');if(!box||!curView)return;
+  const t=findTrip(curView.id);
+  if(!t||!t.rt){box.innerHTML='<div class="rt-h">Tasa de finalización</div><small style="color:#9cb4d6;font-size:12px">Este viaje es anterior a la tasa propia: no se puede marcar cómo acabó.</small>';return}
+  const r=t.rt.res||null,b=(v,txt,cls)=>'<button type="button" data-rt="res" data-v="'+v+'" class="'+(r===(v||null)?'on':'')+(cls?' '+cls:'')+'">'+txt+'</button>';
+  box.innerHTML='<div class="rt-h">¿Cómo acabó este viaje?</div><div class="rt-btns">'+b('','Hecho')+b('c1','Cancelé yo','bad')+b('c2','Canceló el pasajero','bad')+b('g','Pasajero: sin penalización','free')+'</div>'
+    +'<button type="button" data-rt="res" data-v="n" class="rt-link'+(r==='n'?' on':'')+'">'+(r==='n'?'✓ Contado como no hecho (toca para deshacer)':'Me equivoqué con el ✓: no lo hice')+'</button>';
+}
+function decorateRows(sh){
+  const T=TR();if(!T)return;
+  sh.querySelectorAll('button.row[data-a="trip"][data-id]').forEach(row=>{
+    const t=findTrip(row.getAttribute('data-id'));
+    const res=t&&t.rt&&t.rt.res;if(!res)return;
+    const n=row.querySelector('.n');if(!n||n.querySelector('.rt-tag'))return;
+    n.insertAdjacentHTML('beforeend','<span class="rt-tag'+(res==='g'?' free':'')+'">'+(res==='c1'?'cancelé':res==='c2'?'canceló pasajero':res==='g'?'sin penalización':'no hecho')+'</span>');
+  });
+}
+/* la barra ✗ / ✓: dice qué pasa con tu tasa si dejas pasar la oferta o la haces */
+let barCur=null;
+function barHint(){
+  const tx=$('#tripBarTxt'),bar=$('#tripBar');
+  if(!tx||!bar||!barCur||bar.style.display==='none')return;
+  let el=tx.querySelector('.rt-bar');if(!el){el=document.createElement('div');el.className='rt-bar';tx.appendChild(el)}
+  const i=weekInfo(),nx=!!(barCur.offer&&FLAG[barCur.offer.seq]);
+  if(i.c.rate==null&&!nx){el.innerHTML='';return}
+  if(!nx&&i.c.den<MINB){el.innerHTML='<span class="z-n">Pocas ofertas esta semana para calcular</span>';bar.style.borderColor='';return}
+  const wi=whatIf(i.c,nx);
+  const zl=zone(wi.leave,i.cfg,i.c.den);
+  let h;
+  if(nx)h='<span class="z-n">Fuera de radio: dejarla no cuenta</span> · <span>Hacerla: '+pc(wi.doit)+'</span>';
+  else h='<span class="z-'+zl+'">'+(zl==='r'?'⚠ ':zl==='o'?'▲ ':'')+'Dejarla: '+pc(wi.leave)+'</span> · <span class="z-'+zone(wi.doit,i.cfg,i.c.den)+'">Hacerla: '+pc(wi.doit)+'</span>';
+  el.innerHTML=h;
+  bar.style.borderColor=(!nx&&zl==='r')?'#ef4444':(!nx&&zl==='o')?'#f59e0b':'';
+}
+function onBar(cur){barCur=cur;ensureCss();barHint();poll().then(()=>{if(barCur===cur)barHint()})}
+
+/* ---------------- Ajustes: fila «Tasa de finalización» ---------------- */
+function rowSub(){
+  const i=weekInfo();
+  if(i.c.rate==null)return 'Controla tu porcentaje de finalización';
+  return 'Esta semana <b class="z-'+i.z+'">'+pc(i.c.rate)+'</b> · mínimo '+i.cfg.red+' %';
+}
+function injectCard(){
+  const content=$('#content');if(!content)return;
+  const t=content.querySelector('.section-title');
+  if(!t||!/Ajustes/.test(t.textContent))return;
+  const menu=content.querySelector('.settings-menu');if(!menu)return;
+  ensureCss();
+  let row=$('#rateRow');
+  if(!row){
+    row=document.createElement('button');row.id='rateRow';row.type='button';row.className='settings-option rateopt';row.setAttribute('data-rt','open');
+    row.innerHTML='<span class="ico">📊</span><span><b>Tasa de finalización</b><small></small></span><span style="margin-left:auto;font-size:24px;color:#7b8794">›</span>';
+    menu.insertAdjacentElement('afterbegin',row);
+  }
+  const s=row.querySelector('small'),h=rowSub();
+  if(s&&row._h!==h){s.innerHTML=h;row._h=h}
+}
+
+/* ---------------- la página «Tasa de finalización» ---------------- */
+let pg=null;
+function newPg(){return {tab:'w',wk:weekKey(clock()),mk:dkey(clock()).slice(0,7),day:null,edit:null,help:false}}
+const dayRow=(k,which,ic,col,name,val,sub)=>{
+  const ed=pg.edit&&pg.edit.k===k&&pg.edit.w===which;
+  let h='<div class="rp-ed"><span class="ic" style="background:var(--'+col+')">'+ic+'</span><div class="n">'+name+(sub?'<small>'+sub+'</small>':'')+'</div>';
+  if(ed)h+='<input type="number" inputmode="numeric" id="rpIn" min="0" value="'+val+'"><button type="button" class="bt ok" data-rt="ok" data-v="'+which+'">OK</button>';
+  else h+='<div class="v">'+val+'</div><button type="button" class="bt m" data-rt="dec" data-v="'+which+'" aria-label="Quitar uno"'+(val>0?'':' disabled')+'>−</button><button type="button" class="bt p" data-rt="inc" data-v="'+which+'" aria-label="Sumar uno">+</button><button type="button" class="bt e" data-rt="edit" data-v="'+which+'" aria-label="Escribir el número">✎</button>';
+  return h+'</div>';
+};
+function ringHtml(c,z,label){
+  const col=z==='g'?'var(--g)':z==='o'?'var(--o)':z==='r'?'var(--r)':'var(--mut)';
+  return '<div class="rp-ring" style="--p:'+(c.rate==null?0:Math.min(100,r1(c.rate)))+';--c:'+col+'"><div class="in"><b>'+(c.rate==null?'—':pc(c.rate))+'</b><span>'+label+'</span></div></div>';
+}
+function weekHtml(){
+  const l=ledger(),cfg=l.cfg,mon=pg.wk,keys=wkKeys(mon),today=dkey(clock()),curMon=weekKey(clock());
+  const c=calc(sumKeys(keys)),z=zone(c.rate,cfg,c.den);
+  if(!pg.day||keys.indexOf(pg.day)<0)pg.day=keys.indexOf(today)>=0?today:mon;
+  const isCur=mon===curMon;
+  const title=isCur?'Esta semana ('+dshort(mon)+' – '+dshort(keys[6])+')':'Semana del '+dshort(mon)+' al '+dshort(keys[6]);
+  let h='<div class="rp-card z-'+z+'"><div class="rp-top"><button type="button" class="rp-nav" data-rt="wprev" aria-label="Semana anterior">‹</button><div class="rp-ttl">'+title+'</div><button type="button" class="rp-nav" data-rt="wnext" aria-label="Semana siguiente"'+(isCur?' disabled':'')+'>›</button></div>';
+  h+='<div class="rp-top" style="margin-top:-2px"><span class="rp-chip z-'+z+'">'+ZCHIP[z]+'</span></div>';
+  h+='<div class="rp-main">'+ringHtml(c,z,'Total')+'<div class="rp-kv">'
+    +'<div><i style="background:var(--ink);opacity:.7"></i><em>Recibidas</em><b>'+c.recv+'</b></div>'
+    +'<div><i style="background:var(--y)"></i><em>Con aviso'+(c.nxAcc?'<small>'+c.nxAcc+(c.nxAcc===1?' la acepté: ya cuenta':' las acepté: ya cuentan')+'</small>':'')+'</em><b>'+c.nxShow+'</b></div>'
+    +'<div><i style="background:var(--b)"></i><em>Cuentan</em><b>'+c.den+'</b></div>'
+    +'<div><i style="background:var(--g)"></i><em>Finalizados</em><b>'+c.num+'</b></div>'
+    +'<div><i style="background:var(--r)"></i><em>Rechaz./Cancel.</em><b>'+c.rej+'</b></div>'
+    +(c.free?'<div><i style="background:var(--mut)"></i><em>Sin penalización</em><b>'+c.free+'</b></div>':'')
+    +'</div></div>';
+  const bo=l.bolt[mon]||0;
+  if(bo>0)h+='<div class="rp-sm">Bolt dice '+bo+' entradas esta semana · el lector vio '+c.recv+' ('+Math.round(c.recv/bo*100)+' %)</div>';
+  h+='</div>';
+  if(c.rate!=null){
+    const mt=marginText(c,cfg);
+    h+='<div class="rp-mar z-'+z+'">'+(z==='r'?'⚠ ':z==='o'?'▲ ':'')+cap(mt)+'</div>';
+  }
+  h+='<h2>Toca un día para editarlo</h2><div class="rp-days">';
+  keys.forEach((k,i)=>{
+    const fut=k>today,dc=calc(peek(k)||zero());
+    h+='<'+(fut?'div':'button type="button" data-rt="day" data-v="'+k+'"')+' class="rp-d'+(k===pg.day?' on':'')+(fut?' off':'')+(k===today?' hoy':'')+'"><b>'+WDS[i]+'</b>'+(fut||!dc.den?'—':dc.num+'/'+dc.den)+'</'+(fut?'div':'button')+'>';
+  });
+  h+='</div>';
+  const dv=dayVals(pg.day),dn=cap(WD[wdi(pg.day)])+' '+dshort(pg.day);
+  h+=dayRow(pg.day,'f','✓','g','Finalizados',dv.f,dn)+dayRow(pg.day,'x','✗','r','Rechazados / Cancelados',dv.x,'')+dayRow(pg.day,'n','!','y','Ofertas con aviso (sin aceptar)',dv.n,'');
+  const dc=calc(peek(pg.day)||zero());
+  h+='<div class="rp-note">«Cuentan» se calcula sola: finalizados + rechazados/cancelados ('+dc.num+' + '+dc.rej+' = '+dc.den+')</div>';
+  return h;
+}
+function monthHtml(){
+  const l=ledger(),cfg=l.cfg,ym=pg.mk,keys=monthKeys(ym),curYm=dkey(clock()).slice(0,7);
+  const c=calc(sumKeys(keys)),z=zone(c.rate,cfg,c.den),p=ym.split('-').map(Number),ws=winStats();
+  let h='<div class="rp-card z-'+z+'"><div class="rp-top"><button type="button" class="rp-nav" data-rt="mprev" aria-label="Mes anterior">‹</button><div class="rp-ttl">'+cap(MONTHS[p[1]-1])+' '+p[0]+'</div><button type="button" class="rp-nav" data-rt="mnext" aria-label="Mes siguiente"'+(ym===curYm?' disabled':'')+'>›</button></div>';
+  h+='<div class="rp-top" style="margin-top:-2px"><span class="rp-chip z-'+z+'">'+ZCHIP[z]+'</span></div>';
+  h+='<div class="rp-main">'+ringHtml(c,z,'Mes')+'<div class="rp-kv">'
+    +'<div><i style="background:var(--g)"></i><em>Finalizados</em><b>'+c.num+'</b></div>'
+    +'<div><i style="background:var(--b)"></i><em>Cuentan</em><b>'+c.den+'</b></div>'
+    +'<div><i style="background:var(--r)"></i><em>Rechaz./Cancel.</em><b>'+c.rej+'</b></div></div></div></div>';
+  h+='<h2>Semana por semana</h2>';
+  const groups=[];let cur=null;
+  for(const k of keys){const m=monOf(k);if(!cur||cur.m!==m){cur={m,keys:[]};groups.push(cur)}cur.keys.push(k)}
+  for(const g of groups){
+    const gc=calc(sumKeys(g.keys)),gz=zone(gc.rate,cfg,gc.den),a=g.keys[0],b=g.keys[g.keys.length-1];
+    const lab=g.keys.length===1?WDS[wdi(a)]+' '+(+a.slice(8)):(+a.slice(8))+' – '+dshort(b);
+    h+='<button type="button" class="rp-wk" data-rt="goweek" data-v="'+g.m+'"><span>'+lab+'</span><div class="bar"><u class="z-'+gz+'" style="width:'+(gc.rate==null?0:Math.min(100,r1(gc.rate)))+'%"></u></div><b class="z-'+gz+'">'+(gc.rate==null?'—':pc(gc.rate))+'</b></button>';
+  }
+  h+='<div class="rp-card" style="margin-top:12px"><div class="rp-100"><div class="rp-ttl">Últimos 100 viajes<br><span style="font-weight:400;font-size:12px;color:var(--mut)">(como te lo enseña Bolt)</span></div><b class="'+(ws.q==null?'z-n':'z-g')+'">'+(ws.q==null?'—':Math.round(ws.q)+' %')+'</b></div>'
+    +(ws.n?'<div class="rp-sm">Cancelé yo '+pc(ws.cp)+' · Canceló el pasajero '+pc(ws.pp)+' · '+ws.n+' viajes contados</div>':'<div class="rp-sm">Aún sin datos. Pon abajo tus cifras de Bolt como punto de partida.</div>')+'</div>';
+  h+='<div class="rp-note">El mensual es solo para mirar. Los datos se editan en «Semanal», día por día.</div>';
+  return h;
+}
+const HELP='<p><b>Cómo cuenta la app</b></p>'
+  +'<p>• Toda oferta que entra suma a <b>Recibidas</b>.</p>'
+  +'<p>• Si trae el cartel «no te afectará», suma también a <b>Con aviso</b> y no cuenta. Si la aceptas con ✓, pasa a contar.</p>'
+  +'<p>• Sin cartel y sin ✓: cuenta como no aceptada y baja la tasa.</p>'
+  +'<p>• ✓ y la haces: sube. ✓ y luego la borras de la lista: es una cancelación y baja.</p>'
+  +'<p>• Si el cliente cancela en pocos minutos (los eliges abajo) no penaliza.</p>'
+  +'<p>• Es una estimación tuya: Bolt no enseña su tasa interna. Los datos se quedan en el móvil.</p>';
+function pageHtml(){
+  const l=ledger(),cfg=l.cfg;
+  let h='<div class="rp"><div class="rp-hd"><button type="button" class="rp-bk" data-rt="close" aria-label="Volver">‹</button><h1>Tasa de finalización</h1><button type="button" class="rp-q" data-rt="help" aria-label="Ayuda">?</button></div>';
+  if(pg.help)h+='<div class="rp-help">'+HELP+'</div>';
+  h+='<div class="rp-tabs"><button type="button" data-rt="tab" data-v="w" class="'+(pg.tab==='w'?'on':'')+'">Semanal</button><button type="button" data-rt="tab" data-v="m" class="'+(pg.tab==='m'?'on':'')+'">Mensual</button></div>';
+  h+=pg.tab==='w'?weekHtml():monthHtml();
+  const step=(id,col,txt,val,unit)=>'<div class="rp-lim"><i style="background:var(--'+col+')"></i><em>'+txt+'</em><button type="button" class="bt m" data-rt="cfg" data-v="'+id+'" data-d="-1" aria-label="Menos">−</button><b>'+val+unit+'</b><button type="button" class="bt p" data-rt="cfg" data-v="'+id+'" data-d="1" aria-label="Más">+</button></div>';
+  h+='<div class="rp-card"><div class="rp-ttl" style="margin-bottom:8px">Avisos y límites</div>'
+    +step('orange','o','Aviso naranja desde',cfg.orange,' %')+step('red','r','Aviso rojo por debajo de',cfg.red,' %')+step('grace','b','Minutos sin penalización si cancela el cliente',cfg.grace,' min')+'</div>';
+  const sd=l.seed||{},bo=l.bolt[pg.wk]||'';
+  h+='<details><summary>Últimos 100 y entradas de Bolt</summary>';
+  h+='<div class="rp-sm">Pon aquí tus cifras de la pantalla de calidad de servicio de Bolt (últimos 100):</div>';
+  h+='<div class="rp-in"><span>Terminados (ej. 93)</span><input type="number" inputmode="numeric" id="rtSF" value="'+(sd.f||'')+'" min="0" max="100"></div>';
+  h+='<div class="rp-in"><span>Cancelé yo (ej. 6)</span><input type="number" inputmode="numeric" id="rtSC" value="'+(sd.c||'')+'" min="0" max="100"></div>';
+  h+='<div class="rp-in"><span>Canceló el pasajero (ej. 1)</span><input type="number" inputmode="numeric" id="rtSP" value="'+(sd.p||'')+'" min="0" max="100"></div>';
+  h+='<button type="button" class="rp-b" data-rt="seed">Guardar los 100</button>';
+  h+='<div class="rp-sm" style="margin-top:14px">Entradas que dice Bolt para la semana que ves (opcional, para ver si el lector se dejó alguna):</div>';
+  h+='<div class="rp-in"><span>Entradas (ej. 302)</span><input type="number" inputmode="numeric" id="rtBolt" value="'+bo+'" min="0"></div>';
+  h+='<button type="button" class="rp-b" data-rt="bolt">Guardar entradas</button></details>';
+  h+='</div>';
+  return h;
+}
+function openPage(){
+  ensureCss();
+  if(!pg)pg=newPg();
+  let p=$('#ratePage');
+  if(!p){p=document.createElement('div');p.id='ratePage';p.setAttribute('role','dialog');document.body.appendChild(p)}
+  p.style.display='block';p.innerHTML=pageHtml();p.scrollTop=0;
+}
+function closePage(){const p=$('#ratePage');if(p)p.remove();pg=null}
+function paintPage(force){
+  const p=$('#ratePage');if(!p||!pg)return;
+  const a=document.activeElement;if(!force&&a&&p.contains(a)&&a.tagName==='INPUT'&&a.type!=='checkbox')return;
+  const y=p.scrollTop;p.innerHTML=pageHtml();p.scrollTop=y;
+  if(pg.edit){const i=$('#rpIn');if(i){i.focus();try{i.select()}catch(e){}}}
+}
+function paintAll(){
+  try{
+    const sh=$('#tripSheet');
+    if(sh&&sh.style.display!=='none'){
+      const old=sh.querySelector('#rateLine');
+      if(old&&curView&&curView.name==='list'){const h=lineHtml();if(old.outerHTML!==h)old.outerHTML=h}
+      if(curView&&curView.name==='detail')paintRes();
+    }
+    barHint();paintPage();injectCard();
+  }catch(e){}
+}
+
+/* ---------------- clics ---------------- */
+const num=id=>{const e=$('#'+id);return e?e.value:''};
+document.addEventListener('click',e=>{
+  const b=e.target&&e.target.closest?e.target.closest('[data-rt]'):null;if(!b)return;
+  const a=b.getAttribute('data-rt'),v=b.getAttribute('data-v');
+  try{
+    if(a==='open'||a==='banner'){if(a==='banner')hideBanner();openPage();return}
+    if(a==='close'){closePage();return}
+    if(a==='ask'){answer(v);return}
+    if(a==='askx'){closeAsk();return}
+    if(a==='res'){
+      const t=curView&&findTrip(curView.id);if(!t||!t.rt)return;
+      // tocar otra vez «no hecho» lo deshace
+      const res=(v==='n'&&t.rt.res==='n')?null:(v||null),prev=t.rt.res||null;
+      setRes(t,res);const T=TR();if(T&&T.save)T.save();paintRes();
+      if(res==='g')banner('free');else if(isCancel(res)&&!isCancel(prev))banner('cancel');
+      return;
+    }
+    if(!pg)return;
+    if(a==='help'){pg.help=!pg.help;paintPage(true);return}
+    if(a==='tab'){pg.tab=v==='m'?'m':'w';pg.edit=null;paintPage(true);return}
+    if(a==='wprev'){pg.wk=addD(pg.wk,-7);pg.day=null;pg.edit=null;paintPage(true);return}
+    if(a==='wnext'){if(pg.wk<weekKey(clock())){pg.wk=addD(pg.wk,7);pg.day=null;pg.edit=null}paintPage(true);return}
+    if(a==='mprev'){pg.mk=addM(pg.mk,-1);paintPage(true);return}
+    if(a==='mnext'){if(pg.mk<dkey(clock()).slice(0,7))pg.mk=addM(pg.mk,1);paintPage(true);return}
+    if(a==='goweek'){pg.tab='w';pg.wk=v;pg.day=null;pg.edit=null;paintPage(true);return}
+    if(a==='day'){pg.day=v;pg.edit=null;paintPage(true);return}
+    if(a==='inc'){bump(pg.day,v,1);paintPage(true);return}
+    if(a==='dec'){bump(pg.day,v,-1);paintPage(true);return}
+    if(a==='edit'){pg.edit={k:pg.day,w:v};paintPage(true);return}
+    if(a==='ok'){const x=num('rpIn');pg.edit=null;if(String(x).trim()!=='')setDay(pg.day,v,x);paintPage(true);return}
+    if(a==='cfg'){const c=ledger().cfg,d=Number(b.getAttribute('data-d'))||0;setCfg({[v]:(c[v]||0)+d});paintPage(true);return}
+    if(a==='seed'){setSeed({f:num('rtSF'),c:num('rtSC'),p:num('rtSP')});paintPage(true);return}
+    if(a==='bolt'){setBolt(pg.wk,num('rtBolt'));paintPage(true);return}
+  }catch(err){}
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&e.target&&e.target.id==='rpIn'&&pg&&pg.edit){try{const w=pg.edit.w,k=pg.day,x=e.target.value;pg.edit=null;if(String(x).trim()!=='')setDay(k,w,x);paintPage(true)}catch(err){}}
+});
+
+/* ---------------- enganche con la lengüeta de Viajes guardados ---------------- */
+window.addEventListener('pdc-trip',ev=>{
+  const d=ev.detail||{};
+  try{
+    if(d.ev==='yes')onYes(d.t);
+    else if(d.ev==='manual')onManual(d.t);
+    else if(d.ev==='no')onNo(d.t);
+    else if(d.ev==='del')onDelete(d.t);
+    else if(d.ev==='paint')onPaint(d.t);
+    else if(d.ev==='bar')onBar(d.t);
+  }catch(e){}
+});
+
+/* ---------------- arranque ---------------- */
+function tick(){try{if(document.hidden)return;poll();injectCard()}catch(e){}}
+window.__pdcRate={ledger,save,calc,tot,sumKeys,weekKey,weekInfo,zone,margin,recover,whatIf,winStats,seedArr,poll,setRes,setDay,bump,dayVals,setSeed,setBolt,setCfg,
+  openPage,closePage,paintAll,onYes,onManual,onNo,onDelete,banner,hideBanner,ask,closeAsk,FLAG,setFlag,tick,get pg(){return pg},get askS(){return askS}};
+const content=$('#content');
+let rq=0;
+if(content){new MutationObserver(()=>{if(rq)return;rq=setTimeout(()=>{rq=0;try{injectCard()}catch(e){}},80)}).observe(content,{childList:true,subtree:true});injectCard()}
+setInterval(tick,2000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick()});
+setTimeout(tick,800);
 })();
 </script>
 <script id="pdc-trec">
@@ -7593,6 +8328,7 @@ function reasonText(r){
   case 'fgs':return 'Android no ha dejado empezar la grabación. Deja el Portal abierto en pantalla y prueba otra vez.';
   case 'old_android':return 'Este Android es antiguo y no deja guardar el vídeo en la galería desde aquí.';
   case 'copy':return 'No se pudo guardar el vídeo. Sigue en tu móvil: prueba otra vez.';
+  case 'rotate':return 'No se pudo girar este vídeo. Puedes guardarlo y girarlo con el editor de la Galería.';
   default:return 'No se pudo hacer. Prueba otra vez.';
  }
 }
@@ -7664,9 +8400,24 @@ function openFinished(){
   +'<div class="trec-row"><span>Duración</span><b>'+fmtDur(p.durationMs)+'</b></div>'
   +'<div class="trec-row"><span>Tamaño aprox.</span><b>'+fmtSize(p.sizeBytes)+'</b></div>'
   +'<div class="trec-row"><span>Audio</span><b>'+(p.audio?'Sí':'No')+'</b></div>'
-  +B('Guardar y descargar en el móvil','save()','grn')+B('Eliminar','askDelete()','red')+B('Decidir luego','later()','sec'));
+  +B('Guardar y descargar en el móvil','save()','grn')+B('Se ve al revés: girar 180°','flip()','sec')+B('Eliminar','askDelete()','red')+B('Decidir luego','later()','sec'));
 }
 function later(){if(S.pending)S.dismissed=S.pending.at;closeM()}
+async function flip(){
+ var p=P();if(!p||S.busy)return;
+ S.busy=true;
+ M('<h3>Girando el vídeo…</h3><p>Un momento.</p>');
+ var r;
+ try{r=await p.flip({degrees:180})}catch(e){r={ok:false,reason:'rotate'}}
+ S.busy=false;
+ if(r&&r.ok){
+  M('<h3>Vídeo girado</h3><p>'+(r.fix?'Ya está al derecho. Los próximos vídeos también saldrán ya corregidos.':'Hecho. Los próximos vídeos vuelven al giro de siempre.')+'</p><span class="trec-s">Si algún día salen al revés otra vez, pulsa «Se ve al revés» de nuevo.</span>'+B('Seguir','back()','grn'));
+  return;
+ }
+ r=r||{};
+ if(r.reason==='nothing'){await poll();closeM();return}
+ M('<h3>No se pudo girar</h3><p>'+reasonText(r)+'</p>'+B('Volver','back()','sec'));
+}
 async function save(){
  var p=P();if(!p||S.busy)return;
  S.busy=true;
@@ -7739,7 +8490,7 @@ function timers(on){
 
 /* ---------- arranque ---------- */
 var st=document.createElement('style');st.id='trec-css';st.textContent=CSS;(document.head||document.documentElement).appendChild(st);
-window.PDCREC={tap:tap,pickMin:pickMin,go:go,cancel:cancel,stopRec:stopRec,save:save,askDelete:askDelete,del:del,later:later,back:back,
+window.PDCREC={tap:tap,pickMin:pickMin,go:go,cancel:cancel,stopRec:stopRec,save:save,flip:flip,askDelete:askDelete,del:del,later:later,back:back,
  chipHtml:chipHtml,poll:poll,paint:paint,state:S,fmtDur:fmtDur,fmtSize:fmtSize,estimate:estimate};
 try{
  var host=document.getElementById('content')||document.body;

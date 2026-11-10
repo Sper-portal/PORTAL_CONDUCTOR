@@ -90,6 +90,8 @@ public class ScreenReaderPlugin extends Plugin {
         JSObject r = new JSObject();
         r.put("on", sp.getInt("trip_on", 1) == 1);
         r.put("seq", sp.getLong("trip_seq", 0L));
+        r.put("nofx", sp.getBoolean("trip_nofx", false));
+        r.put("nofxN", sp.getLong("trip_nofx_n", 0L));
         String js = sp.getString("trip_cur", "");
         r.put("json", js == null ? "" : js);
         call.resolve(r);
