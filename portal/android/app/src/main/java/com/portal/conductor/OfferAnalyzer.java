@@ -371,7 +371,7 @@ public class OfferAnalyzer {
      *  - Tarjeta: la de la ZONA de la recogida (c.zoneKind) y de valle o punta; solo las recogidas en el aeropuerto usan la del aeropuerto.
      *  - Punta: la tarjeta de punta solo cuenta si peak (franja) y c.peakApplies; si no, se calcula con valle y se guarda en alt lo que saldria con punta.
      *  - Aeropuerto (recogida o viaje hacia alli): se resta la tasa del bruto y despues se calcula la comision. Recogida: hasta airFlatKm solo vale la minima.
-     *  - Viajes cortos con demanda: rango entre inicial + bumpLo e inicial + bumpHi (el calculo usa el punto medio).
+     *  - Viajes cortos con demanda: un solo neto (v3.44: ya no hay rango).
      */
     public static Est estimate(BoltCfg c, boolean peak, double km, double min, double offerMult, String airKind) {
         return estimate(c, peak, km, min, offerMult, airKind, c.atEvent && c.eventName != null ? c.eventName : "");
@@ -410,7 +410,7 @@ public class OfferAnalyzer {
             if (c.eventOn && ev.length() > 0) evShown = ev;
             else { disc = c.longDisc; raw = raw * (1 - disc / 100.0); }
         }
-        boolean range = !pickup && m > 1.0 + 1e-9 && m >= c.shortFrom - 1e-9 && km < c.shortKm && c.bumpHi > c.bumpLo;
+        boolean range = false;   // v3.44: nunca hay rango (un solo neto); lo guardado en shortKm/shortFrom/bumpLo/bumpHi se ignora
         double mid = range ? raw + (c.bumpLo + c.bumpHi) / 2.0 : raw;
         double gross = r5(c, mid * m * fm);
         double pct = Math.max(0, Math.min(90, c.comm));
