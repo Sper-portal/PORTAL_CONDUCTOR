@@ -238,7 +238,9 @@ public class OfferAnalyzer {
         public Card midV = new Card(2.10, 0.77, 0.15, 6.75), midP = new Card(2.68, 0.84, 0.20, 7.65);
         public Card highV = new Card(2.39, 0.85, 0.16, 6.70), highP = new Card(3.56, 0.91, 0.21, 8.35);
         // aeropuerto (solo las RECOGIDAS en el aeropuerto): valle / punta
-        public Card airV = new Card(2.89, 0.82, 0.15, 13.50), airP = new Card(2.89, 0.82, 0.15, 13.50);
+        // v3.47: tarifa de aeropuerto del pasajero (Bolt). Las categorias tienen las suyas: airCatV / airCatP [0 comfort, 1 xl, 2 premium]
+        public Card airV = new Card(3.04, 0.86, 0.15, 13.70), airP = new Card(3.04, 0.86, 0.15, 13.70);
+        public Card[] airCatV = defaultAirCat(), airCatP = defaultAirCat();
         // v3.46: categorias de Bolt (Comfort, XL, Premium). catV / catP [categoria 0 comfort, 1 xl, 2 premium][zona 0 baja, 1 media, 2 alta]: valle / hora punta
         public String cat = "";              // categoria de la oferta que se esta leyendo ("", "comfort", "xl" o "premium"); la pone analyze() en cada lectura y no se guarda
         public Card[][] catV = defaultCat(false), catP = defaultCat(true);
@@ -254,30 +256,52 @@ public class OfferAnalyzer {
     // =====================================================================
     //  v3.46: categorias de Bolt. «Bolt» y «Electric» son el Bolt normal; Comfort, XL y Premium llevan sus propias tarjetas.
     //  De fabrica: tarjeta del Bolt normal de esa zona + la diferencia de su tarifa con la de Electric (valle, pantalla de tarifas del conductor).
-    //  La hora punta usa las mismas diferencias: es aproximada hasta que el conductor ponga los precios reales en Ajustes.
+    //  La hora punta (v3.47) lleva los precios reales de la pantalla de tarifas de Bolt.
     // =====================================================================
+    // v3.47: la 4 es Child Seat / Booster Seat (valle = punta hasta que el conductor ponga la real)
     private static final double[][][] CAT_V = {
         { {3.87, 0.92, 0.15, 7.35}, {2.35, 0.90, 0.18, 7.90}, {2.80, 0.99, 0.18, 7.85} },
         { {1.90, 1.35, 0.22, 10.75}, {3.96, 1.32, 0.26, 11.55}, {4.09, 1.45, 0.27, 11.50} },
-        { {5.43, 1.15, 0.18, 9.10}, {3.37, 1.12, 0.22, 9.80}, {3.47, 1.23, 0.23, 9.75} }
+        { {5.43, 1.15, 0.18, 9.10}, {3.37, 1.12, 0.22, 9.80}, {3.47, 1.23, 0.23, 9.75} },
+        { {3.44, 0.93, 0.18, 10.25}, {3.50, 0.97, 0.23, 8.90}, {4.13, 1.06, 0.24, 9.70} }
     };
+    // v3.47: hora punta = precios reales de la pantalla de tarifas de Bolt (antes eran aproximados): [categoria][baja, media, alta] = {inicial, km, min, minima}
     private static final double[][][] CAT_P = {
-        { {4.88, 0.93, 0.18, 9.90}, {2.93, 0.97, 0.23, 8.80}, {3.97, 1.05, 0.23, 9.50} },
-        { {2.91, 1.36, 0.25, 13.30}, {4.54, 1.39, 0.31, 12.45}, {5.26, 1.51, 0.32, 13.15} },
-        { {6.44, 1.16, 0.21, 11.65}, {3.95, 1.19, 0.27, 10.70}, {4.64, 1.29, 0.28, 11.40} }
+        { {3.48, 0.94, 0.18, 10.35}, {3.54, 0.98, 0.23, 8.95}, {4.17, 1.06, 0.24, 9.80} },
+        { {4.41, 1.37, 0.26, 15.10}, {4.54, 1.44, 0.33, 13.10}, {6.09, 1.56, 0.35, 14.30} },
+        { {6.44, 1.16, 0.22, 12.80}, {3.95, 1.22, 0.28, 11.10}, {5.16, 1.32, 0.30, 12.10} },
+        { {3.44, 0.93, 0.18, 10.25}, {3.50, 0.97, 0.23, 8.90}, {4.13, 1.06, 0.24, 9.70} }
     };
 
     /** Tarjetas de fabrica de las categorias: [0 comfort, 1 xl, 2 premium][0 baja, 1 media, 2 alta]. */
     public static Card[][] defaultCat(boolean peak) {
         double[][][] src = peak ? CAT_P : CAT_V;
-        Card[][] r = new Card[3][3];
-        for (int i = 0; i < 3; i++) for (int z = 0; z < 3; z++) r[i][z] = new Card(src[i][z][0], src[i][z][1], src[i][z][2], src[i][z][3]);
+        Card[][] r = new Card[4][3];   // v3.47: 4 categorias (la 4 = Child Seat / Booster Seat)
+        for (int i = 0; i < 4; i++) for (int z = 0; z < 3; z++) r[i][z] = new Card(src[i][z][0], src[i][z][1], src[i][z][2], src[i][z][3]);
         return r;
     }
 
-    public static int catIndex(String cat) { return "comfort".equals(cat) ? 0 : ("xl".equals(cat) ? 1 : ("premium".equals(cat) ? 2 : -1)); }
+    // v3.47: tarjetas del aeropuerto (solo recogidas) de las categorias: [0 comfort, 1 xl, 2 premium] = {inicial, km, min, minima}. La hora punta de fabrica es igual que la de valle.
+    private static final double[][] CAT_AIR = { {3.56, 1.01, 0.17, 16.00}, {5.20, 1.47, 0.25, 23.40}, {4.41, 1.25, 0.22, 19.85}, {3.56, 1.01, 0.17, 16.00} };   // la 4 (Child Seat) = Comfort
 
-    public static String catLabel(String cat) { return "comfort".equals(cat) ? "Comfort" : ("xl".equals(cat) ? "XL" : ("premium".equals(cat) ? "Premium" : "")); }
+    public static Card[] defaultAirCat() {
+        Card[] r = new Card[4];
+        for (int i = 0; i < 4; i++) r[i] = new Card(CAT_AIR[i][0], CAT_AIR[i][1], CAT_AIR[i][2], CAT_AIR[i][3]);
+        return r;
+    }
+
+    /** La tarjeta de una RECOGIDA en el aeropuerto: la de la categoria (Comfort, XL, Premium) si la hay; si no, la del aeropuerto de siempre. */
+    public static Card airCard(BoltCfg c, boolean peak) {
+        int i = catIndex(c.cat);
+        Card base = peak ? c.airP : c.airV;
+        if (i < 0) return base;
+        Card[] a = peak ? c.airCatP : c.airCatV;
+        return a == null || a[i] == null ? base : a[i];
+    }
+
+    public static int catIndex(String cat) { return "comfort".equals(cat) ? 0 : ("xl".equals(cat) ? 1 : ("premium".equals(cat) ? 2 : ("childseat".equals(cat) ? 3 : -1))); }   // v3.47: 3 = Child Seat / Booster Seat
+
+    public static String catLabel(String cat) { return "comfort".equals(cat) ? "Comfort" : ("xl".equals(cat) ? "XL" : ("premium".equals(cat) ? "Premium" : ("childseat".equals(cat) ? "Child Seat" : ""))); }
 
     /** La tarjeta de la categoria (Comfort, XL o Premium) para la zona y el momento; sin categoria, la de la zona de siempre. */
     public static Card catCard(BoltCfg c, int kind, boolean peak) {
@@ -298,6 +322,7 @@ public class OfferAnalyzer {
             if (n.matches("(bolt )?(comfort|confort)")) return "comfort";
             if (n.matches("(bolt )?xl")) return "xl";
             if (n.matches("(bolt )?premium")) return "premium";
+            if (n.matches("(bolt )?(child|booster) ?seat")) return "childseat";   // v3.47: Child Seat y Booster Seat valen igual
             if (n.matches("(bolt )?(electric|electrico)")) return "";
         }
         return "";
@@ -453,10 +478,10 @@ public class OfferAnalyzer {
     private static Est calc(BoltCfg c, boolean up, double km, double min, double offerMult, String ak, String ev) {
         boolean pickup = "pickup".equals(ak);
         boolean air = ak.length() > 0;
-        Card card = pickup ? (up ? c.airP : c.airV) : catCard(c, c.zoneKind, up);   // v3.46: con categoria (Comfort, XL, Premium) su propia tarjeta
+        Card card = pickup ? airCard(c, up) : catCard(c, c.zoneKind, up);   // v3.46: con categoria (Comfort, XL, Premium) su propia tarjeta (v3.47: tambien en el aeropuerto)
         double raw = card.base + km * card.perKm + min * card.perMin;
-        boolean ma = false;
-        if (pickup && c.airFlatKm > 0 && km <= c.airFlatKm && card.minFare > 0) { raw = card.minFare; ma = true; }
+        boolean ma = false, flat = false;
+        if (pickup && c.airFlatKm > 0 && km <= c.airFlatKm && card.minFare > 0) { raw = card.minFare; ma = true; flat = true; }   // v3.47: precio fijo = la minima y la tasa va APARTE (encima)
         else if (card.minFare > 0 && raw < card.minFare) { raw = card.minFare; ma = true; }
         double m = offerMult > 1.0 ? Math.min(10.0, offerMult) : 1.0;
         double fm = m > 1.0 + 1e-9 ? 1 + c.fine / 100.0 : 1.0;
@@ -468,9 +493,9 @@ public class OfferAnalyzer {
         }
         boolean range = false;   // v3.44: nunca hay rango (un solo neto); lo guardado en shortKm/shortFrom/bumpLo/bumpHi se ignora
         double mid = range ? raw + (c.bumpLo + c.bumpHi) / 2.0 : raw;
-        double gross = r5(c, mid * m * fm);
         double pct = Math.max(0, Math.min(90, c.comm));
         double fee = air ? c.airFee : 0;
+        double gross = r5(c, mid * m * fm + (flat ? fee : 0));   // v3.47: con la minima fija el cliente paga la minima (con la demanda) + la tasa aparte; a la tasa no le afecta la demanda
         Est e = new Est();
         e.gross = gross; e.fee = fee;
         double after = fee > 0 ? Math.max(0, gross - fee) : gross;

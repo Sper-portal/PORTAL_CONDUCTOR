@@ -253,11 +253,30 @@ public class BoltConfig {
                 c.midV = card(cm.get("mv"), c.midV); c.midP = card(cm.get("mp"), c.midP);
                 c.highV = card(cm.get("hv"), c.highV); c.highP = card(cm.get("hp"), c.highP);
                 c.airV = card(cm.get("av"), c.airV); c.airP = card(cm.get("ap"), c.airP);
+                // v3.47: la tarjeta del aeropuerto de fabrica de antes (2,89 / 0,82 / 0,15 / 13,50) pasa a la nueva (tarifa de pasajero de Bolt); si la habia cambiado, se respeta
+                if (sameCard(c.airV, 2.89, 0.82, 0.15, 13.5)) c.airV = new OfferAnalyzer.Card(3.04, 0.86, 0.15, 13.70);
+                if (sameCard(c.airP, 2.89, 0.82, 0.15, 13.5)) c.airP = new OfferAnalyzer.Card(3.04, 0.86, 0.15, 13.70);
+                // v3.47: tarjetas del aeropuerto de las categorias (1 Comfort, 2 XL, 3 Premium): av1 ap1 av2 ap2 av3 ap3
+                for (int ci = 0; ci < 4; ci++) {
+                    c.airCatV[ci] = card(cm.get("av" + (ci + 1)), c.airCatV[ci]);
+                    c.airCatP[ci] = card(cm.get("ap" + (ci + 1)), c.airCatP[ci]);
+                }
                 // v3.46: tarjetas de las categorias (1 Comfort, 2 XL, 3 Premium) por zona y valle / punta: lv1 lp1 mv1 mp1 hv1 hp1 ... hp3
-                for (int ci = 0; ci < 3; ci++) for (int zi = 0; zi < 3; zi++) {
+                for (int ci = 0; ci < 4; ci++) for (int zi = 0; zi < 3; zi++) {   // v3.47: 4 categorias (la 4 = Child Seat / Booster Seat)
                     String zl = zi == 0 ? "l" : (zi == 1 ? "m" : "h");
                     c.catV[ci][zi] = card(cm.get(zl + "v" + (ci + 1)), c.catV[ci][zi]);
                     c.catP[ci][zi] = card(cm.get(zl + "p" + (ci + 1)), c.catP[ci][zi]);
+                }
+                // v3.47: hora punta de las categorias con los precios reales de Bolt: si tenias guardados los de fabrica de antes (aproximados) pasan a los nuevos; si los cambiaste, se respetan
+                {
+                    final double[][][] oldP = {
+                        { {4.88, 0.93, 0.18, 9.90}, {2.93, 0.97, 0.23, 8.80}, {3.97, 1.05, 0.23, 9.50} },
+                        { {2.91, 1.36, 0.25, 13.30}, {4.54, 1.39, 0.31, 12.45}, {5.26, 1.51, 0.32, 13.15} },
+                        { {6.44, 1.16, 0.21, 11.65}, {3.95, 1.19, 0.27, 10.70}, {4.64, 1.29, 0.28, 11.40} }
+                    };
+                    OfferAnalyzer.Card[][] newP = OfferAnalyzer.defaultCat(true);
+                    for (int ci = 0; ci < 3; ci++) for (int zi = 0; zi < 3; zi++)
+                        if (sameCard(c.catP[ci][zi], oldP[ci][zi][0], oldP[ci][zi][1], oldP[ci][zi][2], oldP[ci][zi][3])) c.catP[ci][zi] = newP[ci][zi];
                 }
                 // v3.15g: tarjetas normal / aeropuerto x entre semana / fin de semana. Solo se aprovecha lo que el conductor habia cambiado de fabrica.
                 if (cm.get("nwd") != null) { OfferAnalyzer.Card x = card(cm.get("nwd"), c.midV); if (!sameCard(x, 2.10, 0.77, 0.15, 6.75)) c.midV = x; }
@@ -377,10 +396,14 @@ public class BoltConfig {
          .append(",\"mv\":").append(cardJson(c.midV)).append(",\"mp\":").append(cardJson(c.midP))
          .append(",\"hv\":").append(cardJson(c.highV)).append(",\"hp\":").append(cardJson(c.highP))
          .append(",\"av\":").append(cardJson(c.airV)).append(",\"ap\":").append(cardJson(c.airP));
-        for (int ci = 0; ci < 3; ci++) for (int zi = 0; zi < 3; zi++) {   // v3.46: tarjetas de las categorias
+        for (int ci = 0; ci < 4; ci++) for (int zi = 0; zi < 3; zi++) {   // v3.46: tarjetas de las categorias (v3.47: 4)
             String zl = zi == 0 ? "l" : (zi == 1 ? "m" : "h");
             b.append(",\"").append(zl).append("v").append(ci + 1).append("\":").append(cardJson(c.catV[ci][zi]));
             b.append(",\"").append(zl).append("p").append(ci + 1).append("\":").append(cardJson(c.catP[ci][zi]));
+        }
+        for (int ci = 0; ci < 4; ci++) {   // v3.47: tarjetas del aeropuerto de las categorias
+            b.append(",\"av").append(ci + 1).append("\":").append(cardJson(c.airCatV[ci]));
+            b.append(",\"ap").append(ci + 1).append("\":").append(cardJson(c.airCatP[ci]));
         }
         b.append("},\"zone\":").append(zoneJson(c.zone)).append('}');
         return b.toString();

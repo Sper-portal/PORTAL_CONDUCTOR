@@ -1095,7 +1095,10 @@ public class ScreenReaderService extends AccessibilityService {
     /** linea de la tarjeta usada: la del aeropuerto (recogidas) o la de la zona de la recogida, de valle o de hora punta */
     static String cardLine(OfferAnalyzer.Result r) {
         String per = r.estPeakUsed ? "hora punta" : "valle";
-        if ("pickup".equals(r.estAirport)) return "Aeropuerto (recogida) \u00B7 tarjeta del aeropuerto \u00B7 " + per;
+        if ("pickup".equals(r.estAirport)) {
+            String ac = OfferAnalyzer.catLabel(r.estCat);   // v3.47: categoria (Comfort, XL, Premium) tambien en el aeropuerto
+            return "Aeropuerto (recogida) \u00B7 tarjeta " + (ac.length() > 0 ? ac + " " : "") + "del aeropuerto \u00B7 " + per;
+        }
         String cl = OfferAnalyzer.catLabel(r.estCat);   // v3.46: categoria (Comfort, XL, Premium)
         String t = "Tarjeta " + (cl.length() > 0 ? cl + " " : "") + "de zona " + OfferAnalyzer.zoneName(r.estZone) + " \u00B7 " + per;
         return "dest".equals(r.estAirport) ? "Aeropuerto (viaje hacia all\u00ED) \u00B7 " + t : t;

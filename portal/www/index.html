@@ -1439,8 +1439,8 @@ function cmpCss(){
 body.lt .cmp{--c-text:#10243d;--c-muted:#52688a;--c-soft:#6b7f9c;--c-card:#ffffff;--c-cardend:#ffffff;--c-bd:#c8d8ee;--c-line:#dbe6f4;--c-hero:linear-gradient(145deg,#e8f2ff,#ffffff);--c-herobd:#8ab8f5;--c-herofg:#10243d;--c-actbar:linear-gradient(180deg,#3b82f6,#1d5fd0);--c-prevbar:linear-gradient(180deg,#c4cfde,#9aa9c0);--c-up:#0a8a46;--c-upbg:#12e87522;--c-upbd:#16a35a;--c-dn:#c81e4a;--c-dnbg:#ff315f1a;--c-dnbd:#e0365f;--c-ne:#1f6fbf;--c-eq:#52688a;--c-tab:#ffffffcc;--c-tabbd:#c8d8ee;--c-axis:#b9c9de}
 .cmp *{box-sizing:border-box}
 .cmp-title{font-size:25px;font-weight:900;display:flex;align-items:center;gap:8px;margin:4px 0 8px}
-.cmp-tabs{display:grid;grid-template-columns:1fr 1fr 1.25fr;gap:0;border:1px solid var(--c-tabbd);border-radius:18px;background:var(--c-tab);padding:3px;margin:4px 0 10px}
-.cmp-tabs button{font:inherit;font-size:14px;text-align:center;padding:9px 4px;border-radius:15px;color:var(--c-muted);font-weight:700;background:none;border:1px solid transparent;cursor:pointer}
+.cmp-tabs{display:grid;grid-template-columns:1fr 1fr 1.2fr 1.5fr;gap:0;border:1px solid var(--c-tabbd);border-radius:18px;background:var(--c-tab);padding:3px;margin:4px 0 10px}
+.cmp-tabs button{font:inherit;font-size:12.5px;text-align:center;padding:7px 2px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;line-height:1.15;border-radius:15px;color:var(--c-muted);font-weight:700;background:none;border:1px solid transparent;cursor:pointer}
 .cmp-tabs button.on{background:linear-gradient(135deg,#087fff,#12b9ff);color:#fff;box-shadow:0 0 16px #008cff77;border-color:#65d5ff99}
 .cmp-per{font-size:13px;color:var(--c-text);margin:0 2px 10px;line-height:1.35}.cmp-per span{color:var(--c-soft);font-size:12px;display:block}
 .cmp-hero{border-radius:22px;padding:14px 14px 12px;background:var(--c-hero);border:1px solid var(--c-herobd);box-shadow:0 0 22px #008cff33,inset 0 1px 0 #ffffff22;display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;color:var(--c-herofg)}
@@ -1480,13 +1480,24 @@ body.lt .cmp{--c-text:#10243d;--c-muted:#52688a;--c-soft:#6b7f9c;--c-card:#fffff
 .cmp-trips div{display:flex;justify-content:space-between;padding:3px 0;border-top:1px dashed var(--c-line)}.cmp-trips div:first-child{border-top:0}
 .cmp-note{font-size:11.5px;color:var(--c-soft);margin:10px 2px 0;line-height:1.4;text-align:center}
 .cmp-full{width:100%;margin-top:14px}
+.cmp-pre{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 8px}
+.cmp-pre button{font:inherit;font-size:12.5px;font-weight:700;padding:6px 10px;border-radius:999px;border:1px solid var(--c-tabbd);background:var(--c-tab);color:var(--c-muted);cursor:pointer}
+.cmp-pbox{border-radius:18px;padding:9px 12px 10px;margin:8px 0;background:var(--c-card);border:1px solid var(--c-bd);border-left-width:5px}
+.cmp-pbox.a{border-left-color:#3b9cff}.cmp-pbox.b{border-left-color:#7f93b0}
+.cmp-pt{display:flex;justify-content:space-between;align-items:baseline;font-size:15px;margin-bottom:6px}.cmp-pt span{font-size:12px;color:var(--c-muted)}
+.cmp-pd{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cmp-pd label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--c-muted);min-width:0}
+.cmp-pd input{width:100%;min-width:0;box-sizing:border-box;font:inherit;font-size:15px;padding:8px;border-radius:12px;border:1px solid var(--c-bd);background:var(--c-tab);color:var(--c-text)}
+.cmp-ti{font-size:16px;line-height:1}
+.cmp-static{cursor:default}
+.cmp-pf{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:2px 0 4px}.cmp-pfn{font-size:12.5px;color:var(--c-muted);text-align:right;line-height:1.3}
 body.lt .cmp-uber{--pc:#2a2d35!important;--pcb:linear-gradient(180deg,#4a4d57,#1c1d22)!important;--tint:#1c1d2214!important}
 `;
  var L='html body.lt #content ',lt=[
   ['.cmp-pill.up','color:var(--c-up)'],['.cmp-pill.dn','color:var(--c-dn)'],['.cmp-pill.eq','color:var(--c-eq)'],
   ['.cmp-chip i.up','color:var(--c-up)'],['.cmp-chip i.dn','color:var(--c-dn)'],['.cmp-chip i.ne','color:var(--c-ne)'],['.cmp-chip i.eq','color:var(--c-eq)'],
   ['.cmp-sub,.cmp-right .cmp-prev,.cmp-ct small,.cmp-h2 small,.cmp-lab span,.cmp-leg span,.cmp-note,.cmp-per span,.cmp-trips span,.cmp-day small,.cmp-chip small','color:var(--c-muted)'],
-  ['.cmp-tabs button','color:var(--c-muted)'],['.cmp-tabs button.on','color:#fff'],
+  ['.cmp-tabs button','color:var(--c-muted)'],['.cmp-tabs button.on','color:#fff'],['.cmp-pre button','color:var(--c-muted)'],['.cmp-pd label,.cmp-pt span,.cmp-pfn','color:var(--c-muted)'],['.cmp-pd input','color:var(--c-text)'],
   ['.cmp-logo','color:var(--lf,#fff)'],['.cmp-best','color:#3a2a00'],['.cmp-go','color:var(--pc,#65d5ff)'],
   ['.cmp-hero.br .cmp-hl,.cmp-hero.br .cmp-hv,.cmp-hero.br .cmp-prev','color:var(--hfg,#fff)'],
   ['.cmp-hero.br .cmp-pill.up','color:#7dffb8'],['.cmp-hero.br .cmp-pill.dn','color:#ff9fb4'],['.cmp-hero.br .cmp-pill.eq','color:#e6edf7']
@@ -1518,8 +1529,8 @@ function cmpRange(keys,kind){
 }
 /* ---- sumas ---- */
 function cmpAgg(keys){
- var o={f:0,n:0,ht:0,hp:0,ho:0,pl:{}};PLAT6.forEach(function(p){o.pl[p]={f:0,n:0}});
- keys.forEach(function(k){var x=billingDay(k);o.f+=Number(x.f)||0;o.n+=x.ts.length;o.ht+=totalMinutesForDay(k);o.hp+=boltMinutesForDay(k);o.ho+=otherMinutesForDay(k);
+ var o={f:0,n:0,d:0,ht:0,hp:0,ho:0,pl:{}};PLAT6.forEach(function(p){o.pl[p]={f:0,n:0}});
+ keys.forEach(function(k){var x=billingDay(k);o.f+=Number(x.f)||0;if((Number(x.f)||0)>0.004)o.d++;o.n+=x.ts.length;o.ht+=totalMinutesForDay(k);o.hp+=boltMinutesForDay(k);o.ho+=otherMinutesForDay(k);
   PLAT6.forEach(function(p){o.pl[p].f+=Number(x.plat[p]||0)});x.ts.forEach(function(t){if(o.pl[t.platform])o.pl[t.platform].n++})});
  return o;
 }
@@ -1549,19 +1560,18 @@ function cmpChip(label,big,c,p,mode){
  }
  return '<div class="cmp-chip"><small>'+label+'</small><b>'+big+'</b><i class="'+k+'">'+t+'</i></div>';
 }
-function cmpBars(cur,prev,labels,col){
+function cmpBars(cur,prev,labels,col,leg){
  var max=0;cur.concat(prev).forEach(function(v){if(v!=null&&v>max)max=v});if(max<=0)max=1;
  var h=function(v){return Math.max(0,Math.round(v/max*100))+'%'};
  return '<div class="cmp-chart"'+(col?' style="--pcb:linear-gradient(180deg,'+col+','+col+'cc)"':'')+'><div class="cmp-bars">'+labels.map(function(l,i){
    return '<div class="cmp-g"><div class="cmp-b c'+(cur[i]==null?' z':'')+'" style="height:'+(cur[i]==null?0:h(cur[i]))+'"></div><div class="cmp-b p'+(prev[i]==null?' z':'')+'" style="height:'+(prev[i]==null?0:h(prev[i]))+'"></div></div>'}).join('')
   +'</div><div class="cmp-lab">'+labels.map(function(l){return '<span>'+l+'</span>'}).join('')+'</div>'
-  +'<div class="cmp-leg"><span><i class="a"></i>Actual</span><span><i class="o"></i>Anterior</span></div></div>';
+  +'<div class="cmp-leg"><span><i class="a"></i>'+(leg?leg[0]:'Actual')+'</span><span><i class="o"></i>'+(leg?leg[1]:'Anterior')+'</span></div></div>';
 }
 function cmpHead(act){
- return '<div class="cmp-title">📊 Informe de Facturación</div><div class="cmp-tabs">'
-  +[['week','📅 Semana'],['month','🗓 Mes'],['custom','⚙ Personalizado']].map(function(x){return '<button class="'+(act===x[0]?'on':'')+'" onclick="cmpGo(\''+x[0]+'\')">'+x[1]+'</button>'}).join('')+'</div>';
+ return '<div class="cmp-title">📊 Informe de Facturación</div>'+cmpTabs(act);
 }
-function cmpGo(t){cmpTab=t;if(t==='custom')cmpApp=null;renderReport();try{window.scrollTo(0,0)}catch(e){}}
+function cmpGo(t){cmpTab=t;if(t==='custom'||t==='two')cmpApp=null;renderReport();try{window.scrollTo(0,0)}catch(e){}}
 function cmpOpen(p){cmpApp=p;renderReport();try{window.scrollTo(0,0)}catch(e){}}
 function cmpFull(kind){cmpTab='custom';cmpApp=null;renderReport();if(kind==='month')reportCurrentMonth();else reportCurrentWeek()}
 function cmpToggleDay(k){var e=document.getElementById('cmpd_'+k);if(e)e.hidden=!e.hidden}
@@ -1572,6 +1582,7 @@ function cmpPeriodLine(P){
 /* ---- pantalla general (todas las apps) ---- */
 function cmpRender(){
  cmpCss();
+ if(cmpTab==='two'){cmpTwoRender();return}
  var P=cmpPer(cmpTab==='month'?'month':'week'),prio=prioName();
  if(cmpApp&&PLAT6.indexOf(cmpApp)<0)cmpApp=null;
  var c=cmpAgg(P.cur),p=cmpAgg(P.prevSame),out='<section class="cmp">';
@@ -1591,6 +1602,7 @@ function cmpRender(){
    for(var w=0;w<ch;w++){var a=w*7,b=Math.min(N,a+7);lb.push((a+1)+(b-a>1?'-'+b:''));
     cv.push(cmpAgg(P.cur.slice(a,b)).f);pv.push(cmpAgg(P.prevSame.slice(a,Math.min(b,P.prevSame.length))).f)}
   }
+  out+=cmpPrevFull(P,c);
   out+='<div class="cmp-card"><div class="cmp-ct">Comparativa '+(P.kind==='week'?'semanal':'mensual')+' <small>'+sub+'</small></div>'+cmpBars(cv,pv,lb)+'</div>';
   /* apps */
   var apps=PLAT6.filter(function(q){return c.pl[q].f>0.004||p.pl[q].f>0.004||c.pl[q].n>0}).sort(function(x,y){return c.pl[y].f-c.pl[x].f});
@@ -1614,7 +1626,7 @@ function cmpRender(){
 function cmpDetail(P,c,p,q,prio){
  var K=CMP_COL[q],x=c.pl[q],y=p.pl[q],isP=(q===prio),out='';
  out+='<div class="cmp-back"><button onclick="cmpOpen(null)" aria-label="Volver">←</button><div class="cmp-title"><span class="cmp-logo" style="width:34px;height:34px;font-size:17px;border-radius:11px;background:'+K.lbg+';--lf:'+K.lfg+';color:'+K.lfg+(K.cls==='uber'?';border:1px solid #ffffff55':'')+'">'+K.l+'</span> '+q+'</div></div>';
- out+='<div class="cmp-tabs">'+[['week','📅 Semana'],['month','🗓 Mes'],['custom','⚙ Personalizado']].map(function(z){return '<button class="'+(cmpTab===z[0]?'on':'')+'" onclick="cmpGo(\''+z[0]+'\')">'+z[1]+'</button>'}).join('')+'</div>';
+ out+=cmpTabs(cmpTab);
  out+='<div class="cmp-per">'+cmpPeriodLine(P)+'</div>';
  out+='<div class="cmp-hero br cmp-'+K.cls+'" style="background:'+K.hero+';border-color:'+K.m+';--hfg:'+K.fg+';box-shadow:0 0 24px '+K.m+'55"><div><div class="cmp-hl">Facturación '+q+'</div><div class="cmp-hv">'+euro(x.f)+'</div></div><div class="cmp-hr">'+cmpPill(x.f,y.f)+'<div class="cmp-prev">'+cmpSgEu(x.f-y.f)+'<br>antes '+euro(y.f)+'</div></div></div>';
  if(isP){var ce=cmpEh(x.f,c.hp),pe=cmpEh(y.f,p.hp);
@@ -1647,6 +1659,83 @@ function cmpDetail(P,c,p,q,prio){
  out+='</div>';
  out+='<div class="cmp-note">Hoy cuenta solo hasta ahora, contra el día completo del periodo anterior.</div>';
  return out;
+}
+/* v3.47 · Informe: pestaña «Comparar» (dos periodos cualesquiera, A contra B) y el mes / la semana anterior COMPLETOS en «Semana» y «Mes».
+   Un día sin viajes uno a uno cuenta con el total de facturación que hayas anotado (billingDay); si no hay nada, cuenta 0 €. La comparación nunca sale vacía. */
+var cmpTwo=null;
+function cmpTabs(act){
+ return '<div class="cmp-tabs">'+[['week','📅','Semana'],['month','🗓','Mes'],['two','🔀','Comparar'],['custom','⚙','Personalizado']].map(function(x){return '<button class="'+(act===x[0]?'on':'')+'" onclick="cmpGo(\''+x[0]+'\')"><span class="cmp-ti">'+x[1]+'</span> '+x[2]+'</button>'}).join('')+'</div>';
+}
+/* lista de días (claves AAAA-MM-DD) de a hasta b, los dos incluidos; como mucho 366 */
+function cmpKeys(a,b){
+ var o=[],d=new Date(a+'T12:00:00'),e=new Date(b+'T12:00:00');
+ if(isNaN(d.getTime())||isNaN(e.getTime()))return o;
+ while(d<=e&&o.length<366){o.push(dateKey(d));d.setDate(d.getDate()+1)}
+ return o;
+}
+function cmpSpan(a,b){return Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/864e5)+1}
+function cmpRng(keys){
+ if(!keys.length)return '—';
+ var y=String(new Date(today()+'T12:00:00').getFullYear()),yy=function(k){return k.slice(0,4)!==y?' '+k.slice(0,4):''};
+ var s=function(k){return cmpD(k,{day:'numeric',month:'short'}).replace('.','')+yy(k)};
+ if(keys.length>1&&keys[0].slice(0,7)===keys[keys.length-1].slice(0,7))return cmpD(keys[0],{day:'numeric'})+' – '+s(keys[keys.length-1]);
+ return keys.length>1?s(keys[0])+' – '+s(keys[keys.length-1]):s(keys[0]);
+}
+/* periodos de partida: 'week' = esta semana (lunes a hoy) contra la pasada (los mismos días); 'month' igual con el mes; 'lastmonth' = el mes pasado entero contra el de antes */
+function cmpTwoDef(kind){
+ var t=new Date(today()+'T12:00:00'),y=t.getFullYear(),m=t.getMonth(),P;
+ if(kind==='lastmonth')return {a1:dateKey(new Date(y,m-1,1,12)),a2:dateKey(new Date(y,m,0,12)),b1:dateKey(new Date(y,m-2,1,12)),b2:dateKey(new Date(y,m-1,0,12))};
+ P=cmpPer(kind==='month'?'month':'week');
+ return {a1:P.cur[0],a2:P.cur[P.cur.length-1],b1:P.prevSame[0],b2:P.prevSame[P.prevSame.length-1]};
+}
+function cmpTwoPreset(kind){cmpTwo=cmpTwoDef(kind);cmpTwoRender()}
+function cmpTwoSet(w){
+ var t=cmpTwo||(cmpTwo=cmpTwoDef('week')),g=function(id,d){var e=document.getElementById(id);return e&&/^\d{4}-\d{2}-\d{2}$/.test(e.value)?e.value:d};
+ var n={a1:g('cmpa1',t.a1),a2:g('cmpa2',t.a2),b1:g('cmpb1',t.b1),b2:g('cmpb2',t.b2)};
+ if(n.a1>n.a2){if(w==='a2')n.a1=n.a2;else n.a2=n.a1}
+ if(n.b1>n.b2){if(w==='b2')n.b1=n.b2;else n.b2=n.b1}
+ cmpTwo=n;cmpTwoRender();
+}
+/* tarjeta «mes pasado completo» / «semana pasada completa» (en las pestañas Mes y Semana) */
+function cmpPrevFull(P,c){
+ var f=cmpAgg(P.prevFull),mon=P.kind==='month',ttl,sub,nm,right,eh=cmpEh(f.f,f.ht),pc=f.f>0.004?Math.round(c.f/f.f*100):null;
+ if(mon){nm=cmpD(P.prevFull[0],{month:'long'});ttl=nm.charAt(0).toUpperCase()+nm.slice(1)+' completo';sub=cmpRange(P.prevFull,'month')}
+ else{ttl='Semana pasada completa';sub=cmpRange(P.prevFull,'week')}
+ right=pc==null?'No hay facturación anotada en ese periodo':'Llevas el '+pc+' % '+(mon?'del mes pasado':'de la semana pasada');
+ return '<div class="cmp-card cmp-pfull"><div class="cmp-ct">'+ttl+' <small>'+sub+'</small></div><div class="cmp-pf"><div class="cmp-hv" style="font-size:30px">'+euro(f.f)+'</div><div class="cmp-pfn">'+right+'</div></div>'
+  +'<div class="cmp-chips">'+cmpChip('Viajes',f.n,null,null,'n')+cmpChip('Horas',cmpHM(f.ht),null,null,'min')+cmpChip('€ por hora',eh==null?'—':euro(eh),null,null,'eur')+'</div></div>';
+}
+/* ---- pestaña «Comparar» ---- */
+function cmpTwoRender(){
+ cmpCss();
+ if(!cmpTwo)cmpTwo=cmpTwoDef('week');
+ var T=cmpTwo,KA=cmpKeys(T.a1,T.a2),KB=cmpKeys(T.b1,T.b2),c=cmpAgg(KA),p=cmpAgg(KB),out='<section class="cmp">',i;
+ var pb=function(id,tag,a,b,n){return '<div class="cmp-pbox '+id+'"><div class="cmp-pt"><b>Periodo '+tag+'</b><span>'+n+(n===1?' día':' días')+'</span></div><div class="cmp-pd"><label>Desde<input type="date" id="cmp'+id+'1" value="'+a+'" onchange="cmpTwoSet(\''+id+'1\')"></label><label>Hasta<input type="date" id="cmp'+id+'2" value="'+b+'" onchange="cmpTwoSet(\''+id+'2\')"></label></div></div>'};
+ out+=cmpHead('two')+'<div class="cmp-pre">'+[['week','Esta semana · la pasada'],['month','Este mes · el anterior'],['lastmonth','Mes pasado · el anterior']].map(function(x){return '<button type="button" onclick="cmpTwoPreset(\''+x[0]+'\')">'+x[1]+'</button>'}).join('')+'</div>';
+ out+=pb('a','A',T.a1,T.a2,KA.length)+pb('b','B',T.b1,T.b2,KB.length);
+ var ce=cmpEh(c.f,c.ht),pe=cmpEh(p.f,p.ht);
+ out+='<div class="cmp-hero"><div><div class="cmp-hl">Periodo A · todas las apps</div><div class="cmp-hv">'+euro(c.f)+'</div></div><div class="cmp-hr">'+cmpPill(c.f,p.f)+'<div class="cmp-prev">'+cmpSgEu(c.f-p.f)+'<br>Periodo B: '+euro(p.f)+'</div></div></div>';
+ out+='<div class="cmp-chips">'+cmpChip('Viajes',c.n,c.n,p.n,'n')+cmpChip('Horas',cmpHM(c.ht),c.ht,p.ht,'min')+cmpChip('€ por hora',ce==null?'—':euro(ce),ce,pe,'eur')+'</div>';
+ var cd=KA.length?c.f/KA.length:null,pd=KB.length?p.f/KB.length:null,cv2=c.n>0?c.f/c.n:null,pv2=p.n>0?p.f/p.n:null;
+ out+='<div class="cmp-chips">'+cmpChip('€ por día',cd==null?'—':euro(cd),cd,pd,'eur')+cmpChip('€ por viaje',cv2==null?'—':euro(cv2),cv2,pv2,'eur')+cmpChip('Días trabajados',c.d,c.d,p.d,'n')+'</div>';
+ /* gráfico: los días de A y de B se ponen uno al lado del otro por orden (día 1 con día 1…); si son muchos, por bloques de 7 o de 30 días */
+ var mx=Math.max(KA.length,KB.length),st=mx<=14?1:(mx<=91?7:30),nb=Math.ceil(mx/st),lb=[],cv=[],pv=[];
+ var fa=KA.map(function(k){return Number(billingDay(k).f)||0}),fb=KB.map(function(k){return Number(billingDay(k).f)||0});
+ var bk=function(arr,n){var a=n*st,s=0,j;if(a>=arr.length)return null;for(j=a;j<Math.min(arr.length,a+st);j++)s+=arr[j];return s};
+ for(i=0;i<nb;i++){lb.push(String(i+1));cv.push(bk(fa,i));pv.push(bk(fb,i))}
+ if(nb>0)out+='<div class="cmp-card"><div class="cmp-ct">Comparativa <small>'+(st===1?'facturación por día (día 1, 2, 3…)':'facturación por bloques de '+st+' días')+'</small></div>'+cmpBars(cv,pv,lb,null,['A · '+cmpRng(KA),'B · '+cmpRng(KB)])+'</div>';
+ /* apps */
+ var apps=PLAT6.filter(function(q){return c.pl[q].f>0.004||p.pl[q].f>0.004||c.pl[q].n>0||p.pl[q].n>0}).sort(function(x,y){return c.pl[y].f-c.pl[x].f||p.pl[y].f-p.pl[x].f});
+ out+='<div class="cmp-h2">Por aplicación <small>A contra B</small></div>';
+ if(!apps.length)out+='<div class="cmp-note">Ninguno de los dos periodos tiene facturación anotada: los dos salen con 0,00 €.</div>';
+ apps.forEach(function(q){
+  var K=CMP_COL[q],x=c.pl[q],y=p.pl[q],sub=x.n+(x.n===1?' viaje':' viajes')+(x.n>0?' · '+euro(x.f/x.n)+'/viaje':'')+' · B: '+y.n+(y.n===1?' viaje':' viajes');
+  out+='<div class="cmp-app cmp-static cmp-'+K.cls+'" style="--pc:'+K.m+';--tint:'+K.m+'2e"><div class="cmp-logo" style="background:'+K.lbg+';--lf:'+K.lfg+';color:'+K.lfg+(K.cls==='uber'?';border:1px solid #ffffff55':'')+'">'+K.l+'</div><div><div class="cmp-name">'+q+'</div><div class="cmp-sub">'+sub+'</div></div><div class="cmp-right"><div class="cmp-big">'+euro(x.f)+'</div>'+cmpPill(x.f,y.f)+'<div class="cmp-prev">B: '+euro(y.f)+'</div></div><span></span><div class="cmp-share"><i style="width:'+(c.f>0?Math.min(100,x.f/c.f*100):0).toFixed(1)+'%"></i></div></div>';
+ });
+ if(KA.length!==KB.length)out+='<div class="cmp-note">Ojo: el periodo A tiene '+KA.length+' días y el B tiene '+KB.length+'. Para que sea justo, mira también «€ por día».</div>';
+ if(cmpSpan(T.a1,T.a2)>366||cmpSpan(T.b1,T.b2)>366)out+='<div class="cmp-note">Solo se cuentan los primeros 366 días de cada periodo.</div>';
+ out+='<div class="cmp-note">Los días con viajes cuentan viaje a viaje. Los días en los que solo anotaste el total de facturación cuentan con ese total (sin viajes ni horas). Si no hay nada, cuentan 0 €.</div>';
+ document.querySelector('#content').innerHTML=out+'</section>';
 }
 function reportCurrentWeek(){let [a,b]=weekBounds(0);report(a,b)}
 function reportCurrentMonth(){let [a,b]=monthBounds(0);report(a,b)}
@@ -2483,7 +2572,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.46';
+const APP_VERSION='v3.47';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -4749,7 +4838,7 @@ if(typeof _sam==='function')window.setAuthMode=function(m){
    La hora punta sale de tus franjas (una lista para media y baja, otra para alta); los festivos cuentan como punta. Por defecto la tarjeta de punta NO sube el precio
    (hay poca evidencia de que Bolt la pague al conductor): se calcula con la de valle y el aviso dice lo que saldría con la de punta. Se enciende en Ajustes.
    Viajes cortos con demanda: un solo neto estimado, sin rango (v3.44).
-   Aeropuerto: las recogidas usan la tarjeta del aeropuerto (con mínima fija hasta 11 km); los viajes HACIA el aeropuerto usan la tarjeta de la zona; en los dos se resta la tasa antes de la comisión.
+   Aeropuerto: las recogidas usan la tarjeta del aeropuerto (hasta 11 km: la mínima y la tasa aparte; con categoría, la de esa categoría); los viajes HACIA el aeropuerto usan la tarjeta de la zona; en los dos se resta la tasa antes de la comisión.
    Son estimaciones del conductor (no tarifas oficiales de Bolt). Los valores iniciales y el cálculo son los mismos que usa el código nativo (se comprueba en las pruebas contra Java). */
 (function(){
 const P=window.PDC314;if(!P||P.bolt)return;P.bolt=true;
@@ -4758,7 +4847,8 @@ const LSK='pdc_bolt',CFG_VER=334;
 const MAXZ=40,MAXPT=200,MAXS=30,WEEK=10080;
 const Z_LOW=0,Z_MID=1,Z_HIGH=2,ZW=['low','mid','high'],ZN=['baja','media','alta'],ZK=['l','m','h'];
 /* v3.46: categorías de Bolt */
-const CATS=['comfort','xl','premium'],CATL={comfort:'Comfort',xl:'XL',premium:'Premium'},CATKEYS=[1,2,3].reduce((a,n)=>a.concat(['lv','lp','mv','mp','hv','hp'].map(k=>k+n)),[]);
+const CATS=['comfort','xl','premium','childseat'],CATL={comfort:'Comfort',xl:'XL',premium:'Premium',childseat:'Child Seat'},CATKEYS=[1,2,3,4].reduce((a,n)=>a.concat(['lv','lp','mv','mp','hv','hp'].map(k=>k+n)),[]);   /* v3.47: la 4 es Child Seat / Booster Seat */
+const AIRKEYS=['av1','ap1','av2','ap2','av3','ap3','av4','ap4'];   /* v3.47: tarjetas del aeropuerto de las categorías */
 const kindOfKey=k=>k==='h'?Z_HIGH:k==='l'?Z_LOW:Z_MID;
 const keyOfKind=k=>ZK[k]||'m';
 const CARD=(b,k,m,f)=>({base:b,km:k,min:m,minFare:f});
@@ -4769,9 +4859,11 @@ const HOLS=()=>['01-01','01-06','05-01','05-02','08-15','10-12','11-01','12-06',
 const defaults=()=>({on:true,mode:'auto',comm:25,peakApplies:true,round5:true,fine:0,peakKm:6.5,longKm:10,longDisc:13,eventOn:true,v:CFG_VER,cpv:337,zoneForce:'auto',zoneDef:'mid',
   short:{km:6,from:1.2,lo:0,hi:0},airOn:true,airFee:2.57,airFlatKm:11,holidaysWe:true,holidays:HOLS(),slots:slotsM(),slotsH:slotsHi(),
   cards:{lv:CARD(2.02,0.79,0.13,6.30),lp:CARD(3.03,0.80,0.16,8.85),mv:CARD(2.10,0.77,0.15,6.75),mp:CARD(2.68,0.84,0.20,7.65),
-         hv:CARD(2.39,0.85,0.16,6.70),hp:CARD(3.56,0.91,0.21,8.35),av:CARD(2.89,0.82,0.15,13.50),ap:CARD(2.89,0.82,0.15,13.50),
+         hv:CARD(2.39,0.85,0.16,6.70),hp:CARD(3.56,0.91,0.21,8.35),av:CARD(3.04,0.86,0.15,13.70),ap:CARD(3.04,0.86,0.15,13.70),
+         /* v3.47: tarjetas del aeropuerto (recogidas) de las categorías: 1 Comfort, 2 XL, 3 Premium */
+         av1:CARD(3.56,1.01,0.17,16.00),ap1:CARD(3.56,1.01,0.17,16.00),av2:CARD(5.20,1.47,0.25,23.40),ap2:CARD(5.20,1.47,0.25,23.40),av3:CARD(4.41,1.25,0.22,19.85),ap3:CARD(4.41,1.25,0.22,19.85),av4:CARD(3.56,1.01,0.17,16.00),ap4:CARD(3.56,1.01,0.17,16.00),
          /* v3.46: categorías de Bolt (1 Comfort, 2 XL, 3 Premium) por zona y valle / punta */
-         lv1:CARD(3.87,0.92,0.15,7.35),lp1:CARD(4.88,0.93,0.18,9.90),mv1:CARD(2.35,0.90,0.18,7.90),mp1:CARD(2.93,0.97,0.23,8.80),hv1:CARD(2.80,0.99,0.18,7.85),hp1:CARD(3.97,1.05,0.23,9.50),lv2:CARD(1.90,1.35,0.22,10.75),lp2:CARD(2.91,1.36,0.25,13.30),mv2:CARD(3.96,1.32,0.26,11.55),mp2:CARD(4.54,1.39,0.31,12.45),hv2:CARD(4.09,1.45,0.27,11.50),hp2:CARD(5.26,1.51,0.32,13.15),lv3:CARD(5.43,1.15,0.18,9.10),lp3:CARD(6.44,1.16,0.21,11.65),mv3:CARD(3.37,1.12,0.22,9.80),mp3:CARD(3.95,1.19,0.27,10.70),hv3:CARD(3.47,1.23,0.23,9.75),hp3:CARD(4.64,1.29,0.28,11.40)},
+         lv1:CARD(3.87,0.92,0.15,7.35),lp1:CARD(3.48,0.94,0.18,10.35),mv1:CARD(2.35,0.90,0.18,7.90),mp1:CARD(3.54,0.98,0.23,8.95),hv1:CARD(2.80,0.99,0.18,7.85),hp1:CARD(4.17,1.06,0.24,9.80),lv2:CARD(1.90,1.35,0.22,10.75),lp2:CARD(4.41,1.37,0.26,15.10),mv2:CARD(3.96,1.32,0.26,11.55),mp2:CARD(4.54,1.44,0.33,13.10),hv2:CARD(4.09,1.45,0.27,11.50),hp2:CARD(6.09,1.56,0.35,14.30),lv3:CARD(5.43,1.15,0.18,9.10),lp3:CARD(6.44,1.16,0.22,12.80),mv3:CARD(3.37,1.12,0.22,9.80),mp3:CARD(3.95,1.22,0.28,11.10),hv3:CARD(3.47,1.23,0.23,9.75),hp3:CARD(5.16,1.32,0.30,12.10),lv4:CARD(3.44,0.93,0.18,10.25),lp4:CARD(3.44,0.93,0.18,10.25),mv4:CARD(3.50,0.97,0.23,8.90),mp4:CARD(3.50,0.97,0.23,8.90),hv4:CARD(4.13,1.06,0.24,9.70),hp4:CARD(4.13,1.06,0.24,9.70)},
   zone:{zones:[],postal:{h:'28023 28033 28034 28035 28042 28043 28049 28050 28055 28100 28108 28109 28220 28221 28222 28223 28224 28230 28231 28232 28250 28701 28702 28703 28760 28761 28762'.split(' '),m:'28001 28002 28003 28004 28005 28006 28007 28008 28009 28010 28012 28013 28014 28015 28016 28020 28028 28029 28036 28039 28045 28040 28046 28048'.split(' '),l:'28022 28037 28801 28802 28803 28804 28805 28806 28807 28821 28822 28823 28830 28850 28018 28019 28021 28025 28026 28030 28031 28032 28038 28041 28044 28047 28054 28901 28902 28903 28904 28905 28906 28907 28911 28912 28913 28914 28915 28916 28917 28918 28919 28921 28922 28923 28924 28925 28931 28932 28933 28934 28935 28936 28937 28938 28940 28941 28942 28943 28944 28945 28946 28947 28980 28981 28982 28983 28984 28300 28311 28312 28320 28341 28342 28343 28011 28017 28024 28027 28051 28052 28053'.split(' ')}}});
 P.boltDefaults=defaults;
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -4814,7 +4906,11 @@ function norm(o){const c=defaults();if(!isObj(o))return c;
   c.slots=normSlots(o.slots,c.slots);c.slotsH=normSlots(o.slotsH,c.slotsH);
   const cm=isObj(o.cards)?o.cards:null;
   if(cm){
-    for(const k of ['lv','lp','mv','mp','hv','hp','av','ap'].concat(CATKEYS))c.cards[k]=normCard(cm[k],c.cards[k]);
+    for(const k of ['lv','lp','mv','mp','hv','hp','av','ap'].concat(CATKEYS,AIRKEYS))c.cards[k]=normCard(cm[k],c.cards[k]);
+    /* v3.47: la tarjeta del aeropuerto de fábrica de antes (2,89 / 0,82 / 0,15 / 13,50) pasa a la nueva (tarifa de pasajero de Bolt); si la habías cambiado, se respeta */
+    for(const k of ['av','ap'])if(sameCard(c.cards[k],2.89,0.82,0.15,13.5))c.cards[k]=CARD(3.04,0.86,0.15,13.70);
+    /* v3.47: las tarjetas de hora punta de las categorías de fábrica de antes (aproximadas) pasan a los precios reales de Bolt; si las habías cambiado, se respetan */
+    for(const [k,o,n] of [['lp1',[4.88,0.93,0.18,9.90],[3.48,0.94,0.18,10.35]],['mp1',[2.93,0.97,0.23,8.80],[3.54,0.98,0.23,8.95]],['hp1',[3.97,1.05,0.23,9.50],[4.17,1.06,0.24,9.80]],['lp2',[2.91,1.36,0.25,13.30],[4.41,1.37,0.26,15.10]],['mp2',[4.54,1.39,0.31,12.45],[4.54,1.44,0.33,13.10]],['hp2',[5.26,1.51,0.32,13.15],[6.09,1.56,0.35,14.30]],['lp3',[6.44,1.16,0.21,11.65],[6.44,1.16,0.22,12.80]],['mp3',[3.95,1.19,0.27,10.70],[3.95,1.22,0.28,11.10]],['hp3',[4.64,1.29,0.28,11.40],[5.16,1.32,0.30,12.10]]])if(sameCard(c.cards[k],o[0],o[1],o[2],o[3]))c.cards[k]=CARD(n[0],n[1],n[2],n[3]);
     // v3.15g: tarjetas normal / aeropuerto × entre semana / fin de semana. Solo se aprovecha lo que el conductor había cambiado de fábrica.
     if(cm.nwd!=null){const x=normCard(cm.nwd,c.cards.mv);if(!sameCard(x,2.10,0.77,0.15,6.75))c.cards.mv=x}
     if(cm.nwe!=null){const x=normCard(cm.nwe,c.cards.mp);if(!sameCard(x,2.10,0.77,0.15,6.75))c.cards.mp=x}
@@ -4836,20 +4932,22 @@ P.boltNorm=norm;
 const zcard=(c,k,peak)=>c.cards[(k===Z_HIGH?'h':k===Z_LOW?'l':'m')+(peak?'p':'v')];
 /* v3.46: categorías de Bolt: la tarjeta de Comfort / XL / Premium (claves lv1…hp3); sin categoría, la de la zona de siempre (igual que OfferAnalyzer.catCard de Java) */
 const ccard=(c,k,peak,cat)=>{const i=CATS.indexOf(cat);if(i<0)return zcard(c,k,peak);return c.cards[(k===Z_HIGH?'h':k===Z_LOW?'l':'m')+(peak?'p':'v')+(i+1)]||zcard(c,k,peak)};
+/* v3.47: la tarjeta de una RECOGIDA en el aeropuerto: la de la categoría (av1…ap3) si la hay; si no, la del aeropuerto de siempre (igual que OfferAnalyzer.airCard de Java) */
+const acard=(c,peak,cat)=>{const i=CATS.indexOf(cat);if(i>=0){const x=c.cards[(peak?'ap':'av')+(i+1)];if(x)return x}return peak?c.cards.ap:c.cards.av};
 /* redondeo del bruto a 5 céntimos (medio hacia arriba), sin ruido de coma flotante */
 const r5=(c,x)=>{if(!c.round5)return x;const v=Math.round(x*1e6)/1e6;return Math.floor(v*20+0.5+1e-7)/20};
 function calc(c,up,km,min,om,ak,zk,ev,cat){
   const pickup=ak==='pickup',air=ak!=='';
-  const card=pickup?(up?c.cards.ap:c.cards.av):ccard(c,zk,up,cat);
-  let raw=card.base+km*card.km+min*card.min,ma=false;
-  if(pickup&&c.airFlatKm>0&&km<=c.airFlatKm&&card.minFare>0){raw=card.minFare;ma=true}
+  const card=pickup?acard(c,up,cat):ccard(c,zk,up,cat);
+  let raw=card.base+km*card.km+min*card.min,ma=false,flat=false;
+  if(pickup&&c.airFlatKm>0&&km<=c.airFlatKm&&card.minFare>0){raw=card.minFare;ma=true;flat=true}   /* v3.47: precio fijo = la mínima y la tasa va APARTE (encima) */
   else if(card.minFare>0&&raw<card.minFare){raw=card.minFare;ma=true}
   const m=om>1?Math.min(10,om):1,fm=m>1+1e-9?1+c.fine/100:1;
   let disc=0,evShown='';
   if(c.longDisc>0&&!ma&&!air&&km>=c.longKm&&m>1+1e-9){if(c.eventOn&&ev)evShown=ev;else{disc=c.longDisc;raw=raw*(1-disc/100)}}
   const range=false;   /* v3.44: nunca hay rango: un solo neto. Lo que hubiera guardado en «short» se ignora */
   const mid=range?raw+(c.short.lo+c.short.hi)/2:raw;
-  const gross=r5(c,mid*m*fm),pct=Math.max(0,Math.min(90,c.comm)),fee=air?c.airFee:0;
+  const pct=Math.max(0,Math.min(90,c.comm)),fee=air?c.airFee:0,gross=r5(c,mid*m*fm+(flat?fee:0));   /* v3.47: con la mínima fija el cliente paga la mínima (con la demanda) + la tasa aparte; a la tasa no le afecta la demanda */
   const after=fee>0?Math.max(0,gross-fee):gross,comm=after*pct/100,net=after-comm;
   const e={gross,comm,net,mult:m,fee,grossLo:gross,grossHi:gross,netLo:net,netHi:net,range,alt:-1,airport:ak,minApplied:ma,weekend:false,peakUsed:false,zone:zk,fine:m>1+1e-9?c.fine:0,disc,event:evShown,peakShort:false};
   if(range){
@@ -4903,7 +5001,7 @@ function detectCategory(nodes){
   if(!Array.isArray(nodes))return '';
   for(const raw of nodes){if(raw==null||String(raw).length>40)continue;const n=nrm(raw).replace(/[^a-z0-9]+/g,' ').trim();
     if(!n||n.length>20)continue;
-    if(/^(bolt )?(comfort|confort)$/.test(n))return 'comfort';if(/^(bolt )?xl$/.test(n))return 'xl';if(/^(bolt )?premium$/.test(n))return 'premium';if(/^(bolt )?(electric|electrico)$/.test(n))return ''}
+    if(/^(bolt )?(comfort|confort)$/.test(n))return 'comfort';if(/^(bolt )?xl$/.test(n))return 'xl';if(/^(bolt )?premium$/.test(n))return 'premium';if(/^(bolt )?(child|booster) ?seat$/.test(n))return 'childseat';if(/^(bolt )?(electric|electrico)$/.test(n))return ''}
   return '';
 }
 P.boltCategory=detectCategory;
@@ -5068,7 +5166,7 @@ const peakSum=c=>c.peakApplies?(c.peakKm>0?'la punta sube el precio en viajes de
 /* ---------- las mismas líneas de detalle que el aviso (Java: cardLine, zoneDemand, rangeLine, peakLine) ---------- */
 function cardLine(e){
   const per=e.peakUsed?'hora punta':'valle';
-  if(e.airport==='pickup')return 'Aeropuerto (recogida) · tarjeta del aeropuerto · '+per;
+  if(e.airport==='pickup')return 'Aeropuerto (recogida) · tarjeta '+(CATL[e.cat]?CATL[e.cat]+' ':'')+'del aeropuerto · '+per;
   const t='Tarjeta '+(CATL[e.cat]?CATL[e.cat]+' ':'')+'de zona '+ZN[e.zone]+' · '+per;
   return e.airport==='dest'?'Aeropuerto (viaje hacia allí) · '+t:t;
 }
@@ -5094,11 +5192,12 @@ const SETS=[['h','Zona alta'],['m','Zona media'],['l','Zona baja']];
 function pCards(){
   return '<small>Cada zona tiene dos tarjetas: <b>valle</b> (el resto del tiempo) y <b>hora punta</b> (dentro de tus franjas). La zona es la de la <b>recogida</b>, nunca la del destino. '
    +'La de hora punta se usa en los viajes <b>cortos</b> en hora punta (los km se cambian en <b>General</b>); en los largos se usa la de valle. Si apagas «La hora punta sube lo que cobro», el aviso calcula siempre con la de valle y te dice lo que saldría con la de punta.</small>'
+   +'<details class="bz-cat" id="bz_cat_0"><summary><b>Bolt</b><small>Bolt normal y Electric · zona alta, media y baja</small></summary>'
    +SETS.map(s=>'<b class="bz-sub">📍 '+s[1]+'</b>'+cardHtml(s[0]+'v','Valle','Valle')+cardHtml(s[0]+'p','Hora punta','Punta')).join('')
-   +'<div class="bz-btns"><button type="button" class="secondary" id="bz_cards_def" onclick="boltReset(\'cards\')">↺ Valores iniciales de las 6 tarjetas</button></div>'
-   +'<b class="bz-sub">⭐ Categorías de Bolt</b><small>Comfort, XL y Premium: la app las reconoce por la palabra que sale arriba de la oferta, donde pone «Bolt». «Electric» y «Bolt» se calculan con las tarjetas de arriba. '
-   +'De fábrica cada categoría es el Bolt normal de esa zona más lo que su tarifa cuesta de más (valle: tu pantalla de tarifas de Bolt). <b>La hora punta de las categorías es aproximada</b> hasta que pongas los precios reales de punta; si Bolt no sube igual, corrígelos aquí.</small>'
-   +CATS.map((cn,i)=>'<details class="bz-cat" id="bz_cat_'+(i+1)+'"><summary><b>'+CATL[cn]+'</b></summary>'+SETS.map(s=>'<b class="bz-sub">📍 '+s[1]+'</b>'+cardHtml(s[0]+'v'+(i+1),'Valle','Valle')+cardHtml(s[0]+'p'+(i+1),'Hora punta','Punta')).join('')+'</details>').join('')
+   +'<div class="bz-btns"><button type="button" class="secondary" id="bz_cards_def" onclick="boltReset(\'cards\')">↺ Valores iniciales de las 6 tarjetas</button></div></details>'
+   +CATS.map((cn,i)=>'<details class="bz-cat" id="bz_cat_'+(i+1)+'"><summary><b>'+CATL[cn]+'</b><small>zona alta, media y baja</small></summary>'+SETS.map(s=>'<b class="bz-sub">📍 '+s[1]+'</b>'+cardHtml(s[0]+'v'+(i+1),'Valle','Valle')+cardHtml(s[0]+'p'+(i+1),'Hora punta','Punta')).join('')+'</details>').join('')
+   +'<small class="bz-catnote">Toca Bolt, Comfort, XL, Premium o Child Seat para ver sus tarjetas. Comfort, XL y Premium: la app las reconoce por la palabra que sale arriba de la oferta, donde pone «Bolt». «Electric» y «Bolt» se calculan con la tarjeta «Bolt». '
+   +'De fábrica llevan los <b>precios reales</b> de tu pantalla de tarifas de Bolt (valle y hora punta). <b>Child Seat</b> (el Booster Seat vale igual): su hora punta es real; la de valle va igual que la de punta hasta que pongas la real. Si Bolt los cambia, corrígelos aquí.</small>'
    +'<div class="bz-btns"><button type="button" class="secondary" id="bz_cats_def" onclick="boltReset(\'cats\')">↺ Valores iniciales de las categorías</button></div>'
    +testHtml('c','Escribe los km y minutos del viaje con pasajero y mira lo que estimaría la app con las tarjetas de arriba (sin guardar).');
 }
@@ -5108,10 +5207,12 @@ function pAir(){
   const c=B.cfg;
   return sw('Usar la tarjeta del aeropuerto en las recogidas','Recogida en «parking P1 de la T1», «parking express T2», «parking módulo D … T4». Desmarcado: se usa la tarjeta de la zona.','bz_airOn','airOn',c.airOn)
    +'<div class="bz-g">'+cell('Tasa del aeropuerto (€)','bz_airFee',show(c.airFee),'airFee')+cell('Mínima fija hasta (km)','bz_airFlatKm',show(c.airFlatKm),'airFlatKm',{step:'0.5'})+'</div>'
-   +cardHtml('av','Recogida en el aeropuerto','Valle')+cardHtml('ap','Recogida en el aeropuerto','Punta')
-   +'<div class="bz-hint">En una <b>recogida</b> en el aeropuerto: hasta los km indicados solo vale la <b>mínima</b> (precio fijo); a partir de ahí, inicial + km × precio + minutos × precio. '
-   +'La <b>demanda multiplica todo</b> (la mínima también). Los viajes <b>hacia</b> el aeropuerto (Terminal 1–4, «Aeropuerto…») usan la tarjeta de la zona de la recogida. '
-   +'En los dos casos se resta primero la <b>tasa</b> (el precio de Bolt ya la incluye) y sobre lo que queda se aplica la comisión. El barrio de Barajas o la Avenida de la Hispanidad no cuentan como aeropuerto.</div>'
+   +'<details class="bz-cat" id="bz_aircat_0"><summary><b>Bolt</b><small>recogida en el aeropuerto</small></summary>'+cardHtml('av','Recogida en el aeropuerto','Valle')+cardHtml('ap','Recogida en el aeropuerto','Punta')+'</details>'
+   +CATS.map((cn,i)=>'<details class="bz-cat" id="bz_aircat_'+(i+1)+'"><summary><b>'+CATL[cn]+'</b><small>recogida en el aeropuerto</small></summary>'+cardHtml('av'+(i+1),'Valle','Valle')+cardHtml('ap'+(i+1),'Hora punta','Punta')+'</details>').join('')
+   +'<small class="bz-catnote">Toca Bolt, Comfort, XL, Premium o Child Seat para ver su tarjeta de aeropuerto. Comfort, XL y Premium tienen su propia tarifa de aeropuerto (Child Seat usa la de Comfort hasta que tengas la real). La de hora punta es igual que la de valle hasta que tengas el precio real.</small>'
+   +'<div class="bz-hint">En una <b>recogida</b> en el aeropuerto: hasta los km indicados el cliente paga la <b>mínima</b> (precio fijo) y la <b>tasa</b> aparte, encima; a partir de ahí, inicial + km × precio + minutos × precio (la tasa ya va dentro). Con Comfort, XL o Premium se usa la tarjeta de esa categoría. '
+   +'La <b>demanda multiplica el precio</b> (la mínima también), pero no la tasa. Los viajes <b>hacia</b> el aeropuerto (Terminal 1–4, «Aeropuerto…») usan la tarjeta de la zona de la recogida. '
+   +'En los dos casos se resta primero la <b>tasa</b> (el precio de Bolt la incluye) y sobre lo que queda se aplica la comisión. El barrio de Barajas o la Avenida de la Hispanidad no cuentan como aeropuerto.</div>'
    +'<div class="bz-btns"><button type="button" class="secondary" id="bz_air_def" onclick="boltReset(\'air\')">↺ Valores iniciales del aeropuerto</button></div>'
    +testHtml('a','Prueba una recogida en el aeropuerto o un viaje hacia allí con los valores de arriba (sin guardar).');
 }
@@ -5361,7 +5462,7 @@ function testHtml(p,note){
    +cell('Km del viaje',id('km'),show(s.km),'',{step:'0.1',on})+cell('Minutos del viaje',id('min'),show(s.min),'',{step:'1',on})
    +cell('Demanda de la oferta (×, opcional)',id('mult'),s.mult,'',{step:'0.1',on})
    +(p==='a'?'<label class="bz-f"><span>Tipo de viaje</span>'+sel(id('kind'),'',[['pickup','Recogida en el aeropuerto'],['dest','Viaje hacia el aeropuerto']],s.kind,on)+'</label>':'')
-   +(p==='c'?'<label class="bz-f"><span>Tipo de viaje (categoría)</span>'+sel(id('cat'),'',[['','Bolt (normal o Electric)'],['comfort','Comfort'],['xl','XL'],['premium','Premium']],s.cat||'',on)+'</label>':'')
+   +((p==='c'||p==='a')?'<label class="bz-f"><span>Tipo de viaje (categoría)</span>'+sel(id('cat'),'',[['','Bolt (normal o Electric)'],['comfort','Comfort'],['xl','XL'],['premium','Premium'],['childseat','Child Seat']],s.cat||'',on)+'</label>':'')
    +'<label class="bz-f"><span>'+(p==='a'?'Zona de la recogida (solo cuenta hacia el aeropuerto)':'Zona de la recogida')+'</span>'+sel(id('zone'),'',[['2','Zona alta'],['1','Zona media'],['0','Zona baja']],s.zone,on)+'</label>'
    +(p==='d'?'<label class="bz-f"><span>Lugar de evento</span>'+sel(id('ev'),'',[['','Ninguno']].concat(EV_NAME.map(n=>[n,n])),s.ev||'',on)+'</label>':'')
    +'<label class="bz-f"><span>Hora</span>'+sel(id('per'),'',[['auto','Ahora (según mis franjas)'],['v','Valle'],['p','Hora punta']],s.per,on)+'</label></div>'
@@ -5377,7 +5478,7 @@ window.boltSim=function(p){
   if(!(km>=0)||!(min>=0)){out.innerHTML='<span class="bz-warn">Escribe los km y los minutos del viaje con pasajero.</span>';return}
   const zk=Math.max(0,Math.min(2,Number(s.zone)|0)),om=num(mv),omv=Number.isFinite(om)&&om>0?om:-1;
   const peak=s.per==='p'?true:s.per==='v'?false:isPeak(B.cfg,zk,new Date());
-  const e=estimate(B.cfg,peak,km,min,omv,p==='a'?s.kind:'',zk,p==='d'?(s.ev||''):'',p==='c'?(s.cat||''):''),id=x=>'bz_t'+p+'_'+x;
+  const e=estimate(B.cfg,peak,km,min,omv,p==='a'?s.kind:'',zk,p==='d'?(s.ev||''):'',(p==='c'||p==='a')?(s.cat||''):''),id=x=>'bz_t'+p+'_'+x;
   const rg=e.range&&e.netHi>e.netLo+1e-9;
   out.innerHTML='<div class="bz-big"><span>NETO ESTIMADO'+(rg?' · entre '+money(e.netLo)+' y '+money(e.netHi)+' €':'')+'</span><b id="'+id('net')+'">'+money(e.net)+' €</b></div>'
    +'<div class="bz-line">Bruto estimado: <b id="'+id('gross')+'">'+money(e.gross)+' €</b>'+(e.minApplied?' (tarifa mínima)':'')+(e.fee>0?' − Tasa del aeropuerto: <b id="'+id('fee')+'">'+money(e.fee)+' €</b> = <b id="'+id('after')+'">'+money(Math.max(0,e.gross-e.fee))+' €</b> (la tasa se resta antes de la comisión)':'')+' · Comisión ('+es(B.cfg.comm)+' %): <b id="'+id('comm')+'">'+money(e.comm)+' €</b></div>'
@@ -5500,7 +5601,7 @@ window.boltReset=function(which){
   else if(which==='areas'){B.cfg.zone.zones=[];if(P.zmap){P.zmap.sel=-1;P.zmap.vsel=-1;P.zmap.draft=null}}
   else if(which==='slotsm'){B.cfg.slots=d.slots}
   else if(which==='slotsh'){B.cfg.slotsH=d.slotsH}
-  else if(which==='air'){B.cfg.cards.av=d.cards.av;B.cfg.cards.ap=d.cards.ap;B.cfg.airOn=d.airOn;B.cfg.airFee=d.airFee;B.cfg.airFlatKm=d.airFlatKm}
+  else if(which==='air'){B.cfg.cards.av=d.cards.av;B.cfg.cards.ap=d.cards.ap;for(const k of AIRKEYS)B.cfg.cards[k]=d.cards[k];B.cfg.airOn=d.airOn;B.cfg.airFee=d.airFee;B.cfg.airFlatKm=d.airFlatKm}
   else if(which==='dem'){B.cfg.fine=d.fine;B.cfg.short=d.short;B.cfg.longKm=d.longKm;B.cfg.longDisc=d.longDisc;B.cfg.eventOn=d.eventOn}
   else if(which==='cats'){for(const k of CATKEYS)B.cfg.cards[k]=d.cards[k]}
   else{for(const k of ['lv','lp','mv','mp','hv','hp'])B.cfg.cards[k]=d.cards[k]}
@@ -5836,7 +5937,7 @@ try{
   const e=jEntry('rentabilidad');
   if(e)e[4]='Es un aviso que salta arriba cuando te llega una oferta de Bolt, Uber o Cabify. Cada dato (€/hora, €/km y distancia de recogida) sale con su color: verde si cumple tu objetivo, naranja si se queda un poco corto y rojo si está lejos. Arriba del todo: ACEPTAR si todo está bien, RECHAZAR si algo está muy mal, y A VALORAR si está justo. Se activa en Ajustes → Rentabilidad de viajes. La oferta de Bolt no muestra el precio: la app lo ESTIMA con tus tarjetas de precios (por zona de la recogida —alta, media o baja—, por hora —valle o punta— y con la demanda que trae la oferta) y te dice bruto, comisión y NETO estimados, en pantalla y por voz. Son estimaciones tuyas, no tarifas oficiales de Bolt: los valores se corrigen en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt, que está dividida en apartados (General, Tarjetas, Aeropuerto, Horas punta y valle, Zonas y mapa, Demanda y viajes largos, Voz), cada uno con su prueba. En Uber la app lee una captura de la pantalla (dentro del móvil, sin guardarla). Solo avisa: no pulsa nada por ti.';
   J_KB.push(['boltzonas','📍','Zonas de Bolt (alta, media y baja)','zona alta^8,zona media^8,zona baja^8,zonas bolt^7,dibujar zona^8,poligono^7,mapa zonas^8,marcar zonas^7,forzar zona^8,zona forzada^8,zona por defecto^7,probar ubicacion^6,mover punto^6,borrar punto^6,borrar zona^6,gps bolt^6,recogida zona^6,zona de la recogida^7','El precio estimado de Bolt depende de la ZONA donde RECOGES (tu ubicación cuando llega la oferta), nunca de la del destino. Hay tres tipos: zona alta (donde Bolt paga más), media y baja, y cada una tiene su tarjeta de valle y de hora punta. Las zonas las dibujas tú como polígonos en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt → Zonas y mapa → «Dibujar zona nueva»: eliges el tipo (alta, media o baja), tocas el mapa para ir poniendo puntos alrededor de la zona (arrastras para mover el mapa, ＋/－ o pellizcar para acercar) y la cierras tocando el punto 1 (el verde) o con «Cerrar zona». En el mapa el color dice el tipo: verde alta, ámbar media y gris baja. Para cambiar una zona la tocas: arrastras un punto blanco para moverlo, tocas un punto y «Borrar punto» (mínimo 3), tocas el círculo pequeño del medio de un lado para añadir un punto, cambias el tipo con los botones Alta/Media/Baja o «Borrar zona». Una zona no puede cruzarse consigo misma. Si caes en varias zonas manda la alta, luego la media y luego la baja. Fuera de todas vale la «zona por defecto» (media al principio, se puede cambiar). «Forzar la zona» hace que TODAS las ofertas se calculen con esa zona hasta que vuelvas a «Automática» (no es solo para un viaje; el resumen avisa en mayúsculas mientras esté forzada). «Probar ubicación» dice en qué zona cree la app que estás y qué ve el lector de pantalla. Si el móvil no da la ubicación (sin permiso o sin datos recientes) se usa la zona por defecto y el aviso lo dice. No hay detección por código postal ni por la dirección de la recogida: solo el GPS del móvil. Las imágenes del mapa necesitan internet; sin internet las zonas se ven igual sobre un fondo liso. Son estimaciones, no tarifas oficiales de Bolt.']);
-  J_KB.push(['boltestimacion','💶','Precio estimado de Bolt','tarjetas bolt^7,tarjeta aeropuerto^7,tarjeta zona^7,valle punta^8,hora punta^8,horas punta^8,franjas^8,franja hora punta^8,aeropuerto bolt^6,tasa aeropuerto^6,precio bolt^6,estimar bolt^7,estimacion bolt^7,neto bolt^6,neto estimado^7,bolt no muestra el precio^8,tarifa bolt^5,comision bolt^5,bruto estimado^6,voz bolt^5,demanda^5,ajuste fino^6,viajes cortos^7,rango neto^7,festivos bolt^5,minima aeropuerto^6,redondeo 5 centimos^6','Bolt no enseña el precio en la oferta, así que la app lo estima con ocho tarjetas de precios que editas en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt: zona alta, media y baja, cada una de valle y de hora punta, más las dos del aeropuerto (valle y punta), con su inicial, su precio por km, su precio por minuto y su mínima. La zona es la de la RECOGIDA. Al principio, por ejemplo, la zona media en valle es 2,10 + 0,77 €/km + 0,15 €/min (mínima 6,75 €) y la alta en valle 2,39 + 0,85 + 0,16 (mínima 6,70 €). La DEMANDA que muestra la oferta (×1,2, ×1,4…) se lee siempre y multiplica todo, incluida la mínima, desde la primera décima. El bruto se redondea a 5 céntimos (como hace Bolt) y el neto no. HORA PUNTA: sale de tus franjas (una lista para las zonas media y baja y otra para la alta; al principio lunes a viernes de 07 a 10 y de 17 a 20, sábados y domingos todo el día; la alta empieza a las 08:00 por la mañana, sin confirmar; los festivos cuentan como punta). Por defecto la tarjeta de punta NO sube el precio («La hora punta sube lo que cobro», en General): en los viajes largos que hemos comparado, Bolt pagó la tarifa de valle aunque fuera hora punta; con la casilla apagada la app calcula con la de valle y el aviso añade «Ahora es hora punta: no sube tu precio (con tarifa de punta: neto X €)». Si ves que Bolt sí te paga la de punta, enciéndela. VIAJES CORTOS con demanda: el aviso y la voz dan siempre UN SOLO neto estimado (sin rangos). Hay un ajuste fino de la demanda (en %, 0 al principio). AEROPUERTO: las recogidas (parking P1 de la T1, parking express T2, parking módulo D … T4) usan la tarjeta del aeropuerto y, hasta 11 km, solo vale la mínima (13,50 €); los viajes HACIA el aeropuerto (Terminal 1–4, «Aeropuerto…») usan la tarjeta de la zona; el barrio de Barajas o la Avenida de la Hispanidad no cuentan. En los dos se resta primero la tasa de 2,57 € (el precio de Bolt ya la incluye) y sobre lo que queda se aplica la comisión (25 % al principio). Ejemplo: recogida en el aeropuerto de 13 km y 20 min sin demanda: 2,89 + 13 × 0,82 + 20 × 0,15 = 16,55 €; menos la tasa 2,57 € = 13,98 €; comisión 25 % = 3,50 €; neto 10,49 €. Son estimaciones, no tarifas oficiales: todos los valores se cambian en esa pantalla, donde cada apartado tiene una prueba para contrastarlos con viajes reales.']);
+  J_KB.push(['boltestimacion','💶','Precio estimado de Bolt','tarjetas bolt^7,tarjeta aeropuerto^7,tarjeta zona^7,valle punta^8,hora punta^8,horas punta^8,franjas^8,franja hora punta^8,aeropuerto bolt^6,tasa aeropuerto^6,precio bolt^6,estimar bolt^7,estimacion bolt^7,neto bolt^6,neto estimado^7,bolt no muestra el precio^8,tarifa bolt^5,comision bolt^5,bruto estimado^6,voz bolt^5,demanda^5,ajuste fino^6,viajes cortos^7,rango neto^7,festivos bolt^5,minima aeropuerto^6,redondeo 5 centimos^6','Bolt no enseña el precio en la oferta, así que la app lo estima con ocho tarjetas de precios que editas en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt: zona alta, media y baja, cada una de valle y de hora punta, más las dos del aeropuerto (valle y punta), con su inicial, su precio por km, su precio por minuto y su mínima. La zona es la de la RECOGIDA. Al principio, por ejemplo, la zona media en valle es 2,10 + 0,77 €/km + 0,15 €/min (mínima 6,75 €) y la alta en valle 2,39 + 0,85 + 0,16 (mínima 6,70 €). La DEMANDA que muestra la oferta (×1,2, ×1,4…) se lee siempre y multiplica todo, incluida la mínima, desde la primera décima. El bruto se redondea a 5 céntimos (como hace Bolt) y el neto no. HORA PUNTA: sale de tus franjas (una lista para las zonas media y baja y otra para la alta; al principio lunes a viernes de 07 a 10 y de 17 a 20, sábados y domingos todo el día; la alta empieza a las 08:00 por la mañana, sin confirmar; los festivos cuentan como punta). Por defecto la tarjeta de punta NO sube el precio («La hora punta sube lo que cobro», en General): en los viajes largos que hemos comparado, Bolt pagó la tarifa de valle aunque fuera hora punta; con la casilla apagada la app calcula con la de valle y el aviso añade «Ahora es hora punta: no sube tu precio (con tarifa de punta: neto X €)». Si ves que Bolt sí te paga la de punta, enciéndela. VIAJES CORTOS con demanda: el aviso y la voz dan siempre UN SOLO neto estimado (sin rangos). Hay un ajuste fino de la demanda (en %, 0 al principio). AEROPUERTO: las recogidas (parking P1 de la T1, parking express T2, parking módulo D … T4) usan la tarjeta del aeropuerto (con Comfort, XL o Premium, la de esa categoría) y, hasta 11 km, el cliente paga la mínima (13,70 € en Bolt) y la tasa aparte; los viajes HACIA el aeropuerto (Terminal 1–4, «Aeropuerto…») usan la tarjeta de la zona; el barrio de Barajas o la Avenida de la Hispanidad no cuentan. En los dos se resta primero la tasa de 2,57 € (el precio de Bolt ya la incluye) y sobre lo que queda se aplica la comisión (25 % al principio). Ejemplo: recogida en el aeropuerto de 13 km y 20 min sin demanda: 3,04 + 13 × 0,86 + 20 × 0,15 = 17,22 € (17,20 € redondeado); menos la tasa 2,57 € = 14,63 €; comisión 25 % = 3,66 €; neto 10,97 €. Ejemplo corto: recogida de 10,6 km: el cliente paga la mínima 13,70 € + la tasa 2,57 € = 16,27 € (16,25 €); sin la tasa quedan 13,68 €; comisión 25 % = 3,42 €; neto 10,26 €. Son estimaciones, no tarifas oficiales: todos los valores se cambian en esa pantalla, donde cada apartado tiene una prueba para contrastarlos con viajes reales.']);
 }catch(e){}
 // al abrir: si el teléfono perdió los ajustes de Bolt y la cuenta los tiene, se recuperan; y la cuenta guarda una copia
 setTimeout(async()=>{
@@ -7070,6 +7171,15 @@ html.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite .header::before{displ
 #boltBox .bz-test{margin:16px 0 4px;padding:10px;border:1px dashed #22c55e66;border-radius:14px;background:#22c55e0d}
 #boltBox .bz-test>small{display:block;margin:2px 0 8px;color:#9fb4c8;font-weight:500}
 #boltBox .bz-sub{display:block;margin:14px 0 4px;color:#cfe3f5}
+/* v3.47 · Bolt, Comfort, XL y Premium: botones desplegables (cerrados hasta que los tocas) */
+#boltBox details.bz-cat{margin:10px 0;border:1px solid #3b82f655;border-radius:16px;background:#3b82f60f;padding:2px 12px}
+#boltBox details.bz-cat[open]{border-color:#3b82f6aa;background:#3b82f61a;padding-bottom:10px}
+#boltBox details.bz-cat>summary{display:block;padding:12px 26px 12px 0;line-height:1.3}
+#boltBox details.bz-cat>summary b{font-size:16px}
+#boltBox details.bz-cat>summary small{display:block;margin-top:2px;font-size:12px;color:#7aa2ff;font-weight:600}
+#boltBox details.bz-cat>summary::after{top:50%;margin-top:-15px;right:0}
+#boltBox details.bz-cat[open]>summary{border-bottom:1px solid #3b82f655;margin-bottom:4px}
+#boltBox .bz-catnote{display:block;margin:6px 0 4px;color:#9fb4c8;font-weight:500;line-height:1.4}
 #boltBox .bz-slist{margin:14px 0;padding-top:6px;border-top:1px solid #ffffff1c}
 #boltBox .bz-slist>small{display:block;margin:2px 0 6px;color:#9fb4c8;font-weight:500}
 #boltBox .bz-days{display:flex;gap:6px;margin:8px 0;flex-wrap:wrap}
