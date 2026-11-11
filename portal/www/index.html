@@ -1415,8 +1415,239 @@ function saveManualEdit(){const k=billAnchor;const m=db.manual[k];if(!m){renderB
 function updateManualPreview(){const ids=['pBolt','pUber','pCabify','pPrivados','pFreeNow','pPideTaxi'];const total=ids.reduce((a,id)=>a+(Number(document.querySelector('#'+id)?.value)||0),0);const el=document.querySelector('#manualTotalPreview');if(el)el.textContent=euro(total)}
 function openManualEdit(){const k=billAnchor;const m=db.manual[k];if(!m){alert('No hay datos manuales guardados para este día.');return;}const p=m.platforms||{};document.querySelector('#content').innerHTML=`<div class="period-tabs"><button class="active">Diario</button><button onclick="setBillPeriod('weekly')">Semanal</button><button onclick="setBillPeriod('monthly')">Mensual</button></div><div class="navrow"><button class="back" onclick="renderBilling()">‹</button><b>${fmtDate(k)}</b><button class="back" onclick="changeBillPeriod(1)">›</button></div><section class="panel"><div class="section-title">✏️ Editar facturación del día</div><div class="note">Corrige los datos guardados de este día. La tarjeta se recalcula automáticamente como facturación menos efectivo.</div><div class="platform-summary" style="margin-top:10px"><div class="ps bolt">Bolt<input id="editBolt" class="input" type="number" step=".01" value="${Number(p.Bolt)||0}"></div><div class="ps uber">Uber<input id="editUber" class="input" type="number" step=".01" value="${Number(p.Uber)||0}"></div><div class="ps cabify">Cabify<input id="editCabify" class="input" type="number" step=".01" value="${Number(p.Cabify)||0}"></div><div class="ps private">Privados<input id="editPrivados" class="input" type="number" step=".01" value="${Number(p.Privados)||0}"></div><div class="ps freenow">Free Now<input id="editFreeNow" class="input" type="number" step=".01" value="${Number(p['Free Now'])||0}"></div><div class="ps pidetaxi">Pide Taxi<input id="editPideTaxi" class="input" type="number" step=".01" value="${Number(p['Pide Taxi'])||0}"></div></div><div class="metric" style="margin-top:10px"><small>Efectivo</small><input id="editCash" class="input" type="number" step=".01" value="${Number(m.cash)||0}"></div><div class="row" style="margin-top:10px"><button class="action" style="flex:1" onclick="saveManualEdit()">Guardar cambios</button><button class="back" style="flex:1" onclick="renderBilling()">Cancelar</button></div></section>`}
 
-function renderReport(){
-document.querySelector('#content').innerHTML=`<section class="panel"><div class="section-title">Informe general</div><div class="row"><button class="action" onclick="reportCurrentWeek()">Semana actual</button><button class="action" onclick="reportCurrentMonth()">Mes actual</button></div><div class="row" style="margin-top:8px"><input type="date" id="r1" value="${today()}"><input type="date" id="r2" value="${today()}"></div><button class="action" style="width:100%;margin-top:8px" onclick="manualReport()">Generar informe</button><div id="reportOut" style="margin-top:10px"></div></section>`}
+function renderReport(){if(cmpTab!=='custom'){cmpRender();return}renderReportCustom()}
+function renderReportCustom(){cmpCss();
+document.querySelector('#content').innerHTML=`<section class="panel"><div class="cmp">${cmpHead('custom')}</div><div class="section-title">Informe general</div><div class="row"><button class="action" onclick="reportCurrentWeek()">Semana actual</button><button class="action" onclick="reportCurrentMonth()">Mes actual</button></div><div class="row" style="margin-top:8px"><input type="date" id="r1" value="${today()}"><input type="date" id="r2" value="${today()}"></div><button class="action" style="width:100%;margin-top:8px" onclick="manualReport()">Generar informe</button><div id="reportOut" style="margin-top:10px"></div></section>`}
+/* v3.45 · Comparativa del Informe: semana contra semana y mes contra mes, en total y por aplicación.
+   Se compara siempre «los mismos días»: la semana actual de lunes a hoy contra el lunes de la semana pasada hasta el mismo día de la semana;
+   el mes actual del 1 a hoy contra el mes anterior del 1 al mismo número de día. Todo sale de billingDay() y de las horas guardadas, igual que el resto del Informe.
+   Las horas solo se guardan como «app prioritaria» u «Otras apps», por eso las horas y los euros por hora de cada app solo se muestran para la prioritaria. */
+var cmpTab='week',cmpApp=null;
+var CMP_COL={
+ 'Bolt':{l:'B',m:'#34d186',hero:'linear-gradient(135deg,#0f7a4a,#1fb673 65%,#34d186)',lbg:'#34d186',lfg:'#04301a',fg:'#fff',cls:'bolt'},
+ 'Uber':{l:'U',m:'#ffffff',hero:'linear-gradient(135deg,#050505,#262626 70%,#3a3a3a)',lbg:'#000000',lfg:'#ffffff',fg:'#fff',cls:'uber'},
+ 'Cabify':{l:'C',m:'#8a5cf5',hero:'linear-gradient(135deg,#4a23b0,#6f45e0 65%,#8a5cf5)',lbg:'#8a5cf5',lfg:'#ffffff',fg:'#fff',cls:'cabify'},
+ 'Privados':{l:'P',m:'#13a8ff',hero:'linear-gradient(135deg,#004bb8,#087fff 55%,#13c5ff)',lbg:'#087fff',lfg:'#ffffff',fg:'#fff',cls:'private'},
+ 'Free Now':{l:'F',m:'#f23a92',hero:'linear-gradient(135deg,#a8035a,#d6046f 55%,#f23a92)',lbg:'#f23a92',lfg:'#ffffff',fg:'#fff',cls:'freenow'},
+ 'Pide Taxi':{l:'T',m:'#ffc400',hero:'linear-gradient(135deg,#b88400,#e0a800 55%,#ffd23a)',lbg:'#ffd23a',lfg:'#2b2100',fg:'#2b2100',cls:'pidetaxi'}
+};
+function cmpCss(){
+ if(document.getElementById('cmpcss'))return;
+ var s=document.createElement('style');s.id='cmpcss';
+ s.textContent=`
+.cmp{--c-text:#f4f8ff;--c-muted:#a8c2dc;--c-soft:#8fb0cf;--c-card:linear-gradient(145deg,#08213a,#061426);--c-cardend:#061426;--c-bd:#239dff88;--c-line:#3b5f8655;--c-hero:linear-gradient(145deg,#0b2a4a,#061a30);--c-herobd:#239dffaa;--c-herofg:#fff;--c-actbar:linear-gradient(180deg,#f2f8ff,#bcd3ee);--c-prevbar:linear-gradient(180deg,#7f93b0,#566a86);--c-up:#3dff9a;--c-upbg:#12e87530;--c-upbd:#12e875;--c-dn:#ff7894;--c-dnbg:#ff315f30;--c-dnbd:#ff315f;--c-ne:#8fd3ff;--c-eq:#a8c2dc;--c-tab:#06142666;--c-tabbd:#239dff66;--c-axis:#3b5f86;color:var(--c-text);padding:2px 2px 8px}
+body.lt .cmp{--c-text:#10243d;--c-muted:#52688a;--c-soft:#6b7f9c;--c-card:#ffffff;--c-cardend:#ffffff;--c-bd:#c8d8ee;--c-line:#dbe6f4;--c-hero:linear-gradient(145deg,#e8f2ff,#ffffff);--c-herobd:#8ab8f5;--c-herofg:#10243d;--c-actbar:linear-gradient(180deg,#3b82f6,#1d5fd0);--c-prevbar:linear-gradient(180deg,#c4cfde,#9aa9c0);--c-up:#0a8a46;--c-upbg:#12e87522;--c-upbd:#16a35a;--c-dn:#c81e4a;--c-dnbg:#ff315f1a;--c-dnbd:#e0365f;--c-ne:#1f6fbf;--c-eq:#52688a;--c-tab:#ffffffcc;--c-tabbd:#c8d8ee;--c-axis:#b9c9de}
+.cmp *{box-sizing:border-box}
+.cmp-title{font-size:25px;font-weight:900;display:flex;align-items:center;gap:8px;margin:4px 0 8px}
+.cmp-tabs{display:grid;grid-template-columns:1fr 1fr 1.25fr;gap:0;border:1px solid var(--c-tabbd);border-radius:18px;background:var(--c-tab);padding:3px;margin:4px 0 10px}
+.cmp-tabs button{font:inherit;font-size:14px;text-align:center;padding:9px 4px;border-radius:15px;color:var(--c-muted);font-weight:700;background:none;border:1px solid transparent;cursor:pointer}
+.cmp-tabs button.on{background:linear-gradient(135deg,#087fff,#12b9ff);color:#fff;box-shadow:0 0 16px #008cff77;border-color:#65d5ff99}
+.cmp-per{font-size:13px;color:var(--c-text);margin:0 2px 10px;line-height:1.35}.cmp-per span{color:var(--c-soft);font-size:12px;display:block}
+.cmp-hero{border-radius:22px;padding:14px 14px 12px;background:var(--c-hero);border:1px solid var(--c-herobd);box-shadow:0 0 22px #008cff33,inset 0 1px 0 #ffffff22;display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;color:var(--c-herofg)}
+.cmp-hero.br{border-width:1.5px;color:var(--hfg,#fff)}
+.cmp-hero.br .cmp-hl,.cmp-hero.br .cmp-hv,.cmp-hero.br .cmp-prev{color:var(--hfg,#fff)!important}
+.cmp-hero.br .cmp-pill.up{background:#04301acc;border-color:#7dffb8;color:#7dffb8!important}.cmp-hero.br .cmp-pill.dn{background:#3a0010cc;border-color:#ff9fb4;color:#ff9fb4!important}.cmp-hero.br .cmp-pill.eq{background:#000000aa;border-color:#cfd8e6;color:#e6edf7!important}
+.cmp-hl{font-size:13.5px;font-weight:700;opacity:.95}.cmp-hv{font-size:36px;font-weight:900;letter-spacing:-.02em;line-height:1.1}
+.cmp-hr{text-align:right}.cmp-hr .cmp-prev{font-size:12.5px;margin-top:5px;line-height:1.3;opacity:.92}
+.cmp-pill{display:inline-block;font-size:13.5px;font-weight:900;padding:3px 10px;border-radius:999px;border:1.5px solid;white-space:nowrap}
+.cmp-pill.up{background:var(--c-upbg);border-color:var(--c-upbd);color:var(--c-up)}.cmp-pill.dn{background:var(--c-dnbg);border-color:var(--c-dnbd);color:var(--c-dn)}.cmp-pill.eq{background:#7f93b020;border-color:#7f93b0;color:var(--c-eq)}
+.cmp-chips{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.cmp-chip{border-radius:16px;padding:8px 6px;text-align:center;background:var(--c-card);border:1px solid var(--c-bd)}
+.cmp-chip small{display:block;font-size:11.5px;color:var(--c-muted)}.cmp-chip b{display:block;font-size:17px;margin:1px 0}.cmp-chip i{font-style:normal;font-size:11.5px;font-weight:800}
+.cmp-chip i.up{color:var(--c-up)}.cmp-chip i.dn{color:var(--c-dn)}.cmp-chip i.ne{color:var(--c-ne)}.cmp-chip i.eq{color:var(--c-eq)}
+.cmp-card{border-radius:22px;padding:12px 12px 10px;background:var(--c-card);border:1px solid var(--c-bd);margin:10px 0}
+.cmp-ct{font-weight:800;font-size:15.5px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}.cmp-ct small{font-weight:600;color:var(--c-muted);font-size:12px}
+.cmp-bars{display:flex;align-items:flex-end;gap:7px;height:112px;padding:0 2px;border-bottom:1px solid var(--c-axis)}
+.cmp-g{flex:1;display:flex;align-items:flex-end;gap:3px;height:100%;justify-content:center}
+.cmp-b{width:42%;border-radius:6px 6px 2px 2px;min-height:2px}
+.cmp-b.c{background:var(--pcb,var(--c-actbar))}.cmp-b.p{background:var(--c-prevbar)}.cmp-b.z{min-height:0;background:none}
+.cmp-lab{display:flex;gap:7px;padding:4px 2px 0;font-size:11.5px;color:var(--c-muted)}.cmp-lab span{flex:1;text-align:center}
+.cmp-leg{display:flex;gap:14px;justify-content:center;font-size:12px;color:var(--c-muted);margin-top:6px}.cmp-leg i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}.cmp-leg i.a{background:var(--pcb,var(--c-actbar))}.cmp-leg i.o{background:#7f93b0}
+.cmp-h2{font-size:18px;font-weight:900;margin:14px 2px 6px;display:flex;justify-content:space-between;align-items:baseline}.cmp-h2 small{font-size:12px;font-weight:600;color:var(--c-muted)}
+.cmp-app{position:relative;display:grid;grid-template-columns:46px 1fr auto 18px;gap:10px;align-items:center;border-radius:20px;padding:11px 10px 14px 11px;margin:8px 0;background:linear-gradient(145deg,var(--tint,#ffffff12),var(--c-cardend) 72%);border:1px solid var(--pc,#239dff);cursor:pointer;color:var(--c-text);width:100%;text-align:left;font:inherit}
+.cmp-logo{width:46px;height:46px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:22px;box-shadow:0 0 12px #00000044}
+.cmp-name{font-size:17px;font-weight:900}.cmp-sub{font-size:11.5px;color:var(--c-muted);line-height:1.3;margin-top:1px;font-weight:400}
+.cmp-right{text-align:right}.cmp-big{font-size:19px;font-weight:900}.cmp-right .cmp-pill{font-size:12px;padding:1px 8px;margin-top:2px}.cmp-right .cmp-prev{font-size:11px;color:var(--c-soft);margin-top:2px;font-weight:400}
+.cmp-go{font-size:26px;color:var(--pc,#65d5ff);font-weight:300}
+.cmp-share{position:absolute;left:67px;right:34px;bottom:5px;height:4px;border-radius:4px;background:#7f93b033}.cmp-share i{display:block;height:100%;border-radius:4px;background:var(--pc,#65d5ff)}
+.cmp-back{display:flex;align-items:center;gap:10px;margin:4px 0 8px}.cmp-back button{width:38px;height:38px;border-radius:50%;border:1px solid var(--c-bd);display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--c-tab);color:var(--c-text);cursor:pointer;padding:0}
+.cmp-back .cmp-title{margin:0}
+.cmp-day{display:grid;grid-template-columns:64px 1fr auto;gap:8px;align-items:center;padding:9px 2px;border-top:1px solid var(--c-line);cursor:pointer;width:100%;background:none;border-left:0;border-right:0;border-bottom:0;color:var(--c-text);font:inherit;text-align:left}
+.cmp-day.first{border-top:0}
+.cmp-day em{font-style:normal;font-weight:800;font-size:14px}.cmp-day small{display:block;color:var(--c-muted);font-size:11.5px;font-weight:400}.cmp-day .cmp-pill{font-size:11.5px;padding:1px 7px}
+.cmp-best{display:inline-block;font-size:10.5px;font-weight:900;color:#3a2a00;background:linear-gradient(135deg,#ffe27a,#ffb020);padding:1px 7px;border-radius:999px;margin-left:6px}
+.cmp-trips{padding:2px 4px 8px 66px;font-size:12.5px;color:var(--c-muted)}.cmp-trips[hidden]{display:none}
+.cmp-trips div{display:flex;justify-content:space-between;padding:3px 0;border-top:1px dashed var(--c-line)}.cmp-trips div:first-child{border-top:0}
+.cmp-note{font-size:11.5px;color:var(--c-soft);margin:10px 2px 0;line-height:1.4;text-align:center}
+.cmp-full{width:100%;margin-top:14px}
+body.lt .cmp-uber{--pc:#2a2d35!important;--pcb:linear-gradient(180deg,#4a4d57,#1c1d22)!important;--tint:#1c1d2214!important}
+`;
+ var L='html body.lt #content ',lt=[
+  ['.cmp-pill.up','color:var(--c-up)'],['.cmp-pill.dn','color:var(--c-dn)'],['.cmp-pill.eq','color:var(--c-eq)'],
+  ['.cmp-chip i.up','color:var(--c-up)'],['.cmp-chip i.dn','color:var(--c-dn)'],['.cmp-chip i.ne','color:var(--c-ne)'],['.cmp-chip i.eq','color:var(--c-eq)'],
+  ['.cmp-sub,.cmp-right .cmp-prev,.cmp-ct small,.cmp-h2 small,.cmp-lab span,.cmp-leg span,.cmp-note,.cmp-per span,.cmp-trips span,.cmp-day small,.cmp-chip small','color:var(--c-muted)'],
+  ['.cmp-tabs button','color:var(--c-muted)'],['.cmp-tabs button.on','color:#fff'],
+  ['.cmp-logo','color:var(--lf,#fff)'],['.cmp-best','color:#3a2a00'],['.cmp-go','color:var(--pc,#65d5ff)'],
+  ['.cmp-hero.br .cmp-hl,.cmp-hero.br .cmp-hv,.cmp-hero.br .cmp-prev','color:var(--hfg,#fff)'],
+  ['.cmp-hero.br .cmp-pill.up','color:#7dffb8'],['.cmp-hero.br .cmp-pill.dn','color:#ff9fb4'],['.cmp-hero.br .cmp-pill.eq','color:#e6edf7']
+ ];
+ s.textContent+=lt.map(function(r){return r[0].split(',').map(function(x){return L+x}).join(',')+'{'+r[1]+'!important}'}).join('\n');
+ document.head.appendChild(s);
+}
+/* ---- fechas del periodo ---- */
+function cmpPer(kind){
+ var t=new Date(today()+'T12:00:00'),cur=[],prevFull=[],i,a,b;
+ if(kind==='week'){
+  var dow=t.getDay()||7,mon=new Date(t);mon.setDate(t.getDate()-dow+1);
+  for(i=0;i<7;i++){a=new Date(mon);a.setDate(mon.getDate()+i);b=new Date(mon);b.setDate(mon.getDate()-7+i);if(i<dow)cur.push(dateKey(a));prevFull.push(dateKey(b))}
+ }else{
+  var N=t.getDate(),pl=new Date(t.getFullYear(),t.getMonth(),0,12).getDate();
+  for(i=1;i<=N;i++){cur.push(dateKey(new Date(t.getFullYear(),t.getMonth(),i,12)))}
+  for(i=1;i<=pl;i++){prevFull.push(dateKey(new Date(t.getFullYear(),t.getMonth()-1,i,12)))}
+ }
+ var prevSame=prevFull.slice(0,cur.length);
+ return {kind:kind,cur:cur,prevFull:prevFull,prevSame:prevSame};
+}
+function cmpD(k,o){return new Date(k+'T12:00:00').toLocaleDateString('es-ES',o)}
+function cmpRange(keys,kind){
+ var f=keys[0],l=keys[keys.length-1];
+ var wd=function(k){return cmpD(k,{weekday:'short'}).replace('.','')+' '+cmpD(k,{day:'numeric'})};
+ var mo=cmpD(l,{month:'short'}).replace('.','');
+ if(kind==='month')return cmpD(f,{day:'numeric'})+(keys.length>1?' – '+cmpD(l,{day:'numeric'}):'')+' '+mo;
+ return wd(f)+(keys.length>1?' – '+wd(l):'')+' '+mo;
+}
+/* ---- sumas ---- */
+function cmpAgg(keys){
+ var o={f:0,n:0,ht:0,hp:0,ho:0,pl:{}};PLAT6.forEach(function(p){o.pl[p]={f:0,n:0}});
+ keys.forEach(function(k){var x=billingDay(k);o.f+=Number(x.f)||0;o.n+=x.ts.length;o.ht+=totalMinutesForDay(k);o.hp+=boltMinutesForDay(k);o.ho+=otherMinutesForDay(k);
+  PLAT6.forEach(function(p){o.pl[p].f+=Number(x.plat[p]||0)});x.ts.forEach(function(t){if(o.pl[t.platform])o.pl[t.platform].n++})});
+ return o;
+}
+function cmpEh(f,min){return min>0?f/(min/60):null}
+function cmpHM(min){var t=Math.max(0,Math.round(Number(min)||0));return Math.floor(t/60)+' h '+String(t%60).padStart(2,'0')}
+function cmpPill(c,p){
+ var d=c-p;
+ if(Math.abs(d)<0.005)return '<span class="cmp-pill eq">= igual</span>';
+ if(!(p>0))return '<span class="cmp-pill up">▲ nuevo</span>';
+ return '<span class="cmp-pill '+(d>0?'up':'dn')+'">'+(d>0?'▲ +':'▼ −')+Math.abs(d/p*100).toFixed(1).replace('.',',')+' %</span>';
+}
+function cmpPillEu(c,p){
+ var d=c-p;
+ if(Math.abs(d)<0.005)return '<span class="cmp-pill eq">= igual</span>';
+ return '<span class="cmp-pill '+(d>0?'up':'dn')+'">'+(d>0?'▲ +':'▼ −')+euro(Math.abs(d))+'</span>';
+}
+function cmpSgEu(d){return Math.abs(d)<0.005?'±'+euro(0):(d>0?'+':'−')+euro(Math.abs(d))}
+function cmpChip(label,big,c,p,mode){
+ var t,k;
+ if(c==null||p==null){t='';k='eq'}
+ else{
+  var d=c-p;
+  if(mode==='min'){if(Math.abs(d)<1){t='= igual';k='eq'}else{t=(d>0?'▲ +':'▼ −')+(Math.abs(d)<60?Math.round(Math.abs(d))+' min':cmpHM(Math.abs(d)));k='ne'}}
+  else if(mode==='eur'){if(Math.abs(d)<0.005){t='= igual';k='eq'}else{t=(d>0?'▲ +':'▼ −')+euro(Math.abs(d));k=d>0?'up':'dn'}}
+  else if(mode==='pt'){if(Math.abs(d)<0.05){t='= igual';k='eq'}else{t=(d>0?'▲ +':'▼ −')+Math.abs(d).toFixed(1).replace('.',',')+' pts';k='ne'}}
+  else{if(d===0){t='= igual';k='eq'}else{t=(d>0?'▲ +':'▼ −')+Math.abs(d);k=d>0?'up':'dn'}}
+ }
+ return '<div class="cmp-chip"><small>'+label+'</small><b>'+big+'</b><i class="'+k+'">'+t+'</i></div>';
+}
+function cmpBars(cur,prev,labels,col){
+ var max=0;cur.concat(prev).forEach(function(v){if(v!=null&&v>max)max=v});if(max<=0)max=1;
+ var h=function(v){return Math.max(0,Math.round(v/max*100))+'%'};
+ return '<div class="cmp-chart"'+(col?' style="--pcb:linear-gradient(180deg,'+col+','+col+'cc)"':'')+'><div class="cmp-bars">'+labels.map(function(l,i){
+   return '<div class="cmp-g"><div class="cmp-b c'+(cur[i]==null?' z':'')+'" style="height:'+(cur[i]==null?0:h(cur[i]))+'"></div><div class="cmp-b p'+(prev[i]==null?' z':'')+'" style="height:'+(prev[i]==null?0:h(prev[i]))+'"></div></div>'}).join('')
+  +'</div><div class="cmp-lab">'+labels.map(function(l){return '<span>'+l+'</span>'}).join('')+'</div>'
+  +'<div class="cmp-leg"><span><i class="a"></i>Actual</span><span><i class="o"></i>Anterior</span></div></div>';
+}
+function cmpHead(act){
+ return '<div class="cmp-title">📊 Informe de Facturación</div><div class="cmp-tabs">'
+  +[['week','📅 Semana'],['month','🗓 Mes'],['custom','⚙ Personalizado']].map(function(x){return '<button class="'+(act===x[0]?'on':'')+'" onclick="cmpGo(\''+x[0]+'\')">'+x[1]+'</button>'}).join('')+'</div>';
+}
+function cmpGo(t){cmpTab=t;if(t==='custom')cmpApp=null;renderReport();try{window.scrollTo(0,0)}catch(e){}}
+function cmpOpen(p){cmpApp=p;renderReport();try{window.scrollTo(0,0)}catch(e){}}
+function cmpFull(kind){cmpTab='custom';cmpApp=null;renderReport();if(kind==='month')reportCurrentMonth();else reportCurrentWeek()}
+function cmpToggleDay(k){var e=document.getElementById('cmpd_'+k);if(e)e.hidden=!e.hidden}
+function cmpPeriodLine(P){
+ if(P.kind==='week')return 'Semana actual · '+cmpRange(P.cur,'week')+'<span>contra '+cmpRange(P.prevSame,'week')+' (los mismos días, para que sea justo)</span>';
+ return 'Mes actual · '+cmpRange(P.cur,'month')+'<span>contra el mes anterior, '+cmpRange(P.prevSame,'month')+' (los mismos días)</span>';
+}
+/* ---- pantalla general (todas las apps) ---- */
+function cmpRender(){
+ cmpCss();
+ var P=cmpPer(cmpTab==='month'?'month':'week'),prio=prioName();
+ if(cmpApp&&PLAT6.indexOf(cmpApp)<0)cmpApp=null;
+ var c=cmpAgg(P.cur),p=cmpAgg(P.prevSame),out='<section class="cmp">';
+ if(cmpApp){out+=cmpDetail(P,c,p,cmpApp,prio)}
+ else{
+  out+=cmpHead(cmpTab)+'<div class="cmp-per">'+cmpPeriodLine(P)+'</div>';
+  var ce=cmpEh(c.f,c.ht),pe=cmpEh(p.f,p.ht);
+  out+='<div class="cmp-hero"><div><div class="cmp-hl">Facturación '+(P.kind==='week'?'semana':'mes')+' · todas las apps</div><div class="cmp-hv">'+euro(c.f)+'</div></div><div class="cmp-hr">'+cmpPill(c.f,p.f)+'<div class="cmp-prev">'+cmpSgEu(c.f-p.f)+'<br>antes '+euro(p.f)+'</div></div></div>';
+  out+='<div class="cmp-chips">'+cmpChip('Viajes',c.n,c.n,p.n,'n')+cmpChip('Horas',cmpHM(c.ht),c.ht,p.ht,'min')+cmpChip('€ por hora',ce==null?'—':euro(ce),ce,pe,'eur')+'</div>';
+  /* gráfico */
+  var cv,pv,lb,sub;
+  if(P.kind==='week'){
+   lb=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];sub='facturación por día';
+   cv=lb.map(function(_,i){return i<P.cur.length?billingDay(P.cur[i]).f:null});pv=P.prevFull.map(function(k){return billingDay(k).f});
+  }else{
+   var N=P.cur.length,ch=Math.ceil(N/7);lb=[];cv=[];pv=[];sub='facturación por semanas';
+   for(var w=0;w<ch;w++){var a=w*7,b=Math.min(N,a+7);lb.push((a+1)+(b-a>1?'-'+b:''));
+    cv.push(cmpAgg(P.cur.slice(a,b)).f);pv.push(cmpAgg(P.prevSame.slice(a,Math.min(b,P.prevSame.length))).f)}
+  }
+  out+='<div class="cmp-card"><div class="cmp-ct">Comparativa '+(P.kind==='week'?'semanal':'mensual')+' <small>'+sub+'</small></div>'+cmpBars(cv,pv,lb)+'</div>';
+  /* apps */
+  var apps=PLAT6.filter(function(q){return c.pl[q].f>0.004||p.pl[q].f>0.004||c.pl[q].n>0}).sort(function(x,y){return c.pl[y].f-c.pl[x].f});
+  out+='<div class="cmp-h2">Por aplicación <small>toca una para ver el desglose</small></div>';
+  if(!apps.length)out+='<div class="cmp-note">Todavía no hay viajes ni facturación en '+(P.kind==='week'?'esta semana':'este mes')+' ni en el periodo anterior.</div>';
+  apps.forEach(function(q){
+   var K=CMP_COL[q],x=c.pl[q],y=p.pl[q],isP=(q===prio),sub,eh;
+   sub=x.n+(x.n===1?' viaje':' viajes');
+   if(isP&&c.hp>0){eh=cmpEh(x.f,c.hp);sub+=' · '+hoursText(c.hp)+' · '+euro(eh)+'/h'}
+   else if(x.n>0)sub+=' · '+euro(x.f/x.n)+'/viaje';
+   out+='<button class="cmp-app cmp-'+K.cls+'" onclick="cmpOpen(\''+q+'\')" style="--pc:'+K.m+';--tint:'+K.m+'2e"><div class="cmp-logo" style="background:'+K.lbg+';--lf:'+K.lfg+';color:'+K.lfg+(K.cls==='uber'?';border:1px solid #ffffff55':'')+'">'+K.l+'</div><div><div class="cmp-name">'+q+'</div><div class="cmp-sub">'+sub+'</div></div><div class="cmp-right"><div class="cmp-big">'+euro(x.f)+'</div>'+cmpPill(x.f,y.f)+'<div class="cmp-prev">antes '+euro(y.f)+'</div></div><div class="cmp-go">›</div><div class="cmp-share"><i style="width:'+(c.f>0?Math.min(100,x.f/c.f*100):0).toFixed(1)+'%"></i></div></button>';
+  });
+  if(c.ho>0||p.ho>0){var fo=c.f-c.pl[prio].f,po=p.f-p.pl[prio].f,eo=cmpEh(fo,c.ho);
+   out+='<div class="cmp-note">Las horas de las otras apps (todas juntas): '+hoursText(c.ho)+(eo!=null?' · '+euro(eo)+'/h':'')+'. La app solo guarda las horas como «'+prio+'» u «Otras apps».</div>'}
+  out+='<div class="cmp-note">Hoy cuenta solo hasta ahora, contra el día completo del periodo anterior.</div>';
+  out+='<button class="action cmp-full" onclick="cmpFull(\''+P.kind+'\')">📄 Informe completo '+(P.kind==='week'?'de la semana':'del mes')+' (PDF, comisión, gasolina, km)</button>';
+ }
+ document.querySelector('#content').innerHTML=out+'</section>';
+}
+/* ---- detalle de una app ---- */
+function cmpDetail(P,c,p,q,prio){
+ var K=CMP_COL[q],x=c.pl[q],y=p.pl[q],isP=(q===prio),out='';
+ out+='<div class="cmp-back"><button onclick="cmpOpen(null)" aria-label="Volver">←</button><div class="cmp-title"><span class="cmp-logo" style="width:34px;height:34px;font-size:17px;border-radius:11px;background:'+K.lbg+';--lf:'+K.lfg+';color:'+K.lfg+(K.cls==='uber'?';border:1px solid #ffffff55':'')+'">'+K.l+'</span> '+q+'</div></div>';
+ out+='<div class="cmp-tabs">'+[['week','📅 Semana'],['month','🗓 Mes'],['custom','⚙ Personalizado']].map(function(z){return '<button class="'+(cmpTab===z[0]?'on':'')+'" onclick="cmpGo(\''+z[0]+'\')">'+z[1]+'</button>'}).join('')+'</div>';
+ out+='<div class="cmp-per">'+cmpPeriodLine(P)+'</div>';
+ out+='<div class="cmp-hero br cmp-'+K.cls+'" style="background:'+K.hero+';border-color:'+K.m+';--hfg:'+K.fg+';box-shadow:0 0 24px '+K.m+'55"><div><div class="cmp-hl">Facturación '+q+'</div><div class="cmp-hv">'+euro(x.f)+'</div></div><div class="cmp-hr">'+cmpPill(x.f,y.f)+'<div class="cmp-prev">'+cmpSgEu(x.f-y.f)+'<br>antes '+euro(y.f)+'</div></div></div>';
+ if(isP){var ce=cmpEh(x.f,c.hp),pe=cmpEh(y.f,p.hp);
+  out+='<div class="cmp-chips">'+cmpChip('Viajes',x.n,x.n,y.n,'n')+cmpChip('Horas',cmpHM(c.hp),c.hp,p.hp,'min')+cmpChip('€ por hora',ce==null?'—':euro(ce),ce,pe,'eur')+'</div>'}
+ else{var cm=x.n>0?x.f/x.n:null,pm=y.n>0?y.f/y.n:null,cs=c.f>0?x.f/c.f*100:0,ps=p.f>0?y.f/p.f*100:0;
+  out+='<div class="cmp-chips">'+cmpChip('Viajes',x.n,x.n,y.n,'n')+cmpChip('€ por viaje',cm==null?'—':euro(cm),cm,pm,'eur')+cmpChip('Del total',cs.toFixed(0)+' %',cs,ps,'pt')+'</div>'}
+ /* gráfico */
+ var cv,pv,lb,sub,own=function(k){return Number(billingDay(k).plat[q]||0)};
+ if(P.kind==='week'){lb=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];sub='facturación por día';cv=lb.map(function(_,i){return i<P.cur.length?own(P.cur[i]):null});pv=P.prevFull.map(own)}
+ else{var N=P.cur.length,ch=Math.ceil(N/7);lb=[];cv=[];pv=[];sub='facturación por semanas';
+  for(var w=0;w<ch;w++){var a=w*7,b=Math.min(N,a+7);lb.push((a+1)+(b-a>1?'-'+b:''));cv.push(cmpAgg(P.cur.slice(a,b)).pl[q].f);pv.push(cmpAgg(P.prevSame.slice(a,Math.min(b,P.prevSame.length))).pl[q].f)}}
+ var chCol=K.cls==='uber'?null:K.m;
+ out+='<div class="cmp-card cmp-'+K.cls+'" style="border-color:'+(K.cls==='uber'?'var(--c-bd)':K.m+'88')+'"><div class="cmp-ct">'+q+(P.kind==='week'?' por día':' por semanas')+' <small>'+sub.replace('facturación por día','facturación').replace('facturación por semanas','facturación')+'</small></div>'+cmpBars(cv,pv,lb,chCol)+'</div>';
+ /* desglose por día */
+ var idx=P.cur.map(function(_,i){return i}),rows=[];
+ idx.forEach(function(i){var k=P.cur[i],pk=P.prevSame[i],cx=own(k),px=pk?own(pk):0;rows.push({k:k,pk:pk,c:cx,p:px})});
+ if(P.kind==='month'){rows=rows.filter(function(r){return r.c>0.004||r.p>0.004}).reverse()}
+ var best=-1,bi=-1;rows.forEach(function(r,i){if(r.c>best+1e-9&&r.c>0.004){best=r.c;bi=i}});
+ out+='<div class="cmp-h2">Desglose por día <small>toca un día para ver sus viajes</small></div><div class="cmp-card" style="padding:6px 12px;border-color:'+K.m+'88">';
+ if(!rows.length)out+='<div class="cmp-note">Sin datos de '+q+' en este periodo.</div>';
+ rows.forEach(function(r,i){
+  var tr=billingDay(r.k).ts.filter(function(t){return t.platform===q}),sub2=tr.length?tr.length+(tr.length===1?' viaje':' viajes'):(r.c>0?'importe manual':'sin viajes');
+  if(isP){var hm=boltMinutesForDay(r.k);if(hm>0)sub2+=' · '+hoursText(hm)+' · '+euro(r.c/(hm/60))+'/h'}
+  else if(tr.length)sub2+=' · '+euro(r.c/tr.length)+'/viaje';
+  var d=new Date(r.k+'T12:00:00'),lab=cmpD(r.k,{weekday:'short'}).replace('.','')+' '+d.getDate();
+  lab=lab.charAt(0).toUpperCase()+lab.slice(1);
+  out+='<button class="cmp-day'+(i===0?' first':'')+'" onclick="cmpToggleDay(\''+r.k+'\')"><em>'+lab+(i===bi?'<span class="cmp-best">🏆</span>':'')+'</em><small>'+sub2+'</small><div style="text-align:right"><b style="font-size:16px">'+euro(r.c)+'</b><br>'+(r.pk?cmpPillEu(r.c,r.p):'')+'</div></button>';
+  out+='<div class="cmp-trips" id="cmpd_'+r.k+'" hidden>'+(tr.length?tr.slice().sort(function(a,b){return String(a.time||'').localeCompare(String(b.time||''))}).map(function(t){return '<div><span>'+(t.time||'—')+(t.airport?' ✈':'')+'</span><span>'+euro(t.net)+(Number(t.tip)>0?' + propina '+euro(t.tip):'')+'</span></div>'}).join(''):'<div><span>Sin viajes uno a uno</span><span>'+euro(r.c)+'</span></div>')+'</div>';
+ });
+ out+='</div>';
+ out+='<div class="cmp-note">Hoy cuenta solo hasta ahora, contra el día completo del periodo anterior.</div>';
+ return out;
+}
 function reportCurrentWeek(){let [a,b]=weekBounds(0);report(a,b)}
 function reportCurrentMonth(){let [a,b]=monthBounds(0);report(a,b)}
 function manualReport(){let a=new Date(document.querySelector('#r1').value+'T12:00:00'),b=new Date(document.querySelector('#r2').value+'T12:00:00');report(a,b)}
@@ -2252,7 +2483,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.44';
+const APP_VERSION='v3.46';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -4526,6 +4757,8 @@ const SR=()=>{try{if(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isN
 const LSK='pdc_bolt',CFG_VER=334;
 const MAXZ=40,MAXPT=200,MAXS=30,WEEK=10080;
 const Z_LOW=0,Z_MID=1,Z_HIGH=2,ZW=['low','mid','high'],ZN=['baja','media','alta'],ZK=['l','m','h'];
+/* v3.46: categorías de Bolt */
+const CATS=['comfort','xl','premium'],CATL={comfort:'Comfort',xl:'XL',premium:'Premium'},CATKEYS=[1,2,3].reduce((a,n)=>a.concat(['lv','lp','mv','mp','hv','hp'].map(k=>k+n)),[]);
 const kindOfKey=k=>k==='h'?Z_HIGH:k==='l'?Z_LOW:Z_MID;
 const keyOfKind=k=>ZK[k]||'m';
 const CARD=(b,k,m,f)=>({base:b,km:k,min:m,minFare:f});
@@ -4536,7 +4769,9 @@ const HOLS=()=>['01-01','01-06','05-01','05-02','08-15','10-12','11-01','12-06',
 const defaults=()=>({on:true,mode:'auto',comm:25,peakApplies:true,round5:true,fine:0,peakKm:6.5,longKm:10,longDisc:13,eventOn:true,v:CFG_VER,cpv:337,zoneForce:'auto',zoneDef:'mid',
   short:{km:6,from:1.2,lo:0,hi:0},airOn:true,airFee:2.57,airFlatKm:11,holidaysWe:true,holidays:HOLS(),slots:slotsM(),slotsH:slotsHi(),
   cards:{lv:CARD(2.02,0.79,0.13,6.30),lp:CARD(3.03,0.80,0.16,8.85),mv:CARD(2.10,0.77,0.15,6.75),mp:CARD(2.68,0.84,0.20,7.65),
-         hv:CARD(2.39,0.85,0.16,6.70),hp:CARD(3.56,0.91,0.21,8.35),av:CARD(2.89,0.82,0.15,13.50),ap:CARD(2.89,0.82,0.15,13.50)},
+         hv:CARD(2.39,0.85,0.16,6.70),hp:CARD(3.56,0.91,0.21,8.35),av:CARD(2.89,0.82,0.15,13.50),ap:CARD(2.89,0.82,0.15,13.50),
+         /* v3.46: categorías de Bolt (1 Comfort, 2 XL, 3 Premium) por zona y valle / punta */
+         lv1:CARD(3.87,0.92,0.15,7.35),lp1:CARD(4.88,0.93,0.18,9.90),mv1:CARD(2.35,0.90,0.18,7.90),mp1:CARD(2.93,0.97,0.23,8.80),hv1:CARD(2.80,0.99,0.18,7.85),hp1:CARD(3.97,1.05,0.23,9.50),lv2:CARD(1.90,1.35,0.22,10.75),lp2:CARD(2.91,1.36,0.25,13.30),mv2:CARD(3.96,1.32,0.26,11.55),mp2:CARD(4.54,1.39,0.31,12.45),hv2:CARD(4.09,1.45,0.27,11.50),hp2:CARD(5.26,1.51,0.32,13.15),lv3:CARD(5.43,1.15,0.18,9.10),lp3:CARD(6.44,1.16,0.21,11.65),mv3:CARD(3.37,1.12,0.22,9.80),mp3:CARD(3.95,1.19,0.27,10.70),hv3:CARD(3.47,1.23,0.23,9.75),hp3:CARD(4.64,1.29,0.28,11.40)},
   zone:{zones:[],postal:{h:'28023 28033 28034 28035 28042 28043 28049 28050 28055 28100 28108 28109 28220 28221 28222 28223 28224 28230 28231 28232 28250 28701 28702 28703 28760 28761 28762'.split(' '),m:'28001 28002 28003 28004 28005 28006 28007 28008 28009 28010 28012 28013 28014 28015 28016 28020 28028 28029 28036 28039 28045 28040 28046 28048'.split(' '),l:'28022 28037 28801 28802 28803 28804 28805 28806 28807 28821 28822 28823 28830 28850 28018 28019 28021 28025 28026 28030 28031 28032 28038 28041 28044 28047 28054 28901 28902 28903 28904 28905 28906 28907 28911 28912 28913 28914 28915 28916 28917 28918 28919 28921 28922 28923 28924 28925 28931 28932 28933 28934 28935 28936 28937 28938 28940 28941 28942 28943 28944 28945 28946 28947 28980 28981 28982 28983 28984 28300 28311 28312 28320 28341 28342 28343 28011 28017 28024 28027 28051 28052 28053'.split(' ')}}});
 P.boltDefaults=defaults;
 const clone=o=>JSON.parse(JSON.stringify(o));
@@ -4579,7 +4814,7 @@ function norm(o){const c=defaults();if(!isObj(o))return c;
   c.slots=normSlots(o.slots,c.slots);c.slotsH=normSlots(o.slotsH,c.slotsH);
   const cm=isObj(o.cards)?o.cards:null;
   if(cm){
-    for(const k of ['lv','lp','mv','mp','hv','hp','av','ap'])c.cards[k]=normCard(cm[k],c.cards[k]);
+    for(const k of ['lv','lp','mv','mp','hv','hp','av','ap'].concat(CATKEYS))c.cards[k]=normCard(cm[k],c.cards[k]);
     // v3.15g: tarjetas normal / aeropuerto × entre semana / fin de semana. Solo se aprovecha lo que el conductor había cambiado de fábrica.
     if(cm.nwd!=null){const x=normCard(cm.nwd,c.cards.mv);if(!sameCard(x,2.10,0.77,0.15,6.75))c.cards.mv=x}
     if(cm.nwe!=null){const x=normCard(cm.nwe,c.cards.mp);if(!sameCard(x,2.10,0.77,0.15,6.75))c.cards.mp=x}
@@ -4599,11 +4834,13 @@ P.boltNorm=norm;
 
 /* ---------- el mismo cálculo que el aviso (igual que OfferAnalyzer.estimate de Java) ---------- */
 const zcard=(c,k,peak)=>c.cards[(k===Z_HIGH?'h':k===Z_LOW?'l':'m')+(peak?'p':'v')];
+/* v3.46: categorías de Bolt: la tarjeta de Comfort / XL / Premium (claves lv1…hp3); sin categoría, la de la zona de siempre (igual que OfferAnalyzer.catCard de Java) */
+const ccard=(c,k,peak,cat)=>{const i=CATS.indexOf(cat);if(i<0)return zcard(c,k,peak);return c.cards[(k===Z_HIGH?'h':k===Z_LOW?'l':'m')+(peak?'p':'v')+(i+1)]||zcard(c,k,peak)};
 /* redondeo del bruto a 5 céntimos (medio hacia arriba), sin ruido de coma flotante */
 const r5=(c,x)=>{if(!c.round5)return x;const v=Math.round(x*1e6)/1e6;return Math.floor(v*20+0.5+1e-7)/20};
-function calc(c,up,km,min,om,ak,zk,ev){
+function calc(c,up,km,min,om,ak,zk,ev,cat){
   const pickup=ak==='pickup',air=ak!=='';
-  const card=pickup?(up?c.cards.ap:c.cards.av):zcard(c,zk,up);
+  const card=pickup?(up?c.cards.ap:c.cards.av):ccard(c,zk,up,cat);
   let raw=card.base+km*card.km+min*card.min,ma=false;
   if(pickup&&c.airFlatKm>0&&km<=c.airFlatKm&&card.minFare>0){raw=card.minFare;ma=true}
   else if(card.minFare>0&&raw<card.minFare){raw=card.minFare;ma=true}
@@ -4625,13 +4862,13 @@ function calc(c,up,km,min,om,ak,zk,ev){
 /* peak = ¿es hora punta ahora en esa zona? (por las franjas). La tarjeta de punta solo se usa si además c.peakApplies; si no, se calcula con valle y se guarda en alt lo que saldría con punta */
 /* v3.34: la tarjeta de punta solo cuenta en viajes de menos de c.peakKm km (0 = en todos). Los viajes largos (desde c.longKm km) CON demanda bajan la tarjeta c.longDisc % (0 = sin descuento),
    salvo en un lugar de evento (event = su nombre, '' si no hay): ahí se cobra la tarifa normal. El aeropuerto no lleva descuento. */
-function estimate(c,peak,km,min,offerMult,airKind,zoneKind,event){
+function estimate(c,peak,km,min,offerMult,airKind,zoneKind,event,cat){
   const air=!!c.airOn&&(airKind==='pickup'||airKind==='dest'),ak=air?airKind:'';
   const zk=zoneKind==null?Z_MID:zoneKind,ev=typeof event==='string'?event:'';
   const fits=!(c.peakKm>0)||km<c.peakKm,up=!!peak&&!!c.peakApplies&&fits;
-  const e=calc(c,up,km,min,offerMult,ak,zk,ev);
-  e.weekend=!!peak;e.peakUsed=up;e.zone=zk;e.peakShort=!!peak&&!!c.peakApplies&&!fits;
-  if(peak&&!c.peakApplies)e.alt=calc(c,true,km,min,offerMult,ak,zk,ev).net;
+  const e=calc(c,up,km,min,offerMult,ak,zk,ev,cat);
+  e.weekend=!!peak;e.peakUsed=up;e.zone=zk;e.peakShort=!!peak&&!!c.peakApplies&&!fits;e.cat=CATS.indexOf(cat)>=0?cat:'';
+  if(peak&&!c.peakApplies)e.alt=calc(c,true,km,min,offerMult,ak,zk,ev,cat).net;
   return e;
 }
 P.boltEstimate=estimate;
@@ -4661,6 +4898,15 @@ function detectAirport(nodes){
   return pick?'pickup':dest?'dest':'';
 }
 P.boltAirport=detectAirport;
+/* v3.46: categoría de la oferta por la palabra que sale arriba, donde pone «Bolt» (igual que OfferAnalyzer.detectCategory de Java): comfort, xl, premium o '' (Bolt normal, Electric o no se reconoce) */
+function detectCategory(nodes){
+  if(!Array.isArray(nodes))return '';
+  for(const raw of nodes){if(raw==null||String(raw).length>40)continue;const n=nrm(raw).replace(/[^a-z0-9]+/g,' ').trim();
+    if(!n||n.length>20)continue;
+    if(/^(bolt )?(comfort|confort)$/.test(n))return 'comfort';if(/^(bolt )?xl$/.test(n))return 'xl';if(/^(bolt )?premium$/.test(n))return 'premium';if(/^(bolt )?(electric|electrico)$/.test(n))return ''}
+  return '';
+}
+P.boltCategory=detectCategory;
 /* v3.34 · lugares de eventos (igual que OfferAnalyzer.detectEvent / eventAt de Java): ahí no se aplica el descuento de los viajes largos con demanda */
 const EV_NAME=['IFEMA','Bernabéu','Metropolitano','Palacio Vistalegre','WiZink Center'];
 const EV_GEO=[[40.46778,-3.61722,1000],[40.45305,-3.68834,400],[40.43614,-3.59947,500],[40.38611,-3.73889,300],[40.4239,-3.6717,300]];
@@ -4823,7 +5069,7 @@ const peakSum=c=>c.peakApplies?(c.peakKm>0?'la punta sube el precio en viajes de
 function cardLine(e){
   const per=e.peakUsed?'hora punta':'valle';
   if(e.airport==='pickup')return 'Aeropuerto (recogida) · tarjeta del aeropuerto · '+per;
-  const t='Tarjeta de zona '+ZN[e.zone]+' · '+per;
+  const t='Tarjeta '+(CATL[e.cat]?CATL[e.cat]+' ':'')+'de zona '+ZN[e.zone]+' · '+per;
   return e.airport==='dest'?'Aeropuerto (viaje hacia allí) · '+t:t;
 }
 function demandLine(e,om){
@@ -4850,6 +5096,10 @@ function pCards(){
    +'La de hora punta se usa en los viajes <b>cortos</b> en hora punta (los km se cambian en <b>General</b>); en los largos se usa la de valle. Si apagas «La hora punta sube lo que cobro», el aviso calcula siempre con la de valle y te dice lo que saldría con la de punta.</small>'
    +SETS.map(s=>'<b class="bz-sub">📍 '+s[1]+'</b>'+cardHtml(s[0]+'v','Valle','Valle')+cardHtml(s[0]+'p','Hora punta','Punta')).join('')
    +'<div class="bz-btns"><button type="button" class="secondary" id="bz_cards_def" onclick="boltReset(\'cards\')">↺ Valores iniciales de las 6 tarjetas</button></div>'
+   +'<b class="bz-sub">⭐ Categorías de Bolt</b><small>Comfort, XL y Premium: la app las reconoce por la palabra que sale arriba de la oferta, donde pone «Bolt». «Electric» y «Bolt» se calculan con las tarjetas de arriba. '
+   +'De fábrica cada categoría es el Bolt normal de esa zona más lo que su tarifa cuesta de más (valle: tu pantalla de tarifas de Bolt). <b>La hora punta de las categorías es aproximada</b> hasta que pongas los precios reales de punta; si Bolt no sube igual, corrígelos aquí.</small>'
+   +CATS.map((cn,i)=>'<details class="bz-cat" id="bz_cat_'+(i+1)+'"><summary><b>'+CATL[cn]+'</b></summary>'+SETS.map(s=>'<b class="bz-sub">📍 '+s[1]+'</b>'+cardHtml(s[0]+'v'+(i+1),'Valle','Valle')+cardHtml(s[0]+'p'+(i+1),'Hora punta','Punta')).join('')+'</details>').join('')
+   +'<div class="bz-btns"><button type="button" class="secondary" id="bz_cats_def" onclick="boltReset(\'cats\')">↺ Valores iniciales de las categorías</button></div>'
    +testHtml('c','Escribe los km y minutos del viaje con pasajero y mira lo que estimaría la app con las tarjetas de arriba (sin guardar).');
 }
 
@@ -5111,6 +5361,7 @@ function testHtml(p,note){
    +cell('Km del viaje',id('km'),show(s.km),'',{step:'0.1',on})+cell('Minutos del viaje',id('min'),show(s.min),'',{step:'1',on})
    +cell('Demanda de la oferta (×, opcional)',id('mult'),s.mult,'',{step:'0.1',on})
    +(p==='a'?'<label class="bz-f"><span>Tipo de viaje</span>'+sel(id('kind'),'',[['pickup','Recogida en el aeropuerto'],['dest','Viaje hacia el aeropuerto']],s.kind,on)+'</label>':'')
+   +(p==='c'?'<label class="bz-f"><span>Tipo de viaje (categoría)</span>'+sel(id('cat'),'',[['','Bolt (normal o Electric)'],['comfort','Comfort'],['xl','XL'],['premium','Premium']],s.cat||'',on)+'</label>':'')
    +'<label class="bz-f"><span>'+(p==='a'?'Zona de la recogida (solo cuenta hacia el aeropuerto)':'Zona de la recogida')+'</span>'+sel(id('zone'),'',[['2','Zona alta'],['1','Zona media'],['0','Zona baja']],s.zone,on)+'</label>'
    +(p==='d'?'<label class="bz-f"><span>Lugar de evento</span>'+sel(id('ev'),'',[['','Ninguno']].concat(EV_NAME.map(n=>[n,n])),s.ev||'',on)+'</label>':'')
    +'<label class="bz-f"><span>Hora</span>'+sel(id('per'),'',[['auto','Ahora (según mis franjas)'],['v','Valle'],['p','Hora punta']],s.per,on)+'</label></div>'
@@ -5121,12 +5372,12 @@ window.boltSim=function(p){
   const out=document.getElementById('bz_t'+p+'_out');if(!out)return;
   const g=x=>{const e=document.getElementById('bz_t'+p+'_'+x);return e?e.value:null};
   const s=B.sim[p],km=num(g('km')),min=num(g('min')),mv=g('mult');
-  if(g('zone')!=null)s.zone=g('zone');if(g('per')!=null)s.per=g('per');if(g('kind')!=null)s.kind=g('kind');if(g('ev')!=null)s.ev=g('ev');if(mv!=null)s.mult=mv;
+  if(g('cat')!=null)s.cat=g('cat');if(g('zone')!=null)s.zone=g('zone');if(g('per')!=null)s.per=g('per');if(g('kind')!=null)s.kind=g('kind');if(g('ev')!=null)s.ev=g('ev');if(mv!=null)s.mult=mv;
   if(Number.isFinite(km))s.km=km;if(Number.isFinite(min))s.min=min;
   if(!(km>=0)||!(min>=0)){out.innerHTML='<span class="bz-warn">Escribe los km y los minutos del viaje con pasajero.</span>';return}
   const zk=Math.max(0,Math.min(2,Number(s.zone)|0)),om=num(mv),omv=Number.isFinite(om)&&om>0?om:-1;
   const peak=s.per==='p'?true:s.per==='v'?false:isPeak(B.cfg,zk,new Date());
-  const e=estimate(B.cfg,peak,km,min,omv,p==='a'?s.kind:'',zk,p==='d'?(s.ev||''):''),id=x=>'bz_t'+p+'_'+x;
+  const e=estimate(B.cfg,peak,km,min,omv,p==='a'?s.kind:'',zk,p==='d'?(s.ev||''):'',p==='c'?(s.cat||''):''),id=x=>'bz_t'+p+'_'+x;
   const rg=e.range&&e.netHi>e.netLo+1e-9;
   out.innerHTML='<div class="bz-big"><span>NETO ESTIMADO'+(rg?' · entre '+money(e.netLo)+' y '+money(e.netHi)+' €':'')+'</span><b id="'+id('net')+'">'+money(e.net)+' €</b></div>'
    +'<div class="bz-line">Bruto estimado: <b id="'+id('gross')+'">'+money(e.gross)+' €</b>'+(e.minApplied?' (tarifa mínima)':'')+(e.fee>0?' − Tasa del aeropuerto: <b id="'+id('fee')+'">'+money(e.fee)+' €</b> = <b id="'+id('after')+'">'+money(Math.max(0,e.gross-e.fee))+' €</b> (la tasa se resta antes de la comisión)':'')+' · Comisión ('+es(B.cfg.comm)+' %): <b id="'+id('comm')+'">'+money(e.comm)+' €</b></div>'
@@ -5242,6 +5493,7 @@ window.boltReset=function(which){
     :which==='slotsh'?'¿Volver a las franjas iniciales de la zona alta?\n\nNo se guarda hasta que pulses «Guardar».'
     :which==='air'?'¿Volver a los valores iniciales del aeropuerto (tarjetas, tasa y mínima fija)?\n\nNo se guarda hasta que pulses «Guardar».'
     :which==='dem'?'¿Volver a los valores iniciales de la demanda y de los viajes largos?\n\nNo se guarda hasta que pulses «Guardar».'
+    :which==='cats'?'¿Volver a los valores iniciales de las tarjetas de Comfort, XL y Premium?\n\nNo se guarda hasta que pulses «Guardar».'
     :'¿Volver a los valores iniciales de las seis tarjetas de zona?\n\nNo se guarda hasta que pulses «Guardar».';
   if(!confirm(msg))return;
   if(which==='all'){B.cfg=d}
@@ -5250,6 +5502,7 @@ window.boltReset=function(which){
   else if(which==='slotsh'){B.cfg.slotsH=d.slotsH}
   else if(which==='air'){B.cfg.cards.av=d.cards.av;B.cfg.cards.ap=d.cards.ap;B.cfg.airOn=d.airOn;B.cfg.airFee=d.airFee;B.cfg.airFlatKm=d.airFlatKm}
   else if(which==='dem'){B.cfg.fine=d.fine;B.cfg.short=d.short;B.cfg.longKm=d.longKm;B.cfg.longDisc=d.longDisc;B.cfg.eventOn=d.eventOn}
+  else if(which==='cats'){for(const k of CATKEYS)B.cfg.cards[k]=d.cards[k]}
   else{for(const k of ['lv','lp','mv','mp','hv','hp'])B.cfg.cards[k]=d.cards[k]}
   reloadBody();if(P.zmap&&P.zmap.open){P.zmap.panel();P.zmap.redraw()}
 };

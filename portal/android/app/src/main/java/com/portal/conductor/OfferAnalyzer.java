@@ -44,6 +44,7 @@ public class OfferAnalyzer {
         public double estCommPct = -1;
         public String estAirport = "";              // "" | "pickup" (recogida en el aeropuerto) | "dest" (viaje hacia el aeropuerto)
         public double estFee = 0;                   // tasa del aeropuerto restada antes de la comision
+        public String estCat = "";                  // v3.46: categoria de la oferta ("", "comfort", "xl" o "premium")
         public int estZone = 1;                     // zona de la recogida: 0 baja, 1 media, 2 alta
         public String estArea = "";                 // nombre de la zona dibujada donde se detecto la ubicacion
         public String estZoneSrc = "";              // "area" (dibujada) | "default" (fuera de tus zonas) | "forced" (forzada en Ajustes) | "postal" (codigo postal) | "manual" (elegida por ti en el aviso)
@@ -238,6 +239,9 @@ public class OfferAnalyzer {
         public Card highV = new Card(2.39, 0.85, 0.16, 6.70), highP = new Card(3.56, 0.91, 0.21, 8.35);
         // aeropuerto (solo las RECOGIDAS en el aeropuerto): valle / punta
         public Card airV = new Card(2.89, 0.82, 0.15, 13.50), airP = new Card(2.89, 0.82, 0.15, 13.50);
+        // v3.46: categorias de Bolt (Comfort, XL, Premium). catV / catP [categoria 0 comfort, 1 xl, 2 premium][zona 0 baja, 1 media, 2 alta]: valle / hora punta
+        public String cat = "";              // categoria de la oferta que se esta leyendo ("", "comfort", "xl" o "premium"); la pone analyze() en cada lectura y no se guarda
+        public Card[][] catV = defaultCat(false), catP = defaultCat(true);
         public boolean airOn = true;         // usar la tarjeta del aeropuerto en las recogidas
         public double airFee = 2.57;         // tasa del aeropuerto (recogidas y viajes hacia el aeropuerto): se resta del bruto ANTES de la comision
         public double airFlatKm = 11;        // recogida en el aeropuerto: hasta estos km solo vale la minima
@@ -245,6 +249,58 @@ public class OfferAnalyzer {
         public List<Slot> slotsH = defaultSlotsHigh();    // hora punta de zona alta
         public boolean holidaysWe = true;    // los festivos cuentan como hora punta todo el dia
         public List<String> holidays = defaultHolidays();   // "yyyy-MM-dd" o "MM-dd"
+    }
+
+    // =====================================================================
+    //  v3.46: categorias de Bolt. «Bolt» y «Electric» son el Bolt normal; Comfort, XL y Premium llevan sus propias tarjetas.
+    //  De fabrica: tarjeta del Bolt normal de esa zona + la diferencia de su tarifa con la de Electric (valle, pantalla de tarifas del conductor).
+    //  La hora punta usa las mismas diferencias: es aproximada hasta que el conductor ponga los precios reales en Ajustes.
+    // =====================================================================
+    private static final double[][][] CAT_V = {
+        { {3.87, 0.92, 0.15, 7.35}, {2.35, 0.90, 0.18, 7.90}, {2.80, 0.99, 0.18, 7.85} },
+        { {1.90, 1.35, 0.22, 10.75}, {3.96, 1.32, 0.26, 11.55}, {4.09, 1.45, 0.27, 11.50} },
+        { {5.43, 1.15, 0.18, 9.10}, {3.37, 1.12, 0.22, 9.80}, {3.47, 1.23, 0.23, 9.75} }
+    };
+    private static final double[][][] CAT_P = {
+        { {4.88, 0.93, 0.18, 9.90}, {2.93, 0.97, 0.23, 8.80}, {3.97, 1.05, 0.23, 9.50} },
+        { {2.91, 1.36, 0.25, 13.30}, {4.54, 1.39, 0.31, 12.45}, {5.26, 1.51, 0.32, 13.15} },
+        { {6.44, 1.16, 0.21, 11.65}, {3.95, 1.19, 0.27, 10.70}, {4.64, 1.29, 0.28, 11.40} }
+    };
+
+    /** Tarjetas de fabrica de las categorias: [0 comfort, 1 xl, 2 premium][0 baja, 1 media, 2 alta]. */
+    public static Card[][] defaultCat(boolean peak) {
+        double[][][] src = peak ? CAT_P : CAT_V;
+        Card[][] r = new Card[3][3];
+        for (int i = 0; i < 3; i++) for (int z = 0; z < 3; z++) r[i][z] = new Card(src[i][z][0], src[i][z][1], src[i][z][2], src[i][z][3]);
+        return r;
+    }
+
+    public static int catIndex(String cat) { return "comfort".equals(cat) ? 0 : ("xl".equals(cat) ? 1 : ("premium".equals(cat) ? 2 : -1)); }
+
+    public static String catLabel(String cat) { return "comfort".equals(cat) ? "Comfort" : ("xl".equals(cat) ? "XL" : ("premium".equals(cat) ? "Premium" : "")); }
+
+    /** La tarjeta de la categoria (Comfort, XL o Premium) para la zona y el momento; sin categoria, la de la zona de siempre. */
+    public static Card catCard(BoltCfg c, int kind, boolean peak) {
+        int i = catIndex(c.cat);
+        if (i < 0 || c.catV == null || c.catP == null) return zoneCard(c, kind, peak);
+        int z = kind == Z_HIGH ? 2 : (kind == Z_LOW ? 0 : 1);
+        Card k = (peak ? c.catP : c.catV)[i][z];
+        return k == null ? zoneCard(c, kind, peak) : k;
+    }
+
+    /** Categoria de la oferta de Bolt por la palabra que sale arriba, donde pone «Bolt»: "comfort", "xl", "premium" o "" (Bolt normal, Electric o no se reconoce). */
+    public static String detectCategory(List<String> nodes) {
+        if (nodes == null) return "";
+        for (String raw : nodes) {
+            if (raw == null || raw.length() > 40) continue;
+            String n = norm(raw).replaceAll("[^a-z0-9]+", " ").trim();
+            if (n.length() == 0 || n.length() > 20) continue;
+            if (n.matches("(bolt )?(comfort|confort)")) return "comfort";
+            if (n.matches("(bolt )?xl")) return "xl";
+            if (n.matches("(bolt )?premium")) return "premium";
+            if (n.matches("(bolt )?(electric|electrico)")) return "";
+        }
+        return "";
     }
 
     /** La tarjeta de la zona dada, de punta o de valle. */
@@ -397,7 +453,7 @@ public class OfferAnalyzer {
     private static Est calc(BoltCfg c, boolean up, double km, double min, double offerMult, String ak, String ev) {
         boolean pickup = "pickup".equals(ak);
         boolean air = ak.length() > 0;
-        Card card = pickup ? (up ? c.airP : c.airV) : zoneCard(c, c.zoneKind, up);
+        Card card = pickup ? (up ? c.airP : c.airV) : catCard(c, c.zoneKind, up);   // v3.46: con categoria (Comfort, XL, Premium) su propia tarjeta
         double raw = card.base + km * card.perKm + min * card.perMin;
         boolean ma = false;
         if (pickup && c.airFlatKm > 0 && km <= c.airFlatKm && card.minFare > 0) { raw = card.minFare; ma = true; }
@@ -607,10 +663,17 @@ public class OfferAnalyzer {
 
     /** isBolt: la oferta viene de Bolt (paquete bolt/mtakso). Solo en ese caso, y sin precio visible, se estima el precio. */
     public static Result analyze(List<String> rawNodes, Params p, boolean lenient, boolean isBolt) {
-        Result r = analyzeCore(rawNodes, p, lenient, isBolt);
-        try { addZoneChoices(r, rawNodes, p, lenient, isBolt); }
-        catch (Throwable t) { r.zoneAuto = -1; r.zoneKinds = new int[0]; r.zoneNets = new double[0]; }
-        return r;
+        // v3.46: la categoria de la oferta (Comfort, XL, Premium) solo vale durante esta lectura
+        String cat0 = p != null && p.bolt != null ? p.bolt.cat : null;
+        if (isBolt && p != null && p.bolt != null) p.bolt.cat = detectCategory(rawNodes);
+        try {
+            Result r = analyzeCore(rawNodes, p, lenient, isBolt);
+            try { addZoneChoices(r, rawNodes, p, lenient, isBolt); }
+            catch (Throwable t) { r.zoneAuto = -1; r.zoneKinds = new int[0]; r.zoneNets = new double[0]; }
+            return r;
+        } finally {
+            if (p != null && p.bolt != null) p.bolt.cat = cat0 == null ? "" : cat0;
+        }
     }
 
     /** v3.37: la zona de la recogida solo se ofrece a elegir si cambia el neto al menos esto (euros) */
@@ -838,6 +901,7 @@ public class OfferAnalyzer {
                 Est e = estimate(p.bolt, peakZ, r.tripKm, r.tripMin, om, detectAirport(nodes), evN);
                 r.estimated = true; r.estGross = e.gross; r.estComm = e.comm; r.estNet = e.net; r.estMult = e.mult;
                 r.estOfferMult = om;
+                r.estCat = p.bolt.cat == null ? "" : p.bolt.cat;
                 r.estAirport = e.airport; r.estFee = e.fee;
                 r.estZone = e.zone; r.estArea = p.bolt.zoneName; r.estZoneSrc = p.bolt.zoneSrc;
                 p.bolt.zoneKind = zk0; p.bolt.zoneName = zn0; p.bolt.zoneSrc = zs0;

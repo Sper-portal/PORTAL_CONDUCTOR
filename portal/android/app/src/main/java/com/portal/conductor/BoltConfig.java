@@ -253,6 +253,12 @@ public class BoltConfig {
                 c.midV = card(cm.get("mv"), c.midV); c.midP = card(cm.get("mp"), c.midP);
                 c.highV = card(cm.get("hv"), c.highV); c.highP = card(cm.get("hp"), c.highP);
                 c.airV = card(cm.get("av"), c.airV); c.airP = card(cm.get("ap"), c.airP);
+                // v3.46: tarjetas de las categorias (1 Comfort, 2 XL, 3 Premium) por zona y valle / punta: lv1 lp1 mv1 mp1 hv1 hp1 ... hp3
+                for (int ci = 0; ci < 3; ci++) for (int zi = 0; zi < 3; zi++) {
+                    String zl = zi == 0 ? "l" : (zi == 1 ? "m" : "h");
+                    c.catV[ci][zi] = card(cm.get(zl + "v" + (ci + 1)), c.catV[ci][zi]);
+                    c.catP[ci][zi] = card(cm.get(zl + "p" + (ci + 1)), c.catP[ci][zi]);
+                }
                 // v3.15g: tarjetas normal / aeropuerto x entre semana / fin de semana. Solo se aprovecha lo que el conductor habia cambiado de fabrica.
                 if (cm.get("nwd") != null) { OfferAnalyzer.Card x = card(cm.get("nwd"), c.midV); if (!sameCard(x, 2.10, 0.77, 0.15, 6.75)) c.midV = x; }
                 if (cm.get("nwe") != null) { OfferAnalyzer.Card x = card(cm.get("nwe"), c.midP); if (!sameCard(x, 2.10, 0.77, 0.15, 6.75)) c.midP = x; }
@@ -370,8 +376,13 @@ public class BoltConfig {
         b.append(",\"cards\":{\"lv\":").append(cardJson(c.lowV)).append(",\"lp\":").append(cardJson(c.lowP))
          .append(",\"mv\":").append(cardJson(c.midV)).append(",\"mp\":").append(cardJson(c.midP))
          .append(",\"hv\":").append(cardJson(c.highV)).append(",\"hp\":").append(cardJson(c.highP))
-         .append(",\"av\":").append(cardJson(c.airV)).append(",\"ap\":").append(cardJson(c.airP))
-         .append("},\"zone\":").append(zoneJson(c.zone)).append('}');
+         .append(",\"av\":").append(cardJson(c.airV)).append(",\"ap\":").append(cardJson(c.airP));
+        for (int ci = 0; ci < 3; ci++) for (int zi = 0; zi < 3; zi++) {   // v3.46: tarjetas de las categorias
+            String zl = zi == 0 ? "l" : (zi == 1 ? "m" : "h");
+            b.append(",\"").append(zl).append("v").append(ci + 1).append("\":").append(cardJson(c.catV[ci][zi]));
+            b.append(",\"").append(zl).append("p").append(ci + 1).append("\":").append(cardJson(c.catP[ci][zi]));
+        }
+        b.append("},\"zone\":").append(zoneJson(c.zone)).append('}');
         return b.toString();
     }
 

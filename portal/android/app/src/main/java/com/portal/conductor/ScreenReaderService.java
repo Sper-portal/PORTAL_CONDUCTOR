@@ -809,6 +809,7 @@ public class ScreenReaderService extends AccessibilityService {
         b.append(",\"disc\":").append(jn(r.estDisc)).append(",\"event\":").append(jq(r.estEvent)).append(",\"fine\":").append(jn(r.estFine)).append(",\"airport\":").append(jq(r.estAirport));
         b.append(",\"tripKm\":").append(jn(r.tripKm)).append(",\"tripMin\":").append(jn(r.tripMin)).append(",\"pickupKm\":").append(jn(r.pickupKm)).append(",\"pickupMin\":").append(jn(r.pickupMin));
         b.append(",\"rev\":").append(rev).append(",\"cpUnlisted\":").append(jq(r.estCpUnlisted));
+        b.append(",\"cat\":").append(jq(r.estCat == null ? "" : r.estCat));
         return b.append("}").toString();
     }
 
@@ -1095,7 +1096,8 @@ public class ScreenReaderService extends AccessibilityService {
     static String cardLine(OfferAnalyzer.Result r) {
         String per = r.estPeakUsed ? "hora punta" : "valle";
         if ("pickup".equals(r.estAirport)) return "Aeropuerto (recogida) \u00B7 tarjeta del aeropuerto \u00B7 " + per;
-        String t = "Tarjeta de zona " + OfferAnalyzer.zoneName(r.estZone) + " \u00B7 " + per;
+        String cl = OfferAnalyzer.catLabel(r.estCat);   // v3.46: categoria (Comfort, XL, Premium)
+        String t = "Tarjeta " + (cl.length() > 0 ? cl + " " : "") + "de zona " + OfferAnalyzer.zoneName(r.estZone) + " \u00B7 " + per;
         return "dest".equals(r.estAirport) ? "Aeropuerto (viaje hacia all\u00ED) \u00B7 " + t : t;
     }
 
