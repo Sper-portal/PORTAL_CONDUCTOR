@@ -278,6 +278,17 @@ public class BoltConfig {
                     for (int ci = 0; ci < 3; ci++) for (int zi = 0; zi < 3; zi++)
                         if (sameCard(c.catP[ci][zi], oldP[ci][zi][0], oldP[ci][zi][1], oldP[ci][zi][2], oldP[ci][zi][3])) c.catP[ci][zi] = newP[ci][zi];
                 }
+                // v3.48: valle de Child Seat con los precios reales de Bolt (antes iba igual que la punta) y minuto de la zona media de valle de Comfort, XL y Premium (0,17 / 0,25 / 0,21):
+                // si tenias guardados los de fabrica de antes pasan a los nuevos; si los cambiaste, se respetan
+                {
+                    final double[][] oldChildV = { {3.44, 0.93, 0.18, 10.25}, {3.50, 0.97, 0.23, 8.90}, {4.13, 1.06, 0.24, 9.70} };
+                    final double[][] oldMidV = { {2.35, 0.90, 0.18, 7.90}, {3.96, 1.32, 0.26, 11.55}, {3.37, 1.12, 0.22, 9.80} };
+                    OfferAnalyzer.Card[][] newV = OfferAnalyzer.defaultCat(false);
+                    for (int zi = 0; zi < 3; zi++)
+                        if (sameCard(c.catV[3][zi], oldChildV[zi][0], oldChildV[zi][1], oldChildV[zi][2], oldChildV[zi][3])) c.catV[3][zi] = newV[3][zi];
+                    for (int ci = 0; ci < 3; ci++)
+                        if (sameCard(c.catV[ci][1], oldMidV[ci][0], oldMidV[ci][1], oldMidV[ci][2], oldMidV[ci][3])) c.catV[ci][1] = newV[ci][1];
+                }
                 // v3.15g: tarjetas normal / aeropuerto x entre semana / fin de semana. Solo se aprovecha lo que el conductor habia cambiado de fabrica.
                 if (cm.get("nwd") != null) { OfferAnalyzer.Card x = card(cm.get("nwd"), c.midV); if (!sameCard(x, 2.10, 0.77, 0.15, 6.75)) c.midV = x; }
                 if (cm.get("nwe") != null) { OfferAnalyzer.Card x = card(cm.get("nwe"), c.midP); if (!sameCard(x, 2.10, 0.77, 0.15, 6.75)) c.midP = x; }

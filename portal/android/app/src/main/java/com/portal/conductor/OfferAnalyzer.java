@@ -258,12 +258,12 @@ public class OfferAnalyzer {
     //  De fabrica: tarjeta del Bolt normal de esa zona + la diferencia de su tarifa con la de Electric (valle, pantalla de tarifas del conductor).
     //  La hora punta (v3.47) lleva los precios reales de la pantalla de tarifas de Bolt.
     // =====================================================================
-    // v3.47: la 4 es Child Seat / Booster Seat (valle = punta hasta que el conductor ponga la real)
+    // v3.48: la 4 es Child Seat / Booster Seat (valle con los precios reales de Bolt). En la zona media de valle el minuto es el de la pantalla de Bolt (Comfort 0,17, XL 0,25, Premium 0,21).
     private static final double[][][] CAT_V = {
-        { {3.87, 0.92, 0.15, 7.35}, {2.35, 0.90, 0.18, 7.90}, {2.80, 0.99, 0.18, 7.85} },
-        { {1.90, 1.35, 0.22, 10.75}, {3.96, 1.32, 0.26, 11.55}, {4.09, 1.45, 0.27, 11.50} },
-        { {5.43, 1.15, 0.18, 9.10}, {3.37, 1.12, 0.22, 9.80}, {3.47, 1.23, 0.23, 9.75} },
-        { {3.44, 0.93, 0.18, 10.25}, {3.50, 0.97, 0.23, 8.90}, {4.13, 1.06, 0.24, 9.70} }
+        { {3.87, 0.92, 0.15, 7.35}, {2.35, 0.90, 0.17, 7.90}, {2.80, 0.99, 0.18, 7.85} },
+        { {1.90, 1.35, 0.22, 10.75}, {3.96, 1.32, 0.25, 11.55}, {4.09, 1.45, 0.27, 11.50} },
+        { {5.43, 1.15, 0.18, 9.10}, {3.37, 1.12, 0.21, 9.80}, {3.47, 1.23, 0.23, 9.75} },
+        { {3.80, 0.92, 0.15, 7.30}, {3.00, 0.89, 0.17, 7.85}, {2.77, 0.99, 0.18, 7.80} }
     };
     // v3.47: hora punta = precios reales de la pantalla de tarifas de Bolt (antes eran aproximados): [categoria][baja, media, alta] = {inicial, km, min, minima}
     private static final double[][][] CAT_P = {
