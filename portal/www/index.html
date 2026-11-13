@@ -154,7 +154,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:8px 4px;b
   </div>
 </section>
 <div class="app auth-hidden">
-<header class="header hdr-banner"><img class="hdr-banner-img" src="header-banner.webp" alt="Driver Hub 360 · Tu centro de operaciones" draggable="false"><button class="hdr-menu-hit" aria-label="Abrir menú" onclick="openSideMenu()"></button></header>
+<header class="header hdr-banner"><img class="hdr-banner-img" src="header-banner.webp" alt="Driver Hub 360 · Tu centro de operaciones" draggable="false"><button class="hdr-menu-hit" aria-label="Abrir menú" onclick="openSideMenu()"></button><div class="hdr-tit"><img data-v="control" src="tit-control.webp" alt="Control Horario" draggable="false"><img data-v="billing" src="tit-billing.webp" alt="Facturación" draggable="false"><img data-v="report" src="tit-report.webp" alt="Informe" draggable="false"><img data-v="settings" src="tit-settings.webp" alt="Ajustes" draggable="false"></div></header>
 <div id="drawerBackdrop" class="drawer-backdrop" onclick="closeSideMenu()"></div>
 <aside id="sideDrawer" class="side-drawer" aria-label="Menú principal">
   <div class="drawer-head"><button class="drawer-close" onclick="closeSideMenu()">×</button><div class="drawer-brand">Portal <span>del Conductor</span></div><div class="drawer-sub">Menú general</div></div>
@@ -954,7 +954,7 @@ function saveOdometer(k){const startRaw=document.querySelector('#odoStart')?.val
 function kilometersForDay(k){const o=dayOdometer(k);return o.start!==''&&o.end!==''&&Number.isFinite(Number(o.start))&&Number.isFinite(Number(o.end))&&Number(o.end)>=Number(o.start)?Number(o.end)-Number(o.start):(()=>{const g=Number(o.gpsKm)||0,lv=(k===today()&&db.activeSession&&Number(window.__gpsLiveKm)>0)?Number(window.__gpsLiveKm):0,sum=g+lv;return sum>=1?sum:null})()}
 function jornadaElapsedMinutes(k){return totalMinutesForDay(k)}
 function performanceForDay(k){const ts=dayTrips(k);const total=fact(k);const totalC=total+calcDayComp(k);const mins=jornadaElapsedMinutes(k);const km=kilometersForDay(k);return {trips:ts.length,eurTrip:ts.length?total/ts.length:null,eurHour:mins>0?totalC/(mins/60):null,km,eurKm:km>0?totalC/km:null,minutes:mins,total:totalC}}
-function performanceStripHtml(k){const x=performanceForDay(k);return `<div class="efficiency-strip" aria-label="Rendimiento de la jornada"><div class="efficiency-card"><small>€ / HORA</small><b>${x.eurHour===null?'—':euro(x.eurHour)+'/h'}</b><span class="sub">${hoursText(x.minutes)}</span></div><div class="efficiency-card"><small>€ / VIAJE</small><b>${x.eurTrip===null?'—':euro(x.eurTrip)}</b><span class="sub">${x.trips} viajes</span></div><div class="efficiency-card"><small>€ / KM</small><b>${x.eurKm===null?'—':euro(x.eurKm)+'/km'}</b><span class="sub">${x.km===null?'Al cerrar km':x.km+' km'}</span></div></div>`}
+function performanceStripHtml(k){const x=performanceForDay(k);return `<div class="efficiency-strip" aria-label="Rendimiento de la jornada"><div class="efficiency-card"><small>€ / HORA</small><b>${x.eurHour===null?'—':euro(x.eurHour)+'/h'}</b><span class="sub">${hoursText(x.minutes)}</span></div><div class="efficiency-card"><small>€ / VIAJE</small><b>${x.eurTrip===null?'—':euro(x.eurTrip)}</b><span class="sub">${x.trips} viajes</span></div><div class="efficiency-card"><small>€ / KM</small><b>${x.eurKm===null?'—':euro(x.eurKm)+'/km'}</b><span class="sub">${x.km===null?'Al cerrar km':kmTxt(x.km)}</span></div></div>`}
 function exportReportPdf(){const out=document.querySelector('#reportOut');if(!out||!out.dataset.ready){alert('Primero genera el informe.');return}window.print()}
 function shareReport(){const out=document.querySelector('#reportOut');if(!out||!out.dataset.ready){alert('Primero genera el informe.');return}const textReport=out.innerText;if(navigator.share){navigator.share({title:'Informe Super Portal del Conductor',text:textReport}).catch(()=>{})}else if(navigator.clipboard){navigator.clipboard.writeText(textReport).then(()=>alert('Informe copiado. Puedes pegarlo en el mensaje que quieras enviar.')).catch(()=>window.print())}else window.print()}
 function renderCalc(){
@@ -1193,7 +1193,7 @@ function renderTema(){
   window.addEventListener('focus',themeApply);window.addEventListener('pageshow',themeApply);
 })();
 (function(){
-  var sh=show;show=function(v){ltSet(v==='calc'||v==='control'||v==='billing'||v==='report');return sh.apply(this,arguments)};
+  var sh=show;show=function(v){try{document.body.classList.toggle('vista-sec',v!=='calc');document.body.setAttribute('data-vista',v)}catch(e){}ltSet(v==='calc'||v==='control'||v==='billing'||v==='report');return sh.apply(this,arguments)};
   var rc=renderControl;renderControl=function(){var r=rc.apply(this,arguments);try{document.getElementById('content').setAttribute('data-prio',prioKey())}catch(e){}return r};
   document.addEventListener('click',function(e){var t=e.target&&e.target.closest&&e.target.closest('#sideDrawer .drawer-item');if(t)ltSet(false)},true);
   function ltWrapMenu(){['renderAccount','renderAppSettings','renderNotifications','renderInfo','renderHelp','renderMadridHoy'].forEach(function(n){var f=window[n];if(typeof f!=='function'||f.__lt)return;var g=function(){ltSet(false);return f.apply(this,arguments)};g.__lt=1;window[n]=g})}
@@ -1315,9 +1315,9 @@ function renderControl(){
   let k=selectedDay,daySessions=sessionsForDay(k),h=daySessions[daySessions.length-1],active=currentSession(),w=weeklyHours(controlWeek),m=monthlyHours(controlMonth);
   let dayTotal=boltMinutesForDay(k),dayPri=priorityMinutesForDay(k),dayNon=Math.max(0,dayTotal-dayPri);
   let button=active?`<button class="toggle running" onclick="toggleSession()">■ Finalizar jornada · ${new Date(active.start).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}</button>`:`<button class="toggle" onclick="toggleSession()">▶ Iniciar jornada</button>`;
-  document.querySelector('#content').innerHTML=`<section class="panel"><div class="section-title">Control Horario · Diario</div><div class="navrow"><button class="back" onclick="changeDay(-1)">‹</button><b>${fmtDate(k)}</b><button class="back" onclick="changeDay(1)">›</button></div>${button}${appSwitchHtml()}<div class="appblk">${prioDot()} Solo ${prioName()}<span class="ctl-chip"><small>Estado</small><b>${active?'EN CURSO':'Finalizada'}</b></span></div><div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(dayPri)}</b></div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(dayNon)}</b></div><div class="metric control-metric control-total"><small>Total de horas</small><b>${hoursText(dayTotal)}</b></div></div>${daySplitHtml(k)}${ctlDetails('tr','🕒 Tramos del día ('+daySessions.length+') · añadir tramo manual',`<div class="note">Cada inicio y finalización se guarda como un tramo independiente. Tramos registrados hoy: <b>${daySessions.length}</b>. El total diario suma todos los tramos.</div><div class="row" style="margin-top:10px"><input type="time" id="start" value="00:00"><input type="time" id="end" value="00:00"></div><button id="saveHoursBtn" class="action" style="width:100%;margin-top:8px" onclick="saveHoursManual()">Añadir tramo manual</button><button id="cancelHourEdit" class="back" style="display:none;width:100%;margin-top:6px" onclick="cancelHourEdit()">Cancelar edición</button>${hourSegmentsHtml(k,daySessions)}`)}</section>
+  document.querySelector('#content').innerHTML=`<section class="panel"><div class="section-title t-top">Control Horario · Diario</div><div class="navrow"><button class="back" onclick="changeDay(-1)">‹</button><b>${fmtDate(k)}</b><button class="back" onclick="changeDay(1)">›</button></div>${button}${appSwitchHtml()}<div class="appblk">${prioDot()} Solo ${prioName()}<span class="ctl-chip"><small>Estado</small><b>${active?'EN CURSO':'Finalizada'}</b></span></div><div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(dayPri)}</b></div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(dayNon)}</b></div><div class="metric control-metric control-total"><small>Total de horas</small><b>${hoursText(dayTotal)}</b></div></div>${daySplitHtml(k)}${ctlDetails('tr','🕒 Tramos del día ('+daySessions.length+') · añadir tramo manual',`<div class="note">Cada inicio y finalización se guarda como un tramo independiente. Tramos registrados hoy: <b>${daySessions.length}</b>. El total diario suma todos los tramos.</div><div class="row" style="margin-top:10px"><input type="time" id="start" value="00:00"><input type="time" id="end" value="00:00"></div><button id="saveHoursBtn" class="action" style="width:100%;margin-top:8px" onclick="saveHoursManual()">Añadir tramo manual</button><button id="cancelHourEdit" class="back" style="display:none;width:100%;margin-top:6px" onclick="cancelHourEdit()">Cancelar edición</button>${hourSegmentsHtml(k,daySessions)}`)}</section>
   <section class="panel"><div class="section-title">Resumen semanal</div><div class="navrow"><button class="back" onclick="changeControlWeek(-1)">‹</button><b>Semanal · ${fmtDate(dateKey(w.mon))} → ${fmtDate(dateKey(w.sun))}</b><button class="back" onclick="changeControlWeek(1)">›</button></div><div class="appblk">${prioDot()} Solo ${prioName()}<span class="ctl-chip"><small>Faltan para ${db.settings.goal} h</small><b>${hoursText(w.remain)}</b></span></div><div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(w.pri)}</b></div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(w.non)}</b></div><div class="metric control-metric control-total"><small>Total semanal</small><b>${hoursText(w.total)}</b></div></div>${allBlockHtml(w)}${ctlDetails('sem','📅 Detalle por día de la semana',weekTable(w.mon))}</section>
-  <section class="panel"><div class="section-title">Resumen mensual</div><div class="navrow"><button class="back" onclick="changeControlMonth(-1)">‹</button><b>${m.first.toLocaleDateString('es-ES',{month:'long',year:'numeric'})}</b><button class="back" onclick="changeControlMonth(1)">›</button></div><div class="appblk">${prioDot()} Solo ${prioName()}<span class="ctl-chip"><small>Días trabajados</small><b>${m.days}</b></span></div><div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(m.pri)}</b></div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(m.non)}</b></div><div class="metric control-metric control-total"><small>Total mensual</small><b>${hoursText(m.total)}</b></div></div>${allBlockHtml(m)}${ctlDetails('mes','🗓️ Detalle por semana del mes',monthTable(m.first,m.last))}</section><div class="futuristic fuel-panel" style="margin-top:12px;padding:12px;border-radius:22px"><button class="action" style="width:100%" onclick="toggleFuelPanel()">⛽ Gasolina / odómetro · ${fuelPanelOpen?'▲ Ocultar':'▼ Mostrar'}</button>${fuelPanelOpen?`<div class="fuel-panel-content"><div class="section-title" style="font-size:15px">⛽ Gasolina</div><div class="navrow"><button class="back" onclick="changeFuelDay(-1)">‹</button><b>${fmtDate(fuelSelected)}</b><button class="back" onclick="changeFuelDay(1)">›</button></div>${(()=>{const o=dayOdometer(fuelSelected),km=kilometersForDay(fuelSelected),dayTotal=fact(fuelSelected);return `<div class="odometer-box"><div class="section-title" style="font-size:14px;margin:0">🚘 Odómetro de jornada (opcional)</div><div class="odo-fields"><div><label for="odoStart">Inicio (km)</label><input id="odoStart" type="number" min="0" step="1" inputmode="numeric" placeholder="Km inicial" value="${o.start!==''?o.start:''}"></div><div><label for="odoEnd">Final (km)</label><input id="odoEnd" type="number" min="0" step="1" inputmode="numeric" placeholder="Km final" value="${o.end!==''?o.end:''}"></div></div><button class="action" style="width:100%;margin-top:8px" onclick="saveOdometer('${fuelSelected}')">Guardar kilómetros</button><div class="odometer-result"><div class="odo-line"><span>Kilómetros recorridos</span><b>${km===null?'—':km+' km'}</b></div><div class="odo-line"><span>Facturación por km</span><b>${km>0?euro(dayTotal/km)+'/km':'—'}</b></div></div></div>`})()}<div class="row"><input type="number" step="0.01" id="fuel" value="" placeholder="Añadir importe €" inputmode="decimal" onfocus="this.select()"><button class="action" onclick="saveFuel()">Añadir gasolina</button></div><button class="action fuel-summary-btn" style="width:100%;margin-top:10px" onclick="toggleFuelSummary()">${fuelSummaryOpen?'▲ Ocultar resumen':'📋 Ver resumen de gasolina'}</button>${fuelSummaryOpen?`<div class="fuel-summary" style="margin-top:12px"><div class="note">Acumulado del día: <b>${euro(db.fuel[fuelSelected]||0)}</b> · El resumen se organiza por meses.</div><div style="margin-top:12px"><b>Cargas de ${fmtDate(fuelSelected)}</b>${fuelEntriesHtml(fuelSelected)}</div>${fuelMonthSummaryHtml()}</div>`:''}</div>`:''}</div>` }
+  <section class="panel"><div class="section-title">Resumen mensual</div><div class="navrow"><button class="back" onclick="changeControlMonth(-1)">‹</button><b>${m.first.toLocaleDateString('es-ES',{month:'long',year:'numeric'})}</b><button class="back" onclick="changeControlMonth(1)">›</button></div><div class="appblk">${prioDot()} Solo ${prioName()}<span class="ctl-chip"><small>Días trabajados</small><b>${m.days}</b></span></div><div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(m.pri)}</b></div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(m.non)}</b></div><div class="metric control-metric control-total"><small>Total mensual</small><b>${hoursText(m.total)}</b></div></div>${allBlockHtml(m)}${ctlDetails('mes','🗓️ Detalle por semana del mes',monthTable(m.first,m.last))}</section><div class="futuristic fuel-panel" style="margin-top:12px;padding:12px;border-radius:22px"><button class="action" style="width:100%" onclick="toggleFuelPanel()">⛽ Gasolina / odómetro · ${fuelPanelOpen?'▲ Ocultar':'▼ Mostrar'}</button>${fuelPanelOpen?`<div class="fuel-panel-content"><div class="section-title" style="font-size:15px">⛽ Gasolina</div><div class="navrow"><button class="back" onclick="changeFuelDay(-1)">‹</button><b>${fmtDate(fuelSelected)}</b><button class="back" onclick="changeFuelDay(1)">›</button></div>${(()=>{const o=dayOdometer(fuelSelected),km=kilometersForDay(fuelSelected),dayTotal=fact(fuelSelected);return `<div class="odometer-box"><div class="section-title" style="font-size:14px;margin:0">🚘 Odómetro de jornada (opcional)</div><div class="odo-fields"><div><label for="odoStart">Inicio (km)</label><input id="odoStart" type="number" min="0" step="1" inputmode="numeric" placeholder="Km inicial" value="${o.start!==''?o.start:''}"></div><div><label for="odoEnd">Final (km)</label><input id="odoEnd" type="number" min="0" step="1" inputmode="numeric" placeholder="Km final" value="${o.end!==''?o.end:''}"></div></div><button class="action" style="width:100%;margin-top:8px" onclick="saveOdometer('${fuelSelected}')">Guardar kilómetros</button><div class="odometer-result"><div class="odo-line"><span>Kilómetros recorridos</span><b>${km===null?'—':kmTxt(km)}</b></div><div class="odo-line"><span>Facturación por km</span><b>${km>0?euro(dayTotal/km)+'/km':'—'}</b></div></div></div>`})()}<div class="row"><input type="number" step="0.01" id="fuel" value="" placeholder="Añadir importe €" inputmode="decimal" onfocus="this.select()"><button class="action" onclick="saveFuel()">Añadir gasolina</button></div><button class="action fuel-summary-btn" style="width:100%;margin-top:10px" onclick="toggleFuelSummary()">${fuelSummaryOpen?'▲ Ocultar resumen':'📋 Ver resumen de gasolina'}</button>${fuelSummaryOpen?`<div class="fuel-summary" style="margin-top:12px"><div class="note">Acumulado del día: <b>${euro(db.fuel[fuelSelected]||0)}</b> · El resumen se organiza por meses.</div><div style="margin-top:12px"><b>Cargas de ${fmtDate(fuelSelected)}</b>${fuelEntriesHtml(fuelSelected)}</div>${fuelMonthSummaryHtml()}</div>`:''}</div>`:''}</div>` }
 function saveHoursManual(){let st=document.querySelector('#start').value,en=document.querySelector('#end').value;if(!st||!en||st==='00:00'&&en==='00:00'){alert('Introduce la hora de inicio y finalización del tramo.');return}if(st===en){alert('La hora de inicio y finalización no pueden ser iguales.');return}let a=new Date(selectedDay+'T'+st+':00'),b=new Date(selectedDay+'T'+en+':00');if(b<a)b.setDate(b.getDate()+1);if(editingHourId!==null){const h=(db.hours||[]).find(x=>String(x.id)===String(editingHourId));if(h){db.hours=db.hours.filter(x=>String(x.id)!==String(editingHourId));const rec={...h,date:selectedDay,start:a.toISOString(),end:b.toISOString(),manual:true};db.hours.push(...splitHourRecordByCalendarDay(rec));}editingHourId=null;}else{const rec={id:'hour_manual_'+Date.now()+'_'+Math.random().toString(36).slice(2),date:selectedDay,app:currentWorkApp(),start:a.toISOString(),end:b.toISOString(),manual:true};db.hours.push(...splitHourRecordByCalendarDay(rec));}save();renderControl()}
 function saveFuel(){const v=Number(String(document.querySelector('#fuel').value||'').replace(',','.'))||0;if(v<=0)return;ensureFuelEntries();db.fuelEntries[fuelSelected]=fuelEntriesForDay(fuelSelected);db.fuelEntries[fuelSelected].push({id:Date.now()+Math.random(),amount:Number(v.toFixed(2))});recalcFuelDay(fuelSelected);save();renderControl()}
 function weekTable(mon){let rows='';const hh=m=>{m=Math.max(0,Math.round(m));return Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')};for(let i=0;i<7;i++){let x=new Date(mon);x.setDate(mon.getDate()+i);let k=dateKey(x),t=boltMinutesForDay(k),p=priorityMinutesForDay(k),all=totalMinutesForDay(k);rows+=`<tr><td>${new Date(k+'T12:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'2-digit',month:'2-digit'})}</td><td class="g">${hh(p)}</td><td class="r">${hh(t-p)}</td><td class="b">${hh(t)}</td><td class="s">${hh(all)}</td></tr>`}return `<table class="wk"><tr><th>Día</th><th class="g">Prior.</th><th class="r">No prior.</th><th class="b">${prioName()}</th><th class="s">Todas</th></tr>${rows}</table>`}
@@ -1615,7 +1615,7 @@ function cmpTap(g){
    if(dx)t.style.setProperty('--sx',Math.round(dx)+'px')}catch(e){}}
 }
 function cmpHead(act){
- return '<div class="cmp-title">📊 Informe de Facturación</div>'+cmpTabs(act);
+ return '<div class="cmp-title t-top">📊 Informe de Facturación</div>'+cmpTabs(act);
 }
 function cmpGo(t){cmpTab=t;if(t==='custom'||t==='two')cmpApp=null;renderReport();try{window.scrollTo(0,0)}catch(e){}}
 function cmpOpen(p){cmpApp=p;renderReport();try{window.scrollTo(0,0)}catch(e){}}
@@ -1891,7 +1891,7 @@ function renderWriteQuestion(origin){document.querySelector('#content').innerHTM
 function answerUserQuery(){const q=(document.querySelector('#autoQuery').value||'').trim();if(!q){alert('Escribe una consulta.');return}const n=q.toLowerCase();let type=null;if(/viaje|bolt|uber|cabify|privado|trayecto/.test(n))type='viajes';else if(/factur|importe|cobro|efectivo|tarjeta/.test(n))type='facturacion';else if(/horario|jornada|hora|trabaj/.test(n))type='horario';else if(/gasolina|combustible|repost/.test(n))type='gasolina';else if(/informe|reporte|resumen mensual/.test(n))type='informe';if(type){showAutoAnswer(type);return}db.supportSent=db.supportSent||[];db.supportSent.unshift({id:Date.now(),subject:'Consulta del conductor',body:q,date:new Date().toISOString(),status:'pendiente'});save();document.querySelector('#content').innerHTML=`<section class="panel futuristic"><div class="settings-head"><button class="back" onclick="renderSupportMessages()">←</button><div class="section-title" style="margin:0">Consulta guardada</div></div><div class="help-hero"><h2>📨 La hemos guardado</h2><p>Esta consulta no coincide con una de las ayudas automáticas sobre registro de datos. Queda guardada para enviarla al equipo de soporte cuando esté disponible.</p></div></section>`}
 function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 function renderSettings(){
- document.querySelector('#content').innerHTML=`<section class="panel futuristic"><div class="section-title">Ajustes</div><div class="note" style="margin-bottom:12px">Aquí puedes gestionar tu cuenta y las configuraciones de la aplicación.</div><div class="settings-menu"><button class="settings-option account" onclick="settingsFrom=1;renderAccount()"><span class="ico">👤</span><span><b>Cuenta</b><small>Correo o móvil, cerrar sesión y eliminar cuenta</small></span><span style="margin-left:auto;font-size:24px;color:#7b8794">›</span></button><button class="settings-option appsettings" onclick="settingsFrom=1;renderAppSettings()"><span class="ico">⚙</span><span><b>Configuración de la app</b><small>Comisiones, horarios, Bolt, gasolina y nómina</small></span><span style="margin-left:auto;font-size:24px;color:#7b8794">›</span></button></div></section>`
+ document.querySelector('#content').innerHTML=`<section class="panel futuristic"><div class="section-title t-top">Ajustes</div><div class="note" style="margin-bottom:12px">Aquí puedes gestionar tu cuenta y las configuraciones de la aplicación.</div><div class="settings-menu"><button class="settings-option account" onclick="settingsFrom=1;renderAccount()"><span class="ico">👤</span><span><b>Cuenta</b><small>Correo o móvil, cerrar sesión y eliminar cuenta</small></span><span style="margin-left:auto;font-size:24px;color:#7b8794">›</span></button><button class="settings-option appsettings" onclick="settingsFrom=1;renderAppSettings()"><span class="ico">⚙</span><span><b>Configuración de la app</b><small>Comisiones, horarios, Bolt, gasolina y nómina</small></span><span style="margin-left:auto;font-size:24px;color:#7b8794">›</span></button></div></section>`
 }
 function renderAccount(){
  const profile=(()=>{try{return JSON.parse(localStorage.getItem(AUTH_KEY)||'null')}catch(e){return null}})();
@@ -2618,7 +2618,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.49';
+const APP_VERSION='v3.50';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -4339,7 +4339,7 @@ function paintResult(){
   if(hasNum(sv)&&hasNum(ev)&&ev>=sv)km=ev-sv;
   else{const o=dayOdometer(day);const g=nm(o.gpsKm);km=g>=1?g:null}
   const b=box.querySelectorAll('.odo-line b');
-  if(b[0])b[0].textContent=km===null?'—':km+' km';
+  if(b[0])b[0].textContent=km===null?'—':kmTxt(km);
   if(b[1])b[1].textContent=km>0?euro(fact(day)/km)+'/km':'—';
 }
 function paintAuto(){
@@ -6952,6 +6952,13 @@ function showNotice(lines){
     '<div class="acts"><button class="pri" onclick="infNoticeGo()">Ver Madrid hoy</button><button onclick="infNoticeClose()">Cerrar</button><button class="lnk" onclick="infNoticeOff()">No volver a avisar</button></div></div>';
   document.body.appendChild(d);
 }
+/* v3.50: apunta como fue la ultima comprobacion (se ve en Ajustes > Notificaciones) */
+function noteLast(w){try{var q=prefs();q.last={t:Date.now(),w:w};savePrefs(q)}catch(e){}}
+function lastTxt(){
+  var q=prefs().last;if(!q||!q.t)return 'Última comprobación: todavía ninguna.';
+  var d=new Date(q.t),T={shown:'salió el aviso',quiet:'no salió: hoy no hay eventos grandes ni lluvia',nodata:'sin datos de hoy (sin conexión o Ticketmaster no respondió); lo reintenta pasados 30 min'};
+  return 'Última comprobación: '+(dkey(d)===dkey(new Date())?'hoy':z(d.getDate())+'/'+z(d.getMonth()+1))+' a las '+hm(d.getHours()*60+d.getMinutes())+' · '+(T[q.w]||'—');
+}
 function noticeCheck(){
   /* v3.49: sale CADA VEZ que abres la app o vuelves a ella (igual que el recordatorio de «Iniciar jornada»), no solo una vez al día.
      Usa lo guardado: solo descarga si esta caducado (tiempo 1 h, eventos 6 h o de otro dia). Si no hay datos de hoy, no insiste hasta pasados 30 min. */
@@ -6959,20 +6966,22 @@ function noticeCheck(){
   if(!p.notice||!appReady()||noticeBusy)return;
   if(document.getElementById('infNotice'))return;                       /* ya esta en pantalla */
   var c0=cache(),haveToday=!!(c0.ev&&c0.ev.from===today);
-  if(!haveToday){
-    if(p.tryT&&Date.now()-p.tryT<RETRY)return;
-    p.tryT=Date.now();savePrefs(p);
-  }
+  /* v3.50: la espera de 30 min solo vale si el intento de antes TERMINO mal (antes se apuntaba al empezar y, si cerrabas la app a mitad, quedaba bloqueado) */
+  if(!haveToday&&p.tryT&&Date.now()-p.tryT<RETRY)return;
   noticeBusy=true;
-  refresh(false).then(function(){
+  refresh(false).then(function(r){
     noticeBusy=false;
     var c=cache();
-    if(!c.ev||c.ev.from!==today)return;          /* sin datos de hoy: no sale; se reintenta pasados 30 min */
+    if(!c.ev||c.ev.from!==today){          /* sin datos de hoy: no sale; se reintenta pasados 30 min (sin conexion: la proxima vez) */
+      if(r!=='offline'){var p3=prefs();p3.tryT=Date.now();savePrefs(p3)}
+      noteLast('nodata');return;
+    }
     if(!haveToday){var p2=prefs();p2.tryT=0;savePrefs(p2)}
     if(!appReady()||document.getElementById('infNotice'))return;
     var lines=noticeLines();
-    if(lines.length)showNotice(lines);
-  });
+    /* si no hay eventos grandes (ni lluvia) no sale nada; solo se apunta para Ajustes > Notificaciones */
+    if(lines.length){showNotice(lines);noteLast('shown')}else noteLast('quiet');
+  },function(){noticeBusy=false});
 }
 window.infNoticeClose=function(){var d=document.getElementById('infNotice');if(d&&d.parentNode)d.parentNode.removeChild(d)};
 window.infNoticeGo=function(){window.infNoticeClose();S.tab='hoy';window.renderMadridHoy()};
@@ -6988,7 +6997,7 @@ if(typeof rn0==='function'){
       var l=document.querySelector('#content .subpage-list');
       if(l){
         var row=document.createElement('div');row.className='subpage-row';
-        row.innerHTML='<span class="sicon">🌦️</span><div style="flex:1"><b>Aviso de «Madrid hoy»</b><small style="display:block;color:#64748b;margin-top:3px">Cada vez que abres la app o vuelves a ella, te dice si hay eventos grandes y lluvia esta noche. Usa lo guardado y solo descarga si está caducado.</small></div><button id="notifInfo" class="switch '+(prefs().notice?'on':'')+'" onclick="infNoticeToggle(this)"></button>';
+        row.innerHTML='<span class="sicon">🌦️</span><div style="flex:1"><b>Aviso de «Madrid hoy»</b><small style="display:block;color:#64748b;margin-top:3px">Cada vez que abres la app o vuelves a ella, te dice si hay eventos grandes y lluvia esta noche. Usa lo guardado y solo descarga si está caducado.</small><small id="notifInfoLast" style="display:block;color:#64748b;margin-top:3px">'+lastTxt()+'</small></div><button id="notifInfo" class="switch '+(prefs().notice?'on':'')+'" onclick="infNoticeToggle(this)"></button>';
         l.appendChild(row);
       }
     }catch(e){}
@@ -6996,7 +7005,16 @@ if(typeof rn0==='function'){
   };
 }
 /* arranque: un único aviso diferido y la comprobación al volver a la app (sin temporizadores repetidos) */
-setTimeout(function(){try{noticeCheck()}catch(e){}},4500);
+/* v3.50: a los 4,5 s empieza a mirar si la app ya esta lista (con una cuenta en la nube la pantalla puede tardar mucho mas en abrirse) y, en cuanto lo esta, hace UNA comprobacion; mira durante 2 min como mucho */
+setTimeout(function(){
+  var n=0;
+  (function espera(){
+    try{if(appReady()){if(n===0)noticeCheck();else setTimeout(function(){try{noticeCheck()}catch(e){}},1200);return}}catch(e){}
+    if(++n<170)setTimeout(espera,700);
+  })();
+},4500);
+/* v3.50: tambien al volver a la app por el canal nativo (Capacitor), por si el movil no avisa con visibilitychange */
+try{var CAPA=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.App;if(CAPA&&CAPA.addListener)CAPA.addListener('resume',function(){try{noticeCheck()}catch(e){}})}catch(e){}
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'){try{noticeCheck()}catch(e){}}});
 })();
 </script>
@@ -9531,4 +9549,26 @@ html body .theme-seg button.on{background:linear-gradient(145deg,#4db3ff,#0a84ff
 .nm-down{color:#ff9a9a}
 html body.lt #content .nm-hint{color:#475569}
 html body.lt #content .nm-btn,html body.lt #content .nm-note .nm-btn{color:#fff!important}
+</style>
+<style id="v350-style">
+/* ===== v3.50 · cabecera: cartel 2,5:1 con las banderas y boton MENU bien visible. En Control / Facturacion / Informe / Ajustes: titulo centrado arriba (letra de Driver Hub), sin boton de menu y con la foto casi entera de fondo, transparente ===== */
+.app .header.hdr-banner img.hdr-banner-img{aspect-ratio:2.5/1!important}
+.hdr-menu-hit{left:9px!important;top:9px!important;width:48px!important;height:54px!important;background:rgba(4,11,36,.80)!important;border:2px solid #63d6ff!important;border-radius:15px!important;box-shadow:0 0 14px #1e9bffcc,0 3px 10px rgba(0,0,0,.55)!important;z-index:7!important}
+.hdr-menu-hit::before{content:""!important;position:absolute!important;left:0!important;top:8px!important;width:100%!important;height:24px!important;border-radius:0!important;box-shadow:none!important;background:linear-gradient(#fff,#fff) 50% 0/26px 3.6px no-repeat,linear-gradient(#fff,#fff) 50% 50%/26px 3.6px no-repeat,linear-gradient(#fff,#fff) 50% 100%/26px 3.6px no-repeat!important}
+.hdr-menu-hit::after{content:"MENÚ";position:absolute;left:0;right:0;bottom:5px;text-align:center;font:800 10px/1 system-ui,sans-serif;letter-spacing:.9px;color:#c6ecff}
+.hdr-tit{display:none}
+.app .header .hdr-tit img{display:none!important;flex:none!important;height:auto!important;background:none!important;filter:none!important;max-width:94%!important;min-width:0!important;max-height:none!important;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;position:static!important;object-fit:fill!important;aspect-ratio:auto!important;pointer-events:none;user-select:none;-webkit-user-drag:none}
+.app .header .hdr-tit img[data-v=control]{width:240px!important}
+.app .header .hdr-tit img[data-v=billing]{width:191px!important}
+.app .header .hdr-tit img[data-v=report]{width:128px!important}
+.app .header .hdr-tit img[data-v=settings]{width:125px!important}
+body.vista-sec .hdr-menu-hit{display:none!important}
+body.vista-sec .t-top{display:none!important}
+body.vista-sec .app{position:relative}
+body.vista-sec .app .header.hdr-banner{height:64px!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:transparent!important;overflow:visible!important}
+body.vista-sec .app .header.hdr-banner img.hdr-banner-img{display:none!important}
+body.vista-sec .hdr-tit{display:flex;position:absolute;left:0;right:0;top:0;height:64px;align-items:center;justify-content:center;pointer-events:none;z-index:3}
+body[data-vista=control] .app .header .hdr-tit img[data-v=control],body[data-vista=billing] .app .header .hdr-tit img[data-v=billing],body[data-vista=report] .app .header .hdr-tit img[data-v=report],body[data-vista=settings] .app .header .hdr-tit img[data-v=settings]{display:block!important}
+body.vista-sec .app::before{content:"";position:absolute;left:0;right:0;top:0;height:0;padding-top:43.2%;z-index:0;pointer-events:none;background:url(fondo-vista.webp) 50% 0/100% 100% no-repeat;-webkit-mask-image:linear-gradient(180deg,rgba(0,0,0,.80) 0,rgba(0,0,0,.70) 46%,rgba(0,0,0,.42) 70%,rgba(0,0,0,.12) 88%,rgba(0,0,0,0) 100%);mask-image:linear-gradient(180deg,rgba(0,0,0,.80) 0,rgba(0,0,0,.70) 46%,rgba(0,0,0,.42) 70%,rgba(0,0,0,.12) 88%,rgba(0,0,0,0) 100%)}
+body.vista-sec .app .header.hdr-banner,body.vista-sec #content{position:relative!important;z-index:1}
 </style>
