@@ -154,7 +154,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:8px 4px;b
   </div>
 </section>
 <div class="app auth-hidden">
-<header class="header hdr-banner"><img class="hdr-banner-img" src="header-banner.webp" alt="Portal del Conductor · Jahapy" draggable="false"><button class="hdr-menu-hit" aria-label="Abrir menú" onclick="openSideMenu()"></button></header>
+<header class="header hdr-banner"><img class="hdr-banner-img" src="header-banner.webp" alt="Driver Hub 360 · Tu centro de operaciones" draggable="false"><button class="hdr-menu-hit" aria-label="Abrir menú" onclick="openSideMenu()"></button></header>
 <div id="drawerBackdrop" class="drawer-backdrop" onclick="closeSideMenu()"></div>
 <aside id="sideDrawer" class="side-drawer" aria-label="Menú principal">
   <div class="drawer-head"><button class="drawer-close" onclick="closeSideMenu()">×</button><div class="drawer-brand">Portal <span>del Conductor</span></div><div class="drawer-sub">Menú general</div></div>
@@ -2326,7 +2326,7 @@ function toast(msg){let t=document.getElementById('srToast');if(!t){t=document.c
 function amountsIn(text){const out=[];const re=/(\d{1,3}(?:\.\d{3})+,\d{2}|\d{1,4}[.,]\d{2})(?!\d)\s*(€|eur\b)?/gi;let m;while((m=re.exec(text))){let v=m[1];v=v.includes(',')&&v.includes('.')?v.replace(/\./g,'').replace(',','.'):v.replace(',','.');const n=Number(v);const pre=text.slice(Math.max(0,m.index-2),m.index);if(Number.isFinite(n)&&n>0&&n<10000)out.push({amount:n,euro:!!m[2]||pre.includes('€')});}return out;}
 function analyze(wins){const map={};for(const w of wins){const all=norm((w.texts||[]).join(' | '));const bonus=(/confirmar precio|confirm price/.test(all)?6:0)+(/\btotal\b/.test(all)?2:0)+(PKGS[w.pkg]?3:0);const label=PKGS[w.pkg]||String(w.pkg).split('.').pop();for(const t of (w.texts||[])){for(const a of amountsIn(t)){const score=bonus+(a.euro?4:0)+(String(t).length<14?2:0);const k=a.amount.toFixed(2);if(!map[k]||map[k].score<score)map[k]={amount:a.amount,score,label,win:all};}}}return Object.values(map).sort((a,b)=>b.score-a.score);}
 function payHint(win){if(/no cobrar al pasajero|no cobres|pago a traves de la app|app o tarjeta|pagado con tarjeta|pago con tarjeta/.test(win))return'Parece TARJETA.';if(/cobrar al pasajero|cobrar al cliente|recoge el dinero|efectivo/.test(win))return'Parece EFECTIVO.';return'';}
-function fill(c){const inp=document.querySelector('#price');if(inp){inp.value=c.amount.toFixed(2).replace('.',',');inp.dispatchEvent(new Event('input',{bubbles:true}));}const ph=payHint(c.win);window.__payHint=/TARJETA/.test(ph)?{type:'card',amount:c.amount,ts:Date.now()}:/EFECTIVO/.test(ph)?{type:'cash',amount:c.amount,ts:Date.now()}:null;toast(c.label+': '+fmt(c.amount)+' '+ph+(window.__payHint?' Se guardará solo al elegir la plataforma.':''));}
+function fill(c){const inp=document.querySelector('#price');if(inp){inp.value=c.amount.toFixed(2).replace('.',',');inp.dispatchEvent(new Event('input',{bubbles:true}));}const ph=payHint(c.win);window.__payHint=/TARJETA/.test(ph)?{type:'card',amount:c.amount,ts:Date.now()}:/EFECTIVO/.test(ph)?{type:'cash',amount:c.amount,ts:Date.now()}:null;toast(c.label+': '+fmt(c.amount)+' '+ph+(window.__payHint?' Se guardará solo al elegir la plataforma.':'')+(window.__fareMs!=null?' ('+(window.__fareMs/1000).toFixed(1).replace('.',',')+' s)':''));window.__fareMs=null;}
 function choose(list){const o=document.createElement('div');o.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99998;display:flex;align-items:center;justify-content:center';const b=document.createElement('div');b.style.cssText='background:#0b1a33;border:1px solid #3b82f6;border-radius:18px;padding:16px;width:min(88%,340px);text-align:center;color:#fff;font:600 16px system-ui';b.innerHTML='<div style="margin-bottom:10px">¿Cuál es el precio del viaje?</div>';list.slice(0,4).forEach(c=>{const x=document.createElement('button');x.type='button';x.textContent=fmt(c.amount)+' · '+c.label;x.style.cssText='display:block;width:100%;margin:6px 0;padding:12px;border-radius:12px;border:0;background:#2563eb;color:#fff;font:700 17px system-ui';x.onclick=()=>{o.remove();fill(c);};b.appendChild(x);});const k=document.createElement('button');k.type='button';k.textContent='Cancelar';k.style.cssText='margin-top:6px;padding:8px;border:0;background:none;color:#9db4d8;font:600 14px system-ui';k.onclick=()=>o.remove();b.appendChild(k);o.appendChild(b);document.body.appendChild(o);}
 window.fareReadScreen=async function(){
   const SR=plugin();
@@ -2338,7 +2338,7 @@ window.fareReadScreen=async function(){
       else if(confirm('¿Abrir la ficha de la app para permitir ajustes restringidos? (menú ⋮ arriba a la derecha → Permitir ajustes restringidos)'))await SR.openAppInfo();
       return;
     }
-    const r=await SR.read();const wins=r.windows||[];
+    const t0=Date.now();const r=await SR.read();window.__fareMs=Date.now()-t0;const wins=r.windows||[];   /* v3.49: cuanto tarda */
     const cands=analyze(wins);
     if(!cands.length){
       const dbg=wins.map(w=>w.pkg+' ('+(w.texts||[]).length+' textos): '+(w.texts||[]).slice(0,12).join(' | ')).join('\n\n')||'No he podido ver ninguna otra ventana.';
@@ -2544,7 +2544,7 @@ const J_KB=[
 ['corregir','✏️','Me equivoqué en un viaje','borrar,eliminar,quitar,corregir,editar,equivoc^4,equivoq^4,error,cambiar importe,mal puesto','Entra en Facturación → Diario, busca el viaje en la lista del día y edítalo o bórralo desde ahí. Los totales se recalculan solos.'],
 ['otrodia','📅','Quiero cargar o ver otro día','otro dia,ayer,anterior,fecha,flecha,dia pasado,antes de ayer','Usa las flechas de fecha de Calculadora o de Facturación para ir al día que quieras. Lo que cargues se guarda en ese día.'],
 ['facturacion','💶','¿Dónde veo mi facturación?','factur,ingres,gane,ganado,cuanto llevo,semana,mensual,mes','En Facturación tienes Diario, Semanal y Mensual, con el total, tu comisión y el desglose por plataforma. También lo ves de un vistazo arriba, en Calculadora.'],
-['compensaciones','🔁','Cancelaciones y compensaciones','compensac,cancelac,cancelad,cancelan^3,bonus,bono','Para apuntar una cancelación pulsa Cancelaciones en Calculadora (junto a Aeropuerto), elige la app (Uber, Bolt, Cabify, Free Now o Pide Taxi), escribe el importe y guarda. Se suma al total del día, de la semana y del mes y al cuadro de esa app, pero no cuenta como viaje. Para corregirla o borrarla usa ✏️ o 🗑 en la lista del día. Las compensaciones sueltas de la semana se siguen apuntando en Facturación → Semanal.'],
+['compensaciones','🔁','Cancelaciones y compensaciones','compensac,cancelac,cancelad,cancelan^3,bonus,bono','Para apuntar una cancelación pulsa Cancelaciones en Calculadora (junto a Aeropuerto), escribe el importe y toca la app (Uber, Bolt, Cabify, Free Now o Pide Taxi): se guarda al instante. La ✕ de arriba cierra sin guardar. Para cambiar el importe o la app, abre la cancelación con el lápiz de la lista. Se suma al total del día, de la semana y del mes y al cuadro de esa app, pero no cuenta como viaje. Para corregirla o borrarla usa ✏️ o 🗑 en la lista del día. Las compensaciones sueltas de la semana se siguen apuntando en Facturación → Semanal.'],
 ['nomina','🧾','Nómina y pago semanal','nomina,liquidac,pago semanal,transferencia,pagaron','En Facturación → Semanal puedes revisar la semana y compararla con lo que te ingresan. Si algo no cuadra, mira primero las compensaciones y el efectivo.'],
 ['jornada','⏱️','Iniciar y finalizar la jornada','jornada,iniciar,finalizar,empezar,terminar,horario,horas,turno','En Control pulsa Iniciar jornada cuando empieces y Finalizar cuando termines. La app cuenta tus horas y, con el GPS activado, también tus kilómetros.'],
 ['olvido','😅','Se me olvidó iniciar la jornada','olvid^5,se me olvido^6,no inicie^4,no puse,sin iniciar,corregir horas,hora manual','No pasa nada. En Control elige el día y corrige las horas a mano. Sirve también para días anteriores.'],
@@ -2605,7 +2605,7 @@ function renderSendSupport(){jPanel('Pregúntale a Jenny','helpBack()','<div cla
 function renderWriteQuestion(){jPanel('Escribir mi pregunta','renderSendSupport()','<div class="help-hero"><h2>¿Qué necesitas?</h2><p>Escríbelo como lo dirías hablando. Por ejemplo: «se me olvidó iniciar la jornada» o «cómo apunto una propina».</p></div><textarea id="autoQuery" rows="6" placeholder="Escribe aquí tu pregunta…" style="width:100%;margin-top:6px;border-radius:14px;padding:12px;box-sizing:border-box"></textarea><button class="action" style="width:100%;margin-top:10px" onclick="answerUserQuery()">😊 Preguntar a Jenny</button>')}
 function renderAutoHelp(){jPanel('Preguntas rápidas','renderSendSupport()','<div class="subpage-list">'+['viajes','freenow','aeropuerto','compensaciones','pago','corregir','jornada','gasolina','km','lector','pdf','tema','nocuadra'].map(id=>{const e=jEntry(id);return jRow(e[1],e[2],'','showAutoAnswer(\''+id+'\')')}).join('')+'</div>')}
 function renderFaq(){jPanel('Preguntas frecuentes','helpBack()','<div class="subpage-list">'+J_KB.filter(e=>e[0]!=='contacto').map(e=>'<details class="subpage-row" style="display:block"><summary style="cursor:pointer;list-style:none"><span class="sicon" style="display:inline-grid;margin-right:8px">'+e[1]+'</span><b>'+e[2]+'</b></summary><small style="display:block;color:#64748b;margin:8px 0 2px;line-height:1.45">'+e[4]+'</small></details>').join('')+'</div>')}
-function renderHelpCarga(){const S=[['🧮','Calculadora','Escribe el importe y pulsa la plataforma (Bolt, Uber, Cabify, Privados, Free Now o Pide Taxi). Para aeropuerto, usa el botón verde de Aeropuerto. Si te cancelan un viaje, pulsa Cancelaciones, elige la app y escribe el importe. Con «Importe automático» la app lee el precio de la otra ventana. Elige tarjeta o efectivo cuando te lo pregunte. En Últimos viajes puedes añadir propina (🎁), editar (✏️) o borrar (🗑) cada viaje.'],['🧾','Facturación','Diario, Semanal y Mensual, con totales por plataforma y facturación manual. Las cancelaciones se suman al día y a la app que elijas; en Semanal, las compensaciones sueltas y la nómina. En Mensual, cada mes cerrado tiene un botón para cambiar su nómina con los ajustes de ahora (porcentaje, mínimo, propinas).'],['◉','Control','Iniciar y finalizar jornada, corregir horas de días anteriores, apuntar gasolina y kilómetros (con GPS automático o a mano). Aquí eliges tu aplicación prioritaria (Bolt, Uber, Cabify, Free Now o Pide Taxi).'],['📍','GPS y lector de pantalla','El odómetro GPS cuenta los kilómetros con la jornada iniciada. El lector y la burbuja necesitan activar Portal Lector en Accesibilidad de Android.'],['📊','Informe','Elige el periodo, genera el informe y compártelo en PDF o imagen.'],['⚙️','Ajustes','Tema (claro, oscuro o automático), comisión, tasa de aeropuerto, objetivos, horarios prioritarios, burbuja, GPS, copia de seguridad y Rentabilidad de viajes (aviso de si compensa cada oferta).'],['🌤️','Madrid hoy','En el menú de las tres rayitas: el tiempo y los eventos del día (Ticketmaster e IFEMA) para saber dónde puede haber más movimiento.'],['👤','Cuenta','Inicia sesión para guardar tus datos en la nube y recuperarlos si cambias de móvil.']];jPanel('Ayuda con cargar datos','helpBack()','<div class="help-hero"><h2>Dónde se carga cada cosa</h2><p>Un repaso rápido por pantallas. Si te queda alguna duda, pregúntale a Jenny.</p></div><div class="subpage-list">'+S.map(s=>'<div class="subpage-row"><span class="sicon">'+s[0]+'</span><div><b>'+s[1]+'</b><small style="display:block;color:#64748b;margin-top:3px;line-height:1.45">'+s[2]+'</small></div></div>').join('')+'</div>')}
+function renderHelpCarga(){const S=[['🧮','Calculadora','Escribe el importe y pulsa la plataforma (Bolt, Uber, Cabify, Privados, Free Now o Pide Taxi). Para aeropuerto, usa el botón verde de Aeropuerto. Si te cancelan un viaje, pulsa Cancelaciones, escribe el importe y toca la app: se guarda al instante. Con «Importe automático» la app lee el precio de la otra ventana. Elige tarjeta o efectivo cuando te lo pregunte. En Últimos viajes puedes añadir propina (🎁), editar (✏️) o borrar (🗑) cada viaje.'],['🧾','Facturación','Diario, Semanal y Mensual, con totales por plataforma y facturación manual. Las cancelaciones se suman al día y a la app que elijas; en Semanal, las compensaciones sueltas y la nómina. En Mensual, cada mes cerrado tiene un botón para cambiar su nómina con los ajustes de ahora (porcentaje, mínimo, propinas).'],['◉','Control','Iniciar y finalizar jornada, corregir horas de días anteriores, apuntar gasolina y kilómetros (con GPS automático o a mano). Aquí eliges tu aplicación prioritaria (Bolt, Uber, Cabify, Free Now o Pide Taxi).'],['📍','GPS y lector de pantalla','El odómetro GPS cuenta los kilómetros con la jornada iniciada. El lector y la burbuja necesitan activar Portal Lector en Accesibilidad de Android.'],['📊','Informe','Elige el periodo, genera el informe y compártelo en PDF o imagen.'],['⚙️','Ajustes','Tema (claro, oscuro o automático), comisión, tasa de aeropuerto, objetivos, horarios prioritarios, burbuja, GPS, copia de seguridad y Rentabilidad de viajes (aviso de si compensa cada oferta).'],['🌤️','Madrid hoy','En el menú de las tres rayitas: el tiempo y los eventos del día (Ticketmaster e IFEMA) para saber dónde puede haber más movimiento.'],['👤','Cuenta','Inicia sesión para guardar tus datos en la nube y recuperarlos si cambias de móvil.']];jPanel('Ayuda con cargar datos','helpBack()','<div class="help-hero"><h2>Dónde se carga cada cosa</h2><p>Un repaso rápido por pantallas. Si te queda alguna duda, pregúntale a Jenny.</p></div><div class="subpage-list">'+S.map(s=>'<div class="subpage-row"><span class="sicon">'+s[0]+'</span><div><b>'+s[1]+'</b><small style="display:block;color:#64748b;margin-top:3px;line-height:1.45">'+s[2]+'</small></div></div>').join('')+'</div>')}
 /* PDF e imagen del informe */
 function reportCanvas(light){const out=document.querySelector('#reportOut');if(!out||!out.dataset.ready){alert('Primero genera el informe.');return null}const clean=x=>String(x||'').replace(/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/gu,'').replace(/\s+/g,' ').trim();const period=clean((out.querySelector('.metric b')||{}).innerText),plats=[...out.querySelectorAll('.platform-summary .ps')].map(e=>[clean(e.childNodes[0].textContent),clean((e.querySelector('b')||{}).innerText)]),rows=[...out.querySelectorAll('table tr')].map(tr=>[...tr.children].map(c=>clean(c.innerText))).filter(r=>r.length>=2&&r[0]);const W=1080,P=56,RH=84,H=260+(plats.length?190*Math.ceil(plats.length/3):0)+rows.length*RH+150,cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d'),C=light?{bg:'#ffffff',row:'#f1f5f9',txt:'#0f172a',mut:'#475569',acc:'#1d4ed8'}:{bg:'#07111f',row:'#0e2038',txt:'#ffffff',mut:'#9fb4c8',acc:'#5fe6ff'};g.fillStyle=C.bg;g.fillRect(0,0,W,H);const hg=g.createLinearGradient(0,0,W,0);hg.addColorStop(0,'#0a3d9c');hg.addColorStop(1,'#0b6fd6');g.fillStyle=hg;g.fillRect(0,0,W,210);g.fillStyle='#fff';g.font='bold 54px sans-serif';g.textBaseline='alphabetic';g.fillText('Super Portal del Conductor',P,92);g.font='36px sans-serif';g.fillStyle='#dff3ff';g.fillText('Informe · '+period,P,152);let y=250;const fit=(t,mx,font)=>{g.font=font;while(g.measureText(t).width>mx&&t.length>3)t=t.slice(0,-2);return t};if(plats.length){const per=3,cw=(W-2*P-(per-1)*16)/per,col={Bolt:'#00b85c',Uber:'#1f2937',Cabify:'#7c3aed',Privados:'#2563eb','Free Now':'#d6046f','Pide Taxi':'#ffbf00'};plats.forEach((p,i)=>{const x=P+(i%per)*(cw+16),yy=y+Math.floor(i/per)*190;g.fillStyle=col[p[0]]||'#2563eb';g.beginPath();g.roundRect?g.roundRect(x,yy,cw,150,22):g.rect(x,yy,cw,150);g.fill();g.fillStyle=p[0]==='Pide Taxi'?'#2b2100':'#fff';g.font='bold 30px sans-serif';g.textAlign='center';g.fillText(p[0],x+cw/2,yy+54);g.font='bold 40px sans-serif';g.fillText(fit(p[1],cw-16,'bold 40px sans-serif'),x+cw/2,yy+114);g.textAlign='left'});y+=190*Math.ceil(plats.length/per)}rows.forEach((r,i)=>{if(i%2===0){g.fillStyle=C.row;g.fillRect(P-16,y,W-2*P+32,RH-6)}g.fillStyle=C.mut;g.textAlign='left';g.fillText(fit(r[0],W-2*P-300,'30px sans-serif'),P,y+52);g.fillStyle=C.txt;g.textAlign='right';g.font='bold 34px sans-serif';g.fillText(r[r.length-1],W-P,y+52);g.textAlign='left';y+=RH});g.fillStyle=C.mut;g.font='26px sans-serif';g.fillText('Generado el '+new Date().toLocaleDateString('es-ES')+' · Portal del Conductor',P,H-56);return cv}
 function jpegToPdf(jb,w,h){const pw=595,ph=Math.round(595*h/w),enc=new TextEncoder(),parts=[],offs=[];let off=0;const push=x=>{const b=typeof x==='string'?enc.encode(x):x;parts.push(b);off+=b.length};push('%PDF-1.4\n');offs[1]=off;push('1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n');offs[2]=off;push('2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n');offs[3]=off;push('3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 '+pw+' '+ph+']/Resources<</XObject<</Im0 4 0 R>>>>/Contents 5 0 R>>endobj\n');offs[4]=off;push('4 0 obj<</Type/XObject/Subtype/Image/Width '+w+'/Height '+h+'/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length '+jb.length+'>>stream\n');push(jb);push('\nendstream endobj\n');const cs='q '+pw+' 0 0 '+ph+' 0 0 cm /Im0 Do Q';offs[5]=off;push('5 0 obj<</Length '+cs.length+'>>stream\n'+cs+'\nendstream endobj\n');const xo=off;let x='xref\n0 6\n0000000000 65535 f \n';for(let i=1;i<=5;i++)x+=String(offs[i]).padStart(10,'0')+' 00000 n \n';push(x+'trailer<</Size 6/Root 1 0 R>>\nstartxref\n'+xo+'\n%%EOF');const all=new Uint8Array(off);let p=0;parts.forEach(b=>{all.set(b,p);p+=b.length});return all}
@@ -2618,7 +2618,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.48';
+const APP_VERSION='v3.49';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -3077,8 +3077,10 @@ window.cancelClose=closeModal;
 window.cancelPick=function(p){
   sel=p;
   document.querySelectorAll('#cancelModal .cn-plat').forEach(b=>b.classList.toggle('on',b.dataset.p===p));
-  const a=document.getElementById('cnAmt');if(a)a.focus();
   const e=document.getElementById('cnErr');if(e)e.textContent='';
+  /* v3.49: cancelacion NUEVA: tocar la plataforma la guarda en esa app al instante (sin «Guardar»). Al EDITAR se elige y se pulsa «Guardar cambios». */
+  if(!editId){window.cancelSave();return}
+  const a=document.getElementById('cnAmt');if(a)a.focus();
 };
 window.cancelOpen=function(id){
   closeModal();
@@ -3087,17 +3089,17 @@ window.cancelOpen=function(id){
   const adj=ent&&Number(ent.adjustable)>0;
   const o=document.createElement('div');o.id='cancelModal';o.className='cn-overlay';
   o.innerHTML='<div class="cn-card" role="dialog" aria-modal="true" aria-label="Cancelaciones">'
-   +'<div class="cn-title">✕ '+(ent?'Editar cancelación':'Cancelación')+'</div>'
+   +'<div class="cn-title"><button type="button" class="cn-x" aria-label="Cerrar" onclick="cancelClose()">✕</button> '+(ent?'Editar cancelación':'Cancelación')+'</div>'
    +'<div class="cn-day">'+esc(fmtDate(day))+'</div>'
-   +'<div class="cn-label">Plataforma</div>'
-   +'<div class="cn-plats">'+PLATS.map(p=>'<button type="button" class="cn-plat '+cls(p)+(sel===p?' on':'')+'" data-p="'+p+'" onclick="cancelPick(\''+p+'\')">'+p+'</button>').join('')+'</div>'
    +'<div class="cn-label">Importe de la cancelación (€)</div>'
    +'<input id="cnAmt" class="cn-in" type="text" inputmode="decimal" autocomplete="off" placeholder="0,00" value="'+(ent?esc(String(r2(ent.cancellations)).replace('.',',')):'')+'">'
    +(adj?'<div class="cn-label">Compensación ajustable (€)</div><input id="cnAdj" class="cn-in" type="text" inputmode="decimal" autocomplete="off" value="'+esc(String(r2(ent.adjustable)).replace('.',','))+'">':'')
    +'<div class="cn-label">Nota (opcional)</div>'
    +'<input id="cnNote" class="cn-in" type="text" maxlength="120" autocomplete="off" placeholder="Ej.: cliente no apareció" value="'+(ent?esc(ent.note||''):'')+'">'
+   +'<div class="cn-label">'+(ent?'Plataforma':'Toca la aplicación y se guarda')+'</div>'
+   +'<div class="cn-plats">'+PLATS.map(p=>'<button type="button" class="cn-plat '+cls(p)+(sel===p?' on':'')+'" data-p="'+p+'" onclick="cancelPick(\''+p+'\')">'+p+'</button>').join('')+'</div>'
    +'<div id="cnErr" class="cn-err" role="alert"></div>'
-   +'<div class="cn-row"><button type="button" class="cn-save" id="cnSave" onclick="cancelSave()">✓ '+(ent?'Guardar cambios':'Guardar cancelación')+'</button><button type="button" class="cn-cancel" onclick="cancelClose()">Cancelar</button></div>'
+   +(ent?'<div class="cn-row"><button type="button" class="cn-save" id="cnSave" onclick="cancelSave()">✓ Guardar cambios</button><button type="button" class="cn-cancel" onclick="cancelClose()">Cancelar</button></div>':'')
    +'</div>';
   o.addEventListener('click',ev=>{if(ev.target===o)closeModal()});
   document.body.appendChild(o);
@@ -4902,15 +4904,17 @@ const SL=(d,a,b)=>({on:true,d,a,b});
 const slotsM=()=>[SL(31,420,600),SL(31,1020,1200),SL(96,0,1440)];         // lunes a viernes 07-10 y 17-20, sábado y domingo todo el día
 const slotsHi=()=>[SL(31,480,600),SL(31,1020,1200),SL(96,0,1440)];        // zona alta: por la mañana desde las 08:00 (visto el 29-10; sin confirmar)
 const HOLS=()=>['01-01','01-06','05-01','05-02','08-15','10-12','11-01','12-06','12-08','12-25'];
-const defaults=()=>({on:true,mode:'auto',comm:25,peakApplies:true,round5:true,fine:0,peakKm:6.5,longKm:10,longDisc:13,eventOn:true,v:CFG_VER,cpv:337,zoneForce:'auto',zoneDef:'mid',
+/* v3.49: zonas de fábrica (las que midió Juan): se ponen una sola vez a quien no tiene ninguna zona dibujada */
+const DEF_ZONES=[{"n":"Zona 1","k":"h","pts":[[40.417079,-3.722302],[40.416161,-3.742153],[40.409065,-3.754317],[40.401372,-3.769423],[40.399601,-3.768703],[40.393027,-3.775373],[40.381073,-3.785182],[40.369565,-3.80382],[40.35641,-3.825008],[40.347888,-3.85267],[40.334131,-3.88661],[40.30227,-3.902697],[40.301821,-3.953901],[40.342484,-4.007434],[40.377337,-4.071219],[40.421112,-4.085541],[40.454314,-4.050202],[40.486924,-4.057853],[40.593822,-4.199302],[40.700995,-4.113177],[40.760907,-4.069036],[40.839023,-3.779468],[40.784084,-3.572886],[40.706795,-3.516581],[40.587118,-3.441638],[40.50781,-3.496672],[40.472449,-3.497849],[40.470957,-3.53944],[40.487969,-3.557881],[40.540171,-3.554546],[40.52869,-3.587113],[40.505162,-3.59876],[40.480619,-3.601702],[40.478604,-3.581593],[40.472038,-3.573942],[40.46465,-3.574629],[40.45129,-3.587087],[40.451066,-3.601997],[40.460322,-3.617397],[40.469277,-3.626912],[40.469212,-3.642606],[40.47257,-3.649374],[40.471078,-3.656977],[40.471431,-3.658372],[40.471694,-3.667288],[40.478912,-3.666748],[40.484826,-3.663511],[40.484306,-3.676144],[40.48384,-3.682409],[40.48281,-3.687113],[40.485645,-3.693882],[40.486913,-3.69707],[40.489435,-3.697785],[40.482665,-3.715141],[40.476882,-3.732381],[40.476957,-3.737666],[40.476957,-3.739616],[40.476929,-3.741026],[40.477022,-3.74181],[40.476882,-3.742779],[40.476525,-3.743739],[40.475381,-3.747573],[40.474597,-3.750491],[40.473767,-3.753483],[40.47358,-3.753066],[40.470017,-3.750271],[40.467583,-3.749793],[40.464318,-3.749063],[40.462191,-3.746911],[40.456938,-3.744422],[40.45385,-3.743368],[40.45246,-3.74262],[40.450892,-3.742583],[40.442242,-3.739346],[40.4371,-3.738022],[40.430773,-3.737396],[40.42829,-3.735949],[40.427385,-3.734564],[40.423856,-3.730383],[40.422036,-3.724473],[40.421327,-3.722817],[40.419926,-3.722229],[40.419338,-3.72115]]},{"n":"Zona 2","k":"m","pts":[[40.472328,-3.667091],[40.471563,-3.666895],[40.465626,-3.667559],[40.462383,-3.665947],[40.459301,-3.663831],[40.455703,-3.663347],[40.449657,-3.661974],[40.444597,-3.660079],[40.442693,-3.659049],[40.440345,-3.658639],[40.43407,-3.659663],[40.431391,-3.660349],[40.429226,-3.660227],[40.428031,-3.659785],[40.426725,-3.659932],[40.425823,-3.659914],[40.422132,-3.658534],[40.419873,-3.658436],[40.416027,-3.658951],[40.412903,-3.661484],[40.404724,-3.66526],[40.397889,-3.669527],[40.394562,-3.672439],[40.391016,-3.677571],[40.387922,-3.680164],[40.383719,-3.68166],[40.381178,-3.686172],[40.380967,-3.688042],[40.381571,-3.690414],[40.384516,-3.693584],[40.39012,-3.699617],[40.394565,-3.704031],[40.396429,-3.710499],[40.399309,-3.715312],[40.399869,-3.720903],[40.401266,-3.722417],[40.403806,-3.722834],[40.405748,-3.722981],[40.409094,-3.722031],[40.41303,-3.72406],[40.41908,-3.721313],[40.421417,-3.723159],[40.422798,-3.726494],[40.424139,-3.730387],[40.428937,-3.736322],[40.431998,-3.737768],[40.436067,-3.737818],[40.44195,-3.739246],[40.448646,-3.741864],[40.452923,-3.742876],[40.462402,-3.746897],[40.464264,-3.749049],[40.469753,-3.750134],[40.473798,-3.75312],[40.476916,-3.742238],[40.476805,-3.7326],[40.481956,-3.717146],[40.489525,-3.698121],[40.487406,-3.69742],[40.485951,-3.694796],[40.484039,-3.689806],[40.482864,-3.684533],[40.482986,-3.683319],[40.483759,-3.682175],[40.484427,-3.671864],[40.48464,-3.664002],[40.479193,-3.666209],[40.475388,-3.66768]]}];
+const defaults=()=>({on:true,mode:'auto',comm:25,peakApplies:true,round5:true,fine:0,peakKm:6.5,longKm:10,longDisc:13,eventOn:true,v:CFG_VER,cpv:349,zoneForce:'auto',zoneDef:'low',
   short:{km:6,from:1.2,lo:0,hi:0},airOn:true,airFee:2.57,airFlatKm:11,holidaysWe:true,holidays:HOLS(),slots:slotsM(),slotsH:slotsHi(),
   cards:{lv:CARD(2.02,0.79,0.13,6.30),lp:CARD(3.03,0.80,0.16,8.85),mv:CARD(2.10,0.77,0.15,6.75),mp:CARD(2.68,0.84,0.20,7.65),
          hv:CARD(2.39,0.85,0.16,6.70),hp:CARD(3.56,0.91,0.21,8.35),av:CARD(3.04,0.86,0.15,13.70),ap:CARD(3.04,0.86,0.15,13.70),
          /* v3.47: tarjetas del aeropuerto (recogidas) de las categorías: 1 Comfort, 2 XL, 3 Premium */
          av1:CARD(3.56,1.01,0.17,16.00),ap1:CARD(3.56,1.01,0.17,16.00),av2:CARD(5.20,1.47,0.25,23.40),ap2:CARD(5.20,1.47,0.25,23.40),av3:CARD(4.41,1.25,0.22,19.85),ap3:CARD(4.41,1.25,0.22,19.85),av4:CARD(3.56,1.01,0.17,16.00),ap4:CARD(3.56,1.01,0.17,16.00),
          /* v3.46: categorías de Bolt (1 Comfort, 2 XL, 3 Premium) por zona y valle / punta */
-         lv1:CARD(3.87,0.92,0.15,7.35),lp1:CARD(3.48,0.94,0.18,10.35),mv1:CARD(2.35,0.90,0.17,7.90),mp1:CARD(3.54,0.98,0.23,8.95),hv1:CARD(2.80,0.99,0.18,7.85),hp1:CARD(4.17,1.06,0.24,9.80),lv2:CARD(1.90,1.35,0.22,10.75),lp2:CARD(4.41,1.37,0.26,15.10),mv2:CARD(3.96,1.32,0.25,11.55),mp2:CARD(4.54,1.44,0.33,13.10),hv2:CARD(4.09,1.45,0.27,11.50),hp2:CARD(6.09,1.56,0.35,14.30),lv3:CARD(5.43,1.15,0.18,9.10),lp3:CARD(6.44,1.16,0.22,12.80),mv3:CARD(3.37,1.12,0.21,9.80),mp3:CARD(3.95,1.22,0.28,11.10),hv3:CARD(3.47,1.23,0.23,9.75),hp3:CARD(5.16,1.32,0.30,12.10),lv4:CARD(3.80,0.92,0.15,7.30),lp4:CARD(3.44,0.93,0.18,10.25),mv4:CARD(3.00,0.89,0.17,7.85),mp4:CARD(3.50,0.97,0.23,8.90),hv4:CARD(2.77,0.99,0.18,7.80),hp4:CARD(4.13,1.06,0.24,9.70)},
-  zone:{zones:[],postal:{h:'28023 28033 28034 28035 28042 28043 28049 28050 28055 28100 28108 28109 28220 28221 28222 28223 28224 28230 28231 28232 28250 28701 28702 28703 28760 28761 28762'.split(' '),m:'28001 28002 28003 28004 28005 28006 28007 28008 28009 28010 28012 28013 28014 28015 28016 28020 28028 28029 28036 28039 28045 28040 28046 28048'.split(' '),l:'28022 28037 28801 28802 28803 28804 28805 28806 28807 28821 28822 28823 28830 28850 28018 28019 28021 28025 28026 28030 28031 28032 28038 28041 28044 28047 28054 28901 28902 28903 28904 28905 28906 28907 28911 28912 28913 28914 28915 28916 28917 28918 28919 28921 28922 28923 28924 28925 28931 28932 28933 28934 28935 28936 28937 28938 28940 28941 28942 28943 28944 28945 28946 28947 28980 28981 28982 28983 28984 28300 28311 28312 28320 28341 28342 28343 28011 28017 28024 28027 28051 28052 28053'.split(' ')}}});
+         lv1:CARD(6.49,0.92,0.15,7.35),lp1:CARD(3.48,0.94,0.18,10.35),mv1:CARD(4.24,0.90,0.17,7.90),mp1:CARD(3.54,0.98,0.23,8.95),hv1:CARD(2.80,0.99,0.18,7.85),hp1:CARD(4.17,1.06,0.24,9.80),lv2:CARD(4.52,1.35,0.22,10.75),lp2:CARD(4.41,1.37,0.26,15.10),mv2:CARD(5.85,1.32,0.25,11.55),mp2:CARD(4.54,1.44,0.33,13.10),hv2:CARD(4.09,1.45,0.27,11.50),hp2:CARD(6.09,1.56,0.35,14.30),lv3:CARD(8.05,1.15,0.18,9.10),lp3:CARD(6.44,1.16,0.22,12.80),mv3:CARD(5.26,1.12,0.21,9.80),mp3:CARD(3.95,1.22,0.28,11.10),hv3:CARD(3.47,1.23,0.23,9.75),hp3:CARD(5.16,1.32,0.30,12.10),lv4:CARD(3.80,0.92,0.15,7.30),lp4:CARD(3.44,0.93,0.18,10.25),mv4:CARD(3.00,0.89,0.17,7.85),mp4:CARD(3.50,0.97,0.23,8.90),hv4:CARD(2.77,0.99,0.18,7.80),hp4:CARD(4.13,1.06,0.24,9.70)},
+  zone:{zones:JSON.parse(JSON.stringify(DEF_ZONES)),postal:{h:'28023 28033 28034 28035 28042 28043 28049 28050 28055 28100 28108 28109 28220 28221 28222 28223 28224 28230 28231 28232 28250 28701 28702 28703 28760 28761 28762'.split(' '),m:'28001 28002 28003 28004 28005 28006 28007 28008 28009 28010 28012 28013 28014 28015 28016 28020 28028 28029 28036 28039 28045 28040 28046 28048'.split(' '),l:'28022 28037 28801 28802 28803 28804 28805 28806 28807 28821 28822 28823 28830 28850 28018 28019 28021 28025 28026 28030 28031 28032 28038 28041 28044 28047 28054 28901 28902 28903 28904 28905 28906 28907 28911 28912 28913 28914 28915 28916 28917 28918 28919 28921 28922 28923 28924 28925 28931 28932 28933 28934 28935 28936 28937 28938 28940 28941 28942 28943 28944 28945 28946 28947 28980 28981 28982 28983 28984 28300 28311 28312 28320 28341 28342 28343 28011 28017 28024 28027 28051 28052 28053'.split(' ')}}});
 P.boltDefaults=defaults;
 const clone=o=>JSON.parse(JSON.stringify(o));
 const isN=v=>typeof v==='number'&&Number.isFinite(v);
@@ -4959,6 +4963,8 @@ function norm(o){const c=defaults();if(!isObj(o))return c;
     for(const [k,o,n] of [['lp1',[4.88,0.93,0.18,9.90],[3.48,0.94,0.18,10.35]],['mp1',[2.93,0.97,0.23,8.80],[3.54,0.98,0.23,8.95]],['hp1',[3.97,1.05,0.23,9.50],[4.17,1.06,0.24,9.80]],['lp2',[2.91,1.36,0.25,13.30],[4.41,1.37,0.26,15.10]],['mp2',[4.54,1.39,0.31,12.45],[4.54,1.44,0.33,13.10]],['hp2',[5.26,1.51,0.32,13.15],[6.09,1.56,0.35,14.30]],['lp3',[6.44,1.16,0.21,11.65],[6.44,1.16,0.22,12.80]],['mp3',[3.95,1.19,0.27,10.70],[3.95,1.22,0.28,11.10]],['hp3',[4.64,1.29,0.28,11.40],[5.16,1.32,0.30,12.10]]])if(sameCard(c.cards[k],o[0],o[1],o[2],o[3]))c.cards[k]=CARD(n[0],n[1],n[2],n[3]);
     /* v3.48: la valle de Child Seat con los precios reales de Bolt (antes iba igual que la punta) y el minuto de la zona media de valle de Comfort, XL y Premium (0,17 / 0,25 / 0,21); si las habías cambiado, se respetan */
     for(const [k,o,n] of [['lv4',[3.44,0.93,0.18,10.25],[3.80,0.92,0.15,7.30]],['mv4',[3.50,0.97,0.23,8.90],[3.00,0.89,0.17,7.85]],['hv4',[4.13,1.06,0.24,9.70],[2.77,0.99,0.18,7.80]],['mv1',[2.35,0.90,0.18,7.90],[2.35,0.90,0.17,7.90]],['mv2',[3.96,1.32,0.26,11.55],[3.96,1.32,0.25,11.55]],['mv3',[3.37,1.12,0.22,9.80],[3.37,1.12,0.21,9.80]]])if(sameCard(c.cards[k],o[0],o[1],o[2],o[3]))c.cards[k]=CARD(n[0],n[1],n[2],n[3]);
+    /* v3.49: el «Inicial» de valle (baja y media) de Comfort, XL y Premium pasa a ser el de la pantalla de tarifas de Bolt; si las habías cambiado, se respetan */
+    for(const [k,o,n] of [['lv1',[3.87,0.92,0.15,7.35],[6.49,0.92,0.15,7.35]],['mv1',[2.35,0.90,0.17,7.90],[4.24,0.90,0.17,7.90]],['lv2',[1.90,1.35,0.22,10.75],[4.52,1.35,0.22,10.75]],['mv2',[3.96,1.32,0.25,11.55],[5.85,1.32,0.25,11.55]],['lv3',[5.43,1.15,0.18,9.10],[8.05,1.15,0.18,9.10]],['mv3',[3.37,1.12,0.21,9.80],[5.26,1.12,0.21,9.80]]])if(sameCard(c.cards[k],o[0],o[1],o[2],o[3]))c.cards[k]=CARD(n[0],n[1],n[2],n[3]);
     // v3.15g: tarjetas normal / aeropuerto × entre semana / fin de semana. Solo se aprovecha lo que el conductor había cambiado de fábrica.
     if(cm.nwd!=null){const x=normCard(cm.nwd,c.cards.mv);if(!sameCard(x,2.10,0.77,0.15,6.75))c.cards.mv=x}
     if(cm.nwe!=null){const x=normCard(cm.nwe,c.cards.mp);if(!sameCard(x,2.10,0.77,0.15,6.75))c.cards.mp=x}
@@ -4972,7 +4978,8 @@ function norm(o){const c=defaults();if(!isObj(o))return c;
     for(const [k,l] of [['l',['28011','28017','28024','28027','28051','28052','28053']],['m',['28040','28046','28048']]])for(const x of l)if(!seen.has(x)&&pz[k].length<400){pz[k].push(x);seen.add(x)}}
   /* v3.34: los ajustes guardados con las reglas anteriores pasan a las nuevas (la punta sube el precio en viajes cortos; sin el extra de cortos de fábrica) */
   if(rng(o.v,0,0,100000)<CFG_VER){c.peakApplies=true;if(c.short.km===6&&c.short.from===1.2&&c.short.lo===0&&c.short.hi===2.5)c.short.hi=0}
-  c.v=CFG_VER;c.cpv=337;
+  if(rng(o.cpv,0,0,100000)<349&&c.zone.zones.length===0){c.zone.zones=clone(DEF_ZONES);if(c.zoneDef==='mid')c.zoneDef='low'}   /* v3.49: zonas de fábrica para quien no tiene ninguna (una sola vez) */
+  c.v=CFG_VER;c.cpv=349;
   return c}
 P.boltNorm=norm;
 
@@ -5410,7 +5417,7 @@ function pZones(){
    +'<div class="bz-out" id="bz_z_loc">'+esc(zoneLastTxt(B.zoneLast)||'Pulsa «Probar ubicación» para ver en qué zona cree la app que estás.')+'</div>'
    +'<div class="bz-hint">Si el móvil no da la ubicación (sin permiso o sin datos recientes), se usa la zona por defecto y el aviso lo dice.</div>'
    +'<b class="bz-sub">Códigos postales de la recogida</b>'
-   +'<small>Si la tarjeta de Bolt trae el código postal de la recogida (por ejemplo «Madrid 28001») y está en una de estas listas, esa zona manda sobre el GPS. Si no sale o no está en ninguna lista, se usa el GPS y tus zonas como siempre (la zona forzada de arriba manda sobre todo). Escribe los códigos separados por espacios, comas o puntos, o uno detrás de otro (de 5 cifras cada uno).</small>'
+   +'<small>Manda lo que tú has pintado: si tienes zonas dibujadas y el móvil da la ubicación, la zona sale de tu mapa (tus zonas y, fuera de todas ellas, la zona por defecto). El código postal de la recogida (por ejemplo «Madrid 28001») solo manda si no tienes ninguna zona dibujada o si el móvil no da la ubicación, y siempre que esté en una de estas listas. Si el código dice otra zona distinta de la de tu mapa, sale como botón en el aviso. Si no sale o no está en ninguna lista, se usa la zona por defecto (la zona forzada de arriba manda sobre todo). Escribe los códigos separados por espacios, comas o puntos, o uno detrás de otro (de 5 cifras cada uno).</small>'
    +postalBox('h','Zona alta')+postalBox('m','Zona media')+postalBox('l','Zona baja')
    +'<div class="bz-hint" id="bz_cp_msg"></div>';
 }
@@ -5559,7 +5566,7 @@ function bodyHtml(){
 }
 function render(){
   const box=document.getElementById('boltBox');if(!box)return;
-  box.innerHTML='<details id="bz_det"'+(B.open?' open':'')+'><summary><b>💶 Estimación del precio de Bolt</b> <span class="bz-badge">NUEVO</span><br><small id="bz_sum"></small></summary><div id="bz_body">'+bodyHtml()+'</div></details>';
+  box.innerHTML='<details id="bz_det"'+(B.open?' open':'')+'><summary style="cursor:pointer;font-weight:800">💶 Estimación del precio de Bolt</summary><div class="bz-sumline" id="bz_sum"></div><div id="bz_body">'+bodyHtml()+'</div></details>';
   const d=document.getElementById('bz_det');d.addEventListener('toggle',()=>{B.open=d.open});
   afterBody();
 }
@@ -5636,7 +5643,7 @@ window.boltSave=async function(silent){
 };
 window.boltReset=function(which){
   const d=defaults();
-  const msg=which==='all'?'¿Volver a los valores iniciales de TODA la estimación de Bolt (tarjetas, franjas, demanda, aeropuerto, comisión y festivos)?\n\nTambién se quitarán las zonas que hayas dibujado. No se guarda hasta que pulses «Guardar».'
+  const msg=which==='all'?'¿Volver a los valores iniciales de TODA la estimación de Bolt (tarjetas, franjas, demanda, aeropuerto, comisión y festivos)?\n\nLas zonas vuelven a las de fábrica. No se guarda hasta que pulses «Guardar».'
     :which==='areas'?'¿Quitar TODAS las zonas que hayas dibujado?\n\nNo se guarda hasta que pulses «Guardar».'
     :which==='slotsm'?'¿Volver a las franjas iniciales de las zonas media y baja (lunes a viernes 07–10 y 17–20, sábado y domingo todo el día)?\n\nNo se guarda hasta que pulses «Guardar».'
     :which==='slotsh'?'¿Volver a las franjas iniciales de la zona alta?\n\nNo se guarda hasta que pulses «Guardar».'
@@ -5645,7 +5652,7 @@ window.boltReset=function(which){
     :which==='cats'?'¿Volver a los valores iniciales de las tarjetas de Comfort, XL y Premium?\n\nNo se guarda hasta que pulses «Guardar».'
     :'¿Volver a los valores iniciales de las seis tarjetas de zona?\n\nNo se guarda hasta que pulses «Guardar».';
   if(!confirm(msg))return;
-  if(which==='all'){B.cfg=d}
+  if(which==='all'){B.cfg=d;B.cfg.cpv=349;B.cfg.zone.zones=clone(DEF_ZONES)}   /* v3.49: las zonas vuelven a las de fábrica */
   else if(which==='areas'){B.cfg.zone.zones=[];if(P.zmap){P.zmap.sel=-1;P.zmap.vsel=-1;P.zmap.draft=null}}
   else if(which==='slotsm'){B.cfg.slots=d.slots}
   else if(which==='slotsh'){B.cfg.slotsH=d.slotsH}
@@ -5984,7 +5991,7 @@ if(typeof _rs==='function')window.rentSave=async function(){
 try{
   const e=jEntry('rentabilidad');
   if(e)e[4]='Es un aviso que salta arriba cuando te llega una oferta de Bolt, Uber o Cabify. Cada dato (€/hora, €/km y distancia de recogida) sale con su color: verde si cumple tu objetivo, naranja si se queda un poco corto y rojo si está lejos. Arriba del todo: ACEPTAR si todo está bien, RECHAZAR si algo está muy mal, y A VALORAR si está justo. Se activa en Ajustes → Rentabilidad de viajes. La oferta de Bolt no muestra el precio: la app lo ESTIMA con tus tarjetas de precios (por zona de la recogida —alta, media o baja—, por hora —valle o punta— y con la demanda que trae la oferta) y te dice bruto, comisión y NETO estimados, en pantalla y por voz. Son estimaciones tuyas, no tarifas oficiales de Bolt: los valores se corrigen en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt, que está dividida en apartados (General, Tarjetas, Aeropuerto, Horas punta y valle, Zonas y mapa, Demanda y viajes largos, Voz), cada uno con su prueba. En Uber la app lee una captura de la pantalla (dentro del móvil, sin guardarla). Solo avisa: no pulsa nada por ti.';
-  J_KB.push(['boltzonas','📍','Zonas de Bolt (alta, media y baja)','zona alta^8,zona media^8,zona baja^8,zonas bolt^7,dibujar zona^8,poligono^7,mapa zonas^8,marcar zonas^7,forzar zona^8,zona forzada^8,zona por defecto^7,probar ubicacion^6,mover punto^6,borrar punto^6,borrar zona^6,gps bolt^6,recogida zona^6,zona de la recogida^7','El precio estimado de Bolt depende de la ZONA donde RECOGES (tu ubicación cuando llega la oferta), nunca de la del destino. Hay tres tipos: zona alta (donde Bolt paga más), media y baja, y cada una tiene su tarjeta de valle y de hora punta. Las zonas las dibujas tú como polígonos en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt → Zonas y mapa → «Dibujar zona nueva»: eliges el tipo (alta, media o baja), tocas el mapa para ir poniendo puntos alrededor de la zona (arrastras para mover el mapa, ＋/－ o pellizcar para acercar) y la cierras tocando el punto 1 (el verde) o con «Cerrar zona». En el mapa el color dice el tipo: verde alta, ámbar media y gris baja. Para cambiar una zona la tocas: arrastras un punto blanco para moverlo, tocas un punto y «Borrar punto» (mínimo 3), tocas el círculo pequeño del medio de un lado para añadir un punto, cambias el tipo con los botones Alta/Media/Baja o «Borrar zona». Una zona no puede cruzarse consigo misma. Si caes en varias zonas manda la alta, luego la media y luego la baja. Fuera de todas vale la «zona por defecto» (media al principio, se puede cambiar). «Forzar la zona» hace que TODAS las ofertas se calculen con esa zona hasta que vuelvas a «Automática» (no es solo para un viaje; el resumen avisa en mayúsculas mientras esté forzada). «Probar ubicación» dice en qué zona cree la app que estás y qué ve el lector de pantalla. Si el móvil no da la ubicación (sin permiso o sin datos recientes) se usa la zona por defecto y el aviso lo dice. No hay detección por código postal ni por la dirección de la recogida: solo el GPS del móvil. Las imágenes del mapa necesitan internet; sin internet las zonas se ven igual sobre un fondo liso. Son estimaciones, no tarifas oficiales de Bolt.']);
+  J_KB.push(['boltzonas','📍','Zonas de Bolt (alta, media y baja)','zona alta^8,zona media^8,zona baja^8,zonas bolt^7,dibujar zona^8,poligono^7,mapa zonas^8,marcar zonas^7,forzar zona^8,zona forzada^8,zona por defecto^7,probar ubicacion^6,mover punto^6,borrar punto^6,borrar zona^6,gps bolt^6,recogida zona^6,zona de la recogida^7','El precio estimado de Bolt depende de la ZONA donde RECOGES (tu ubicación cuando llega la oferta), nunca de la del destino. Hay tres tipos: zona alta (donde Bolt paga más), media y baja, y cada una tiene su tarjeta de valle y de hora punta. Las zonas las dibujas tú como polígonos en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt → Zonas y mapa → «Dibujar zona nueva»: eliges el tipo (alta, media o baja), tocas el mapa para ir poniendo puntos alrededor de la zona (arrastras para mover el mapa, ＋/－ o pellizcar para acercar) y la cierras tocando el punto 1 (el verde) o con «Cerrar zona». En el mapa el color dice el tipo: verde alta, ámbar media y gris baja. Para cambiar una zona la tocas: arrastras un punto blanco para moverlo, tocas un punto y «Borrar punto» (mínimo 3), tocas el círculo pequeño del medio de un lado para añadir un punto, cambias el tipo con los botones Alta/Media/Baja o «Borrar zona». Una zona no puede cruzarse consigo misma. Si caes en varias zonas manda la alta, luego la media y luego la baja. Fuera de todas vale la «zona por defecto» (media al principio, se puede cambiar). «Forzar la zona» hace que TODAS las ofertas se calculen con esa zona hasta que vuelvas a «Automática» (no es solo para un viaje; el resumen avisa en mayúsculas mientras esté forzada). «Probar ubicación» dice en qué zona cree la app que estás y qué ve el lector de pantalla. Si el móvil no da la ubicación (sin permiso o sin datos recientes) se usa la zona por defecto y el aviso lo dice. Orden: 1) la zona forzada en Ajustes; 2) tu mapa: la zona que has pintado donde está tu móvil (GPS) y, fuera de todas, la zona por defecto; 3) si no tienes zonas pintadas o el móvil no da la ubicación, el código postal de la recogida, si la tarjeta lo trae y está en tus listas de «Códigos postales de la recogida»; 4) la zona por defecto. Si el código postal dice otra zona, sale como botón en el aviso. Las imágenes del mapa necesitan internet; sin internet las zonas se ven igual sobre un fondo liso. Son estimaciones, no tarifas oficiales de Bolt.']);
   J_KB.push(['boltestimacion','💶','Precio estimado de Bolt','tarjetas bolt^7,tarjeta aeropuerto^7,tarjeta zona^7,valle punta^8,hora punta^8,horas punta^8,franjas^8,franja hora punta^8,aeropuerto bolt^6,tasa aeropuerto^6,precio bolt^6,estimar bolt^7,estimacion bolt^7,neto bolt^6,neto estimado^7,bolt no muestra el precio^8,tarifa bolt^5,comision bolt^5,bruto estimado^6,voz bolt^5,demanda^5,ajuste fino^6,viajes cortos^7,rango neto^7,festivos bolt^5,minima aeropuerto^6,redondeo 5 centimos^6','Bolt no enseña el precio en la oferta, así que la app lo estima con ocho tarjetas de precios que editas en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt: zona alta, media y baja, cada una de valle y de hora punta, más las dos del aeropuerto (valle y punta), con su inicial, su precio por km, su precio por minuto y su mínima. La zona es la de la RECOGIDA. Al principio, por ejemplo, la zona media en valle es 2,10 + 0,77 €/km + 0,15 €/min (mínima 6,75 €) y la alta en valle 2,39 + 0,85 + 0,16 (mínima 6,70 €). La DEMANDA que muestra la oferta (×1,2, ×1,4…) se lee siempre y multiplica todo, incluida la mínima, desde la primera décima. El bruto se redondea a 5 céntimos (como hace Bolt) y el neto no. HORA PUNTA: sale de tus franjas (una lista para las zonas media y baja y otra para la alta; al principio lunes a viernes de 07 a 10 y de 17 a 20, sábados y domingos todo el día; la alta empieza a las 08:00 por la mañana, sin confirmar; los festivos cuentan como punta). Por defecto la tarjeta de punta NO sube el precio («La hora punta sube lo que cobro», en General): en los viajes largos que hemos comparado, Bolt pagó la tarifa de valle aunque fuera hora punta; con la casilla apagada la app calcula con la de valle y el aviso añade «Ahora es hora punta: no sube tu precio (con tarifa de punta: neto X €)». Si ves que Bolt sí te paga la de punta, enciéndela. VIAJES CORTOS con demanda: el aviso y la voz dan siempre UN SOLO neto estimado (sin rangos). Hay un ajuste fino de la demanda (en %, 0 al principio). AEROPUERTO: las recogidas (parking P1 de la T1, parking express T2, parking módulo D … T4) usan la tarjeta del aeropuerto (con Comfort, XL o Premium, la de esa categoría) y, hasta 11 km, el cliente paga la mínima (13,70 € en Bolt) y la tasa aparte; los viajes HACIA el aeropuerto (Terminal 1–4, «Aeropuerto…») usan la tarjeta de la zona; el barrio de Barajas o la Avenida de la Hispanidad no cuentan. En los dos se resta primero la tasa de 2,57 € (el precio de Bolt ya la incluye) y sobre lo que queda se aplica la comisión (25 % al principio). Ejemplo: recogida en el aeropuerto de 13 km y 20 min sin demanda: 3,04 + 13 × 0,86 + 20 × 0,15 = 17,22 € (17,20 € redondeado); menos la tasa 2,57 € = 14,63 €; comisión 25 % = 3,66 €; neto 10,97 €. Ejemplo corto: recogida de 10,6 km: el cliente paga la mínima 13,70 € + la tasa 2,57 € = 16,27 € (16,25 €); sin la tasa quedan 13,68 €; comisión 25 % = 3,42 €; neto 10,26 €. Son estimaciones, no tarifas oficiales: todos los valores se cambian en esa pantalla, donde cada apartado tiene una prueba para contrastarlos con viajes reales.']);
 }catch(e){}
 // al abrir: si el teléfono perdió los ajustes de Bolt y la cuenta los tiene, se recuperan; y la cuenta guarda una copia
@@ -6126,6 +6133,18 @@ function initThr(){
   const save=()=>{const h=num(H),k=num(K),p=num(Pk);if(h&&k&&p)sr.setThresholds({eurH:h,eurKm:k,pickKm:p}).then(()=>{P.say('Objetivos guardados')}).catch(()=>{})};
   [H,K,Pk].forEach(el=>{el.onchange=save});
 }
+/* v3.49: los numeros de Rentabilidad (objetivos, recogida en el calculo, comision, diagnostico) se guardan solos al cambiarlos */
+function rentAutoSave(){
+  ['rMinH','rMinK','rMaxP','rComm','rIncl','rDiag'].forEach(id=>{
+    const el=document.getElementById(id);if(!el||el._auto)return;el._auto=1;
+    el.addEventListener('change',async()=>{
+      const v=window.rentCollect();
+      if(v.minHour<0||v.minKm<0||v.maxPickup<0||v.comm<0||v.comm>90){P.say('Revisa el número: no puede ser negativo (la comisión, máximo 90 %)');return}
+      const ok=await window.rentSave(true);
+      if(ok!==false)P.say('✅ Guardado');
+    });
+  });
+}
 const bText=el=>((el.querySelector(':scope > b')||{}).textContent||'').trim();
 function restructureRent(){
   const root=document.querySelector('#content');
@@ -6133,7 +6152,7 @@ function restructureRent(){
   const panel=document.getElementById('rOn').closest('section')||root;
   const kids=[...panel.children];
   const note=re=>kids.find(e=>e.classList&&e.classList.contains('note')&&re.test(bText(e)));
-  const obj=toDetails(note(/^Tus objetivos$/),'🎯','Tus objetivos',true);
+  const obj=toDetails(note(/^Tus objetivos$/),'🎯','Tus objetivos',false);      /* v3.49: cerrado, como los demas */
   const est=toDetails(document.getElementById('rStatBox'),'👀','Estado de la lectura',false);
   const tst=toDetails(note(/^Probar el aviso$/),'🧪','Probar el aviso',false);
   const how=toDetails(note(/^C.mo se calcula$/),'ℹ️','Cómo se calcula',false);
@@ -6149,6 +6168,7 @@ function restructureRent(){
   const tools=[tst,est,dg,how].filter(Boolean);
   if(save){let prev=save;for(const x of tools){prev.insertAdjacentElement('afterend',x);prev=x}}
   else for(const x of tools)panel.appendChild(x);
+  if(save){save.style.marginTop='16px';panel.appendChild(save)}      /* v3.49: «Guardar parámetros» abajo del todo, no en medio */
   /* v3.44: isla «Ajustes de rentabilidad» arriba del todo: «Activar rentabilidad» + odómetro automático + viajes guardados (estos dos los coloca cada módulo dentro de #rtGenBody) */
   try{const row=document.getElementById('rOn').closest('.note');
     if(row&&!document.getElementById('rtGen')){
@@ -6158,7 +6178,7 @@ function restructureRent(){
       row.className='rt-row';row.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #ffffff22';
       det.querySelector('#rtGenBody').appendChild(row);
     }}catch(e){console.warn('v3.44 isla',e)}
-  initBubble();initThr();accordion();
+  initBubble();initThr();accordion();rentAutoSave();
 }
 /* v3.15h: acordeón — al abrir un apartado de Rentabilidad se cierran los demás (también «Estimación del precio de Bolt») */
 function accordion(){
@@ -6181,7 +6201,7 @@ if(typeof _rr==='function')window.renderRent=async function(){
 /* ---------- ayuda ---------- */
 try{
   const e=jEntry('rentabilidad');
-  if(e)e[4]=String(e[4]).replace('Se activa en Ajustes → Rentabilidad de viajes.','Se activa en Ajustes → Rentabilidad de viajes (es una opción propia, con desplegables (al abrir uno se cierran los demás): objetivos, burbuja flotante, semáforos, estimación de Bolt, opciones avanzadas, estado de la lectura y diagnóstico).');
+  if(e)e[4]=String(e[4]).replace('Se activa en Ajustes → Rentabilidad de viajes.','Se activa en Ajustes → Rentabilidad de viajes (es una opción propia, con desplegables (al abrir uno se cierran los demás): objetivos, burbuja flotante, semáforos, estimación de Bolt, opciones avanzadas, estado de la lectura y diagnóstico). Los números que cambies (objetivos, recogida, comisión) se guardan solos.');
 }catch(e){}
 })();
 
@@ -6475,7 +6495,7 @@ if(typeof _ras==='function')window.renderAppSettings=function(){
    Batería y datos:
    - Sin servicios en segundo plano, sin GPS y sin temporizadores repetidos (ni setInterval).
    - Solo se descarga: (1) al abrir la pantalla si lo guardado está caducado, (2) al pulsar actualizar (máx. una vez cada 2 min),
-     (3) como mucho una vez al día, al abrir la app, para el aviso. Una sola petición por origen y ningún reintento automático.
+     (3) para el aviso, cada vez que abres la app o vuelves a ella (usa lo guardado y solo descarga si esta caducado). Una sola petición por origen y ningún reintento automático.
    - Caché en el teléfono: tiempo 60 min, eventos 6 h. Sin conexión se enseña lo guardado y no se intenta descargar.
    Datos: Open-Meteo.com (tiempo) y Ticketmaster (conciertos y deportes). Todo lo demás son estimaciones. */
 (function(){
@@ -6910,13 +6930,13 @@ window.infRefresh=function(){
   refresh(true);
 };
 
-/* ---------- aviso al abrir la app (una vez al día, con datos guardados) ---------- */
+/* ---------- aviso al abrir la app o volver a ella (cada vez, con datos guardados) ---------- */
 function appReady(){var a=document.querySelector('.app');return !!a&&!a.classList.contains('auth-hidden')&&document.visibilityState==='visible'}
 function noticeLines(){
   var c=cache(),p=prefs(),today=dkey(new Date()),map=hmap(c.wx&&c.wx.data),nm=nowMin();
   var L=dayEvents(c,today,p,map).filter(function(r){return r.lvl>=2&&(!r.win||r.b>=nm)});
   L.sort(function(a,b){return b.lvl-a.lvl||(a.ev.t<b.ev.t?-1:1)});
-  var out=L.slice(0,3).map(function(r){
+  var out=L.slice(0,6).map(function(r){      /* v3.49: hasta 6 eventos (antes 3) */
     return {t:(r.ev.k==='fair'&&r.ev.t?'~':'')+(r.ev.t||'—'),a:r.ev.n,b:placeTxt(r.ev)+(r.win?' · salida estimada '+hm(r.a)+' – '+hm(r.b):'')};
   });
   var rb=(c.wx&&c.wx.data&&Date.now()-c.wx.t<12*3600000)?rainBlock(map,today,nm):null;
@@ -6933,16 +6953,23 @@ function showNotice(lines){
   document.body.appendChild(d);
 }
 function noticeCheck(){
+  /* v3.49: sale CADA VEZ que abres la app o vuelves a ella (igual que el recordatorio de «Iniciar jornada»), no solo una vez al día.
+     Usa lo guardado: solo descarga si esta caducado (tiempo 1 h, eventos 6 h o de otro dia). Si no hay datos de hoy, no insiste hasta pasados 30 min. */
   var p=prefs(),today=dkey(new Date());
-  if(!p.notice||p.noticeDay===today||!appReady()||noticeBusy)return;
-  if(p.tryT&&Date.now()-p.tryT<RETRY)return;
-  noticeBusy=true;p.tryT=Date.now();savePrefs(p);
+  if(!p.notice||!appReady()||noticeBusy)return;
+  if(document.getElementById('infNotice'))return;                       /* ya esta en pantalla */
+  var c0=cache(),haveToday=!!(c0.ev&&c0.ev.from===today);
+  if(!haveToday){
+    if(p.tryT&&Date.now()-p.tryT<RETRY)return;
+    p.tryT=Date.now();savePrefs(p);
+  }
+  noticeBusy=true;
   refresh(false).then(function(){
     noticeBusy=false;
     var c=cache();
-    if(!c.ev||c.ev.from!==today)return;          /* sin datos de hoy: no se marca el día, se reintenta pasados 30 min */
-    var p2=prefs();p2.noticeDay=today;savePrefs(p2);
-    if(!appReady())return;
+    if(!c.ev||c.ev.from!==today)return;          /* sin datos de hoy: no sale; se reintenta pasados 30 min */
+    if(!haveToday){var p2=prefs();p2.tryT=0;savePrefs(p2)}
+    if(!appReady()||document.getElementById('infNotice'))return;
     var lines=noticeLines();
     if(lines.length)showNotice(lines);
   });
@@ -6961,7 +6988,7 @@ if(typeof rn0==='function'){
       var l=document.querySelector('#content .subpage-list');
       if(l){
         var row=document.createElement('div');row.className='subpage-row';
-        row.innerHTML='<span class="sicon">🌦️</span><div style="flex:1"><b>Aviso de «Madrid hoy»</b><small style="display:block;color:#64748b;margin-top:3px">Al abrir la app, una vez al día, te dice si hay eventos grandes y lluvia esta noche. Usa lo guardado y solo descarga si está caducado.</small></div><button id="notifInfo" class="switch '+(prefs().notice?'on':'')+'" onclick="infNoticeToggle(this)"></button>';
+        row.innerHTML='<span class="sicon">🌦️</span><div style="flex:1"><b>Aviso de «Madrid hoy»</b><small style="display:block;color:#64748b;margin-top:3px">Cada vez que abres la app o vuelves a ella, te dice si hay eventos grandes y lluvia esta noche. Usa lo guardado y solo descarga si está caducado.</small></div><button id="notifInfo" class="switch '+(prefs().notice?'on':'')+'" onclick="infNoticeToggle(this)"></button>';
         l.appendChild(row);
       }
     }catch(e){}
@@ -7032,6 +7059,8 @@ html body .airport-row>.cancel-btn{justify-content:center!important;border:1px s
 .cn-card{width:100%;max-width:520px;max-height:92vh;overflow:auto;background:linear-gradient(160deg,#0d2a52,#071a33);border:2px solid #3fc8ff;border-radius:22px;padding:16px;color:#fff;box-shadow:0 0 24px #1e9bff66;box-sizing:border-box}
 .cn-title{font-weight:900;font-size:20px}
 .cn-day{color:#9fb4c8;font-size:13px;margin:3px 0 12px}
+/* v3.49: la ✕ de arriba es un boton de verdad (44 px) que cierra la ventana */
+.cn-x{display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;min-width:44px;height:44px;margin:-4px 6px -4px -8px;padding:0;border:0;border-radius:12px;background:#ffffff14;color:inherit;font:inherit;font-size:20px;font-weight:900;cursor:pointer;touch-action:manipulation}
 .cn-label{font-size:13px;color:#cfe3f5;margin:10px 0 5px;font-weight:700}
 .cn-plats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .cn-plat{border:2px solid #ffffff33;border-radius:14px;padding:12px 4px;font-weight:900;font-size:15px;color:#fff;background:#13243d;cursor:pointer;touch-action:manipulation}
@@ -7079,7 +7108,22 @@ html body .airport-row>.cancel-btn{justify-content:center!important;border:1px s
 #boltBox summary::after{content:'›';position:absolute;right:2px;top:2px;font-size:22px;transition:transform .15s}
 #boltBox details[open]>summary::after{transform:rotate(90deg)}
 #boltBox summary small{color:#7aa2ff;font-weight:600}
-#boltBox .bz-badge{background:#22c55e;color:#06210f;font-size:11px;font-weight:900;border-radius:8px;padding:2px 7px;margin-left:4px}
+/* v3.49: el titulo de «Estimacion del precio de Bolt» es como el de las demas secciones (▶ y letra normal); el resumen azul va dentro, arriba */
+#boltBox #bz_det>summary{list-style:revert;position:static;padding-right:0;font-weight:800;font-size:1.2em}
+#boltBox #bz_det>summary::-webkit-details-marker{display:revert}
+#boltBox #bz_det>summary::after{content:none}
+#boltBox #bz_sum{margin:8px 0 0;color:#7aa2ff;font-weight:600;font-size:12px;line-height:1.35}
+/* v3.49: los titulos de los apartados de Rentabilidad un 20 % mas grandes, para que se vea que son titulos donde te puedes meter */
+#content details.rt-sec[data-rt]>summary,#content details#rtGen>summary{font-size:1.2em}
+/* v3.49: todos los cuadros de marcar de la app (todo lo que se enciende y se apaga) son interruptores: verde y a la derecha = encendido, gris y a la izquierda = apagado */
+#content#content input[type=checkbox]{-webkit-appearance:none!important;appearance:none!important;width:52px!important;height:30px!important;min-width:52px!important;border-radius:15px!important;background:#6b7a8f!important;border:0!important;position:relative;flex:none!important;cursor:pointer;margin:0;padding:0;outline:none;box-shadow:none!important;transition:background .18s}
+#content#content input[type=checkbox]::after{content:'';position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 4px #0006;transition:transform .18s}
+#content#content input[type=checkbox]:checked{background:#22c55e!important}
+#content#content input[type=checkbox]:checked::after{transform:translateX(22px)}
+#content#content input[type=checkbox]:disabled{opacity:.5}
+#content#content #boltBox .bz-sw input[type=checkbox]{width:44px!important;height:26px!important;min-width:44px!important;border-radius:13px!important}
+#content#content #boltBox .bz-sw input[type=checkbox]::after{width:20px;height:20px}
+#content#content #boltBox .bz-sw input[type=checkbox]:checked::after{transform:translateX(18px)}
 #boltBox .bz-note{margin:12px 0;padding:10px 12px;border-radius:14px;background:#ffffff10;line-height:1.45;font-size:13px;color:#cfe3f5}
 #boltBox .bz-hint{margin:8px 0;font-size:12px;line-height:1.4;color:#9fb4c8}
 #boltBox .bz-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #ffffff22}
@@ -9217,12 +9261,12 @@ details.subpage-row summary::-webkit-details-marker{display:none}
 <style id="v311-style">
 .app .header.hdr-banner{position:relative!important;display:block!important;height:auto!important;min-height:0!important;padding:0!important;background:none!important;border:0!important;box-shadow:none!important;overflow:visible!important;border-radius:0!important}
 .app .header.hdr-banner::before,.app .header.hdr-banner::after{display:none!important;content:none!important}
-.app .header.hdr-banner img.hdr-banner-img{display:block!important;width:100%!important;max-width:none!important;height:auto!important;max-height:none!important;min-width:0!important;min-height:0!important;aspect-ratio:3/1!important;object-fit:fill!important;flex:none!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;transform:none!important;position:static!important;pointer-events:none;user-select:none;-webkit-user-drag:none}
+.app .header.hdr-banner img.hdr-banner-img{display:block!important;width:100%!important;max-width:none!important;height:auto!important;max-height:none!important;min-width:0!important;min-height:0!important;aspect-ratio:2/1!important;object-fit:fill!important;flex:none!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;transform:none!important;position:static!important;pointer-events:none;user-select:none;-webkit-user-drag:none}
 .hdr-menu-hit{position:absolute;left:2.2%;top:4%;width:10%;height:27%;background:transparent!important;border:0!important;padding:0!important;margin:0!important;z-index:5;cursor:pointer;-webkit-tap-highlight-color:transparent}
 </style>
 <style id="v312-style">
 .app .header.hdr-banner{border-radius:22px!important;overflow:hidden!important;border:2px solid #3fc8ffaa!important;box-shadow:0 0 14px #1e9bff66!important}
-.hdr-menu-hit{left:.4%!important;top:1%!important;width:9%!important;height:21%!important}
+.hdr-menu-hit{left:.4%!important;top:1%!important;width:9%!important;height:14%!important}
 </style>
 <style id="v323-style">
 /* ===== v3.23 · restyling: solo apariencia (colores, degradados, bordes, sombras) + arreglos de alineacion en Control ===== */

@@ -83,6 +83,8 @@ public class ScreenReaderService extends AccessibilityService {
         hideBubble();
         hideAlert();
         shutdownTts();
+        try { bg.shutdownNow(); } catch (Throwable t) { }         // v3.49
+        try { ocrEx.shutdownNow(); } catch (Throwable t) { }
         instance = null;
         return super.onUnbind(i);
     }
@@ -416,7 +418,18 @@ public class ScreenReaderService extends AccessibilityService {
         startActivity(i);
     }
 
-    public JSONArray readAll(String ownPkg) {
+    public JSONArray readAll(String ownPkg) { return readWindows(ownPkg, 0); }
+
+    /** v3.49: sin el ruido de siempre (pantalla de inicio, teclado): lo que leen Importe automatico y la burbuja */
+    public JSONArray readQuick(String ownPkg) { return readWindows(ownPkg, 1); }
+
+    /** v3.49: solo las ventanas de Bolt / Uber / Cabify: lo que lee la oferta en segundo plano */
+    public JSONArray readDrivers(String ownPkg) { return readWindows(ownPkg, 2); }
+
+    private static final Pattern NOISE = Pattern.compile("launcher|inputmethod|keyboard", Pattern.CASE_INSENSITIVE);
+
+    /** mode 0 = todas las ventanas, 1 = sin pantalla de inicio ni teclado, 2 = solo Bolt / Uber / Cabify */
+    private JSONArray readWindows(String ownPkg, int mode) {
         JSONArray out = new JSONArray();
         try {
             List<AccessibilityWindowInfo> ws = getWindows();
@@ -424,20 +437,22 @@ public class ScreenReaderService extends AccessibilityService {
                 for (AccessibilityWindowInfo w : ws) {
                     AccessibilityNodeInfo root = w.getRoot();
                     if (root == null) continue;
-                    addWindow(out, root, ownPkg);
+                    addWindow(out, root, ownPkg, mode);
                 }
             }
             if (out.length() == 0) {
                 AccessibilityNodeInfo root = getRootInActiveWindow();
-                if (root != null) addWindow(out, root, ownPkg);
+                if (root != null) addWindow(out, root, ownPkg, mode);
             }
         } catch (Exception e) { }
         return out;
     }
 
-    private void addWindow(JSONArray out, AccessibilityNodeInfo root, String ownPkg) throws Exception {
+    private void addWindow(JSONArray out, AccessibilityNodeInfo root, String ownPkg, int mode) throws Exception {
         String pkg = String.valueOf(root.getPackageName());
         if (pkg.equals(ownPkg) || pkg.equals("com.android.systemui")) return;
+        if (mode == 2 && !DRIVER.matcher(pkg).find()) return;      // v3.49: no se recorre lo que no es una app de conductor
+        if (mode == 1 && NOISE.matcher(pkg).find()) return;        // v3.49: ni la pantalla de inicio ni el teclado
         JSONArray texts = new JSONArray();
         collect(root, texts, 0);
         JSONObject o = new JSONObject();
@@ -462,7 +477,36 @@ public class ScreenReaderService extends AccessibilityService {
     private String zcSig = "";
     private boolean forced = false;
     private WindowManager.LayoutParams alp;
-    private final Runnable evalRun = new Runnable() { @Override public void run() { evalPending = false; evaluateOffer(); } };
+    // v3.49: la lectura de la pantalla (cada nodo es una consulta a la otra app) y la captura de Uber ya no van en el hilo principal: no frenan el Portal ni la propia app
+    private final java.util.concurrent.ExecutorService bg = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private final java.util.concurrent.ExecutorService ocrEx = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private boolean readBusy = false, scanBusy = false, evalAgain = false;
+    private final Runnable evalRun = new Runnable() { @Override public void run() { evalPending = false; evaluateAsync(); } };
+
+    /** lee las ventanas de conductor en el hilo de fondo y juzga la oferta en el principal; si llega otra peticion mientras lee, repite al acabar */
+    private void evaluateAsync() {
+        if (!trackOn(this)) return;
+        if (readBusy) { evalAgain = true; return; }
+        readBusy = true;
+        try {
+            bg.execute(new Runnable() {
+                @Override public void run() {
+                    JSONArray w = null;
+                    try { w = readDrivers(getPackageName()); } catch (Throwable t) { }
+                    final JSONArray wins = w;
+                    try {
+                        rh.post(new Runnable() {
+                            @Override public void run() {
+                                readBusy = false;
+                                try { if (wins != null) evaluateWith(wins); } catch (Throwable t) { }
+                                if (evalAgain) { evalAgain = false; scheduleEval(); }
+                            }
+                        });
+                    } catch (Throwable t) { readBusy = false; }
+                }
+            });
+        } catch (Throwable t) { readBusy = false; evaluateOffer(); }
+    }
     private final Runnable hideRun = new Runnable() { @Override public void run() { hideAlert(); } };
     private final Runnable unforceRun = new Runnable() { @Override public void run() { forced = false; refreshBubble(); } };
 
@@ -499,7 +543,7 @@ public class ScreenReaderService extends AccessibilityService {
 
     /** lectura en vivo; si no hay ninguna app de conductor visible, usa la memoria (hasta 150 s) */
     public JSONArray readWithCache(String ownPkg, JSONObject meta) {
-        JSONArray wins = readAll(ownPkg);
+        JSONArray wins = readQuick(ownPkg);          // v3.49: sin pantalla de inicio ni teclado
         try {
             if (!hasDriverWindow(wins) && cacheJson != null) {
                 long age = System.currentTimeMillis() - cacheTime;
@@ -549,25 +593,50 @@ public class ScreenReaderService extends AccessibilityService {
     private final Runnable pollRun = new Runnable() {
         @Override public void run() {
             if (!rentOn(ScreenReaderService.this)) { polling = false; return; }
+            rh.postDelayed(this, 1500);
+            // v3.49: el recorrido de ventanas va en un hilo aparte (cada una es una consulta a otra app); aqui solo se decide que hacer con el resultado
+            if (scanBusy) return;
+            scanBusy = true;
+            try { bg.execute(scanRun); } catch (Throwable t) { scanBusy = false; }
+        }
+    };
+
+    private final Runnable scanRun = new Runnable() {
+        @Override public void run() {
+            boolean any = false, uber = false;
+            Rect ub = null;
             try {
                 List<AccessibilityWindowInfo> ws = getWindows();
-                boolean any = false, uber = false;
                 if (ws != null) for (AccessibilityWindowInfo w : ws) {
                     AccessibilityNodeInfo rt = w.getRoot();
                     if (rt == null) continue;
                     CharSequence pk = rt.getPackageName();
                     if (pk != null && DRIVER.matcher(pk).find() && !pk.toString().equals(getPackageName())) {
                         any = true;
-                        if (OCR_PKG.matcher(pk).find()) uber = true;
+                        if (OCR_PKG.matcher(pk).find()) {
+                            uber = true;
+                            if (ub == null) { ub = new Rect(); w.getBoundsInScreen(ub); }
+                        }
                     }
                 }
-                if (any) {
-                    getSharedPreferences("portal", Context.MODE_PRIVATE).edit().putLong("rent_seenTs", System.currentTimeMillis()).apply();
-                    scheduleEval();
-                }
-                if (uber && System.currentTimeMillis() - treeFoundTs > 3000) ocrTick();
-            } catch (Exception e) { }
-            rh.postDelayed(this, 1500);
+            } catch (Throwable t) { }
+            final boolean fAny = any, fUber = uber;
+            final Rect fUb = ub;
+            try {
+                rh.post(new Runnable() {
+                    @Override public void run() {
+                        scanBusy = false;
+                        try {
+                            if (!rentOn(ScreenReaderService.this)) return;
+                            if (fAny) {
+                                getSharedPreferences("portal", Context.MODE_PRIVATE).edit().putLong("rent_seenTs", System.currentTimeMillis()).apply();
+                                scheduleEval();
+                            }
+                            if (fUber && System.currentTimeMillis() - treeFoundTs > 3000) ocrTick(fUb);
+                        } catch (Throwable t) { }
+                    }
+                });
+            } catch (Throwable t) { scanBusy = false; }
         }
     };
 
@@ -594,8 +663,9 @@ public class ScreenReaderService extends AccessibilityService {
     }
 
     // ---- lectura por imagen (OCR): para apps que esconden la oferta al lector de accesibilidad (Uber) ----
-    private boolean ocrBusy = false;
-    private long ocrNextAt = 0, ocrFoundTs = 0;
+    private volatile boolean ocrBusy = false;         // v3.49: se toca desde el hilo de la captura y desde el principal
+    private volatile long ocrNextAt = 0;
+    private long ocrFoundTs = 0;
     private OfferAnalyzer.Result ocrFound = null;
     private TextRecognizer recognizer;
 
@@ -622,25 +692,38 @@ public class ScreenReaderService extends AccessibilityService {
         return null;
     }
 
-    private void ocrTick() {
+    private void ocrTick(final Rect area) {
         if (android.os.Build.VERSION.SDK_INT < 30) { setOcrState("No disponible: hace falta Android 11 o superior."); return; }
         long now = System.currentTimeMillis();
         if (ocrBusy || now < ocrNextAt) return;
-        final Rect area = uberBounds();
         if (area == null) return;
+        // el hueco que ocupa nuestro propio aviso se mide aqui (hilo principal): luego se tapa para no leernos a nosotros mismos
+        Rect al = null;
+        try {
+            if (alertShown && alertView != null) {
+                int[] loc = new int[2];
+                alertView.getLocationOnScreen(loc);
+                al = new Rect(loc[0], loc[1], loc[0] + alertView.getWidth(), loc[1] + alertView.getHeight());
+            }
+        } catch (Throwable t) { al = null; }
+        final Rect alertRect = al;
         ocrBusy = true;
         ocrNextAt = now + 2000;
+        final long t0 = System.nanoTime();
         try {
-            takeScreenshot(android.view.Display.DEFAULT_DISPLAY, getMainExecutor(), new TakeScreenshotCallback() {
+            // v3.49: la captura se recibe en un hilo aparte (antes en el principal): la copia, el recorte y el reconocimiento no frenan la pantalla
+            takeScreenshot(android.view.Display.DEFAULT_DISPLAY, ocrEx, new TakeScreenshotCallback() {
                 @Override public void onSuccess(ScreenshotResult sr) {
+                    Bitmap hw = null;
                     try {
-                        Bitmap hw = Bitmap.wrapHardwareBuffer(sr.getHardwareBuffer(), sr.getColorSpace());
+                        hw = Bitmap.wrapHardwareBuffer(sr.getHardwareBuffer(), sr.getColorSpace());
                         if (hw == null) { ocrBusy = false; setOcrState("La captura llego vacia."); return; }
-                        Bitmap bmp = hw.copy(Bitmap.Config.ARGB_8888, true);
-                        hw.recycle();
-                        sr.getHardwareBuffer().close();
-                        runOcr(bmp, area);
+                        runOcr(hw, area, alertRect, t0);
                     } catch (Throwable t) { ocrBusy = false; setOcrState("Error al procesar la captura: " + t); }
+                    finally {
+                        try { if (hw != null) hw.recycle(); } catch (Throwable t) { }
+                        try { sr.getHardwareBuffer().close(); } catch (Throwable t) { }
+                    }
                 }
                 @Override public void onFailure(int code) {
                     ocrBusy = false;
@@ -655,32 +738,49 @@ public class ScreenReaderService extends AccessibilityService {
         }
     }
 
-    private void runOcr(Bitmap full, Rect area) {
+    /** v3.49: copia solo la zona de Uber (no la pantalla entera), tapa nuestro aviso, y libera cada imagen en cuanto deja de hacer falta */
+    private void runOcr(Bitmap hw, Rect area, Rect alertRect, final long t0) {
+        Bitmap full = null, crop = null;
         try {
-            // se tapa nuestro propio aviso para no leernos a nosotros mismos
-            if (alertShown && alertView != null) {
-                int[] loc = new int[2];
-                alertView.getLocationOnScreen(loc);
+            int x = Math.max(0, area.left), y = Math.max(0, area.top);
+            int w = Math.min(hw.getWidth() - x, area.width()), h = Math.min(hw.getHeight() - y, area.height());
+            if (w < 80 || h < 80) { ocrBusy = false; return; }
+            full = hw.copy(Bitmap.Config.ARGB_8888, true);
+            crop = Bitmap.createBitmap(full, x, y, w, h);
+            if (full != crop) full.recycle();      // (un recorte de todo el bitmap no devuelve el mismo objeto si es modificable, pero por si acaso)
+            full = null;
+            if (alertRect != null) {
                 Paint pt = new Paint();
                 pt.setColor(Color.BLACK);
-                new Canvas(full).drawRect(loc[0], loc[1], loc[0] + alertView.getWidth(), loc[1] + alertView.getHeight(), pt);
+                new Canvas(crop).drawRect(alertRect.left - x, alertRect.top - y, alertRect.right - x, alertRect.bottom - y, pt);
             }
-            int x = Math.max(0, area.left), y = Math.max(0, area.top);
-            int w = Math.min(full.getWidth() - x, area.width()), h = Math.min(full.getHeight() - y, area.height());
-            if (w < 80 || h < 80) { ocrBusy = false; return; }
-            Bitmap crop = Bitmap.createBitmap(full, x, y, w, h);
             if (recognizer == null) recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
-            recognizer.process(InputImage.fromBitmap(crop, 0))
+            final Bitmap cropF = crop;
+            crop = null;
+            recognizer.process(InputImage.fromBitmap(cropF, 0))
                 .addOnSuccessListener(new OnSuccessListener<Text>() {
-                    @Override public void onSuccess(Text text) { ocrBusy = false; onOcrText(text); }
+                    @Override public void onSuccess(Text text) {
+                        ocrBusy = false;
+                        try { cropF.recycle(); } catch (Throwable t) { }
+                        onOcrText(text, (System.nanoTime() - t0) / 1000000L);
+                    }
                 })
                 .addOnFailureListener(new OnFailureListener() {
-                    @Override public void onFailure(Exception e) { ocrBusy = false; setOcrState("Fallo del reconocimiento: " + e); }
+                    @Override public void onFailure(Exception e) {
+                        ocrBusy = false;
+                        try { cropF.recycle(); } catch (Throwable t) { }
+                        setOcrState("Fallo del reconocimiento: " + e);
+                    }
                 });
-        } catch (Throwable t) { ocrBusy = false; setOcrState("Fallo en la lectura por imagen: " + t); }
+        } catch (Throwable t) {
+            ocrBusy = false;
+            setOcrState("Fallo en la lectura por imagen: " + t);
+            try { if (full != null) full.recycle(); } catch (Throwable u) { }
+            try { if (crop != null) crop.recycle(); } catch (Throwable u) { }
+        }
     }
 
-    private void onOcrText(Text text) {
+    private void onOcrText(Text text, long ms) {
         List<String> lines = new ArrayList<String>();
         StringBuilder sb = new StringBuilder();
         for (Text.TextBlock b : text.getTextBlocks()) {
@@ -692,7 +792,8 @@ public class ScreenReaderService extends AccessibilityService {
         }
         OfferAnalyzer.Result r = OfferAnalyzer.analyze(lines, rentParams(), true);
         long now = System.currentTimeMillis();
-        setOcrState(lines.size() + " lineas leidas por imagen" + (r.offer ? " - oferta reconocida" : (r.acceptSeen ? " - veo el boton Aceptar pero no entendi la oferta" : "")));
+        setOcrState(lines.size() + " lineas leidas por imagen" + (r.offer ? " - oferta reconocida" : (r.acceptSeen ? " - veo el boton Aceptar pero no entendi la oferta" : ""))
+            + (r.ocrFix.length() > 0 ? " - corregido: " + r.ocrFix : "") + " (" + ms + " ms)");
         if (r.offer || r.acceptSeen) {
             getSharedPreferences("portal", Context.MODE_PRIVATE).edit()
                 .putString("rent_lastText", "[lectura por imagen de Uber]\n" + sb)
@@ -710,10 +811,16 @@ public class ScreenReaderService extends AccessibilityService {
         rh.postDelayed(evalRun, 450);
     }
 
+    /** lectura y juicio seguidos en el hilo que llama (lo usa el aviso de zona; el camino normal lee en segundo plano: evaluateAsync) */
     private void evaluateOffer() {
         if (!trackOn(this)) return;
+        evaluateWith(readAll(getPackageName()));
+    }
+
+    /** v3.49: juzga lo leido; siempre en el hilo principal */
+    private void evaluateWith(JSONArray wins) {
+        if (!trackOn(this)) return;
         try {
-            JSONArray wins = readAll(getPackageName());
             updateCache(wins);
             if (!rentOn(this)) return;
             SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);

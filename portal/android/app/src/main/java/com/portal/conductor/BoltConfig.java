@@ -213,13 +213,31 @@ public class BoltConfig {
         return l;
     }
 
+    /** v3.49: zonas de fabrica (las que midio Juan). Se ponen una sola vez a quien no tiene ninguna zona dibujada (marca cpv menor de 349). */
+    static List<OfferAnalyzer.Area> defaultAreas() {
+        final String[] src = {
+            "Zona 1|h|40.417079,-3.722302;40.416161,-3.742153;40.409065,-3.754317;40.401372,-3.769423;40.399601,-3.768703;40.393027,-3.775373;40.381073,-3.785182;40.369565,-3.80382;40.35641,-3.825008;40.347888,-3.85267;40.334131,-3.88661;40.30227,-3.902697;40.301821,-3.953901;40.342484,-4.007434;40.377337,-4.071219;40.421112,-4.085541;40.454314,-4.050202;40.486924,-4.057853;40.593822,-4.199302;40.700995,-4.113177;40.760907,-4.069036;40.839023,-3.779468;40.784084,-3.572886;40.706795,-3.516581;40.587118,-3.441638;40.50781,-3.496672;40.472449,-3.497849;40.470957,-3.53944;40.487969,-3.557881;40.540171,-3.554546;40.52869,-3.587113;40.505162,-3.59876;40.480619,-3.601702;40.478604,-3.581593;40.472038,-3.573942;40.46465,-3.574629;40.45129,-3.587087;40.451066,-3.601997;40.460322,-3.617397;40.469277,-3.626912;40.469212,-3.642606;40.47257,-3.649374;40.471078,-3.656977;40.471431,-3.658372;40.471694,-3.667288;40.478912,-3.666748;40.484826,-3.663511;40.484306,-3.676144;40.48384,-3.682409;40.48281,-3.687113;40.485645,-3.693882;40.486913,-3.69707;40.489435,-3.697785;40.482665,-3.715141;40.476882,-3.732381;40.476957,-3.737666;40.476957,-3.739616;40.476929,-3.741026;40.477022,-3.74181;40.476882,-3.742779;40.476525,-3.743739;40.475381,-3.747573;40.474597,-3.750491;40.473767,-3.753483;40.47358,-3.753066;40.470017,-3.750271;40.467583,-3.749793;40.464318,-3.749063;40.462191,-3.746911;40.456938,-3.744422;40.45385,-3.743368;40.45246,-3.74262;40.450892,-3.742583;40.442242,-3.739346;40.4371,-3.738022;40.430773,-3.737396;40.42829,-3.735949;40.427385,-3.734564;40.423856,-3.730383;40.422036,-3.724473;40.421327,-3.722817;40.419926,-3.722229;40.419338,-3.72115",
+            "Zona 2|m|40.472328,-3.667091;40.471563,-3.666895;40.465626,-3.667559;40.462383,-3.665947;40.459301,-3.663831;40.455703,-3.663347;40.449657,-3.661974;40.444597,-3.660079;40.442693,-3.659049;40.440345,-3.658639;40.43407,-3.659663;40.431391,-3.660349;40.429226,-3.660227;40.428031,-3.659785;40.426725,-3.659932;40.425823,-3.659914;40.422132,-3.658534;40.419873,-3.658436;40.416027,-3.658951;40.412903,-3.661484;40.404724,-3.66526;40.397889,-3.669527;40.394562,-3.672439;40.391016,-3.677571;40.387922,-3.680164;40.383719,-3.68166;40.381178,-3.686172;40.380967,-3.688042;40.381571,-3.690414;40.384516,-3.693584;40.39012,-3.699617;40.394565,-3.704031;40.396429,-3.710499;40.399309,-3.715312;40.399869,-3.720903;40.401266,-3.722417;40.403806,-3.722834;40.405748,-3.722981;40.409094,-3.722031;40.41303,-3.72406;40.41908,-3.721313;40.421417,-3.723159;40.422798,-3.726494;40.424139,-3.730387;40.428937,-3.736322;40.431998,-3.737768;40.436067,-3.737818;40.44195,-3.739246;40.448646,-3.741864;40.452923,-3.742876;40.462402,-3.746897;40.464264,-3.749049;40.469753,-3.750134;40.473798,-3.75312;40.476916,-3.742238;40.476805,-3.7326;40.481956,-3.717146;40.489525,-3.698121;40.487406,-3.69742;40.485951,-3.694796;40.484039,-3.689806;40.482864,-3.684533;40.482986,-3.683319;40.483759,-3.682175;40.484427,-3.671864;40.48464,-3.664002;40.479193,-3.666209;40.475388,-3.66768"
+        };
+        List<OfferAnalyzer.Area> l = new ArrayList<OfferAnalyzer.Area>();
+        for (String s : src) {
+            String[] f = s.split("\\|");
+            List<double[]> pts = new ArrayList<double[]>();
+            for (String pr : f[2].split(";")) { String[] ll = pr.split(","); pts.add(new double[]{Double.parseDouble(ll[0]), Double.parseDouble(ll[1])}); }
+            l.add(new OfferAnalyzer.Area(f[0], kindOf(f[1], OfferAnalyzer.Z_HIGH), pts));
+        }
+        return l;
+    }
+
+    private static OfferAnalyzer.BoltCfg withDefaultZones(OfferAnalyzer.BoltCfg c) { c.zone.good = defaultAreas(); c.zoneDef = OfferAnalyzer.Z_LOW; return c; }
+
     /** Lee la configuracion. Cualquier dato ausente o no valido vuelve a su valor inicial; un JSON roto devuelve todo por defecto. */
     public static OfferAnalyzer.BoltCfg parse(String json) {
-        OfferAnalyzer.BoltCfg c = new OfferAnalyzer.BoltCfg();
+        OfferAnalyzer.BoltCfg c = withDefaultZones(new OfferAnalyzer.BoltCfg());   // v3.49: la base son los valores de fabrica (zonas de fabrica y zona por defecto baja), igual que la pagina
         if (json == null || json.trim().length() == 0) return c;
         try {
             Map<String, Object> m = map(new P(json).val());
-            if (m == null) return c;
+            if (m == null) return withDefaultZones(c);
             c.on = bool(m.get("on"), c.on);
             Object md = m.get("mode");
             if (md instanceof String && ("auto".equals(md) || "week".equals(md) || "weekend".equals(md))) c.mode = (String) md;
@@ -289,6 +307,14 @@ public class BoltConfig {
                     for (int ci = 0; ci < 3; ci++)
                         if (sameCard(c.catV[ci][1], oldMidV[ci][0], oldMidV[ci][1], oldMidV[ci][2], oldMidV[ci][3])) c.catV[ci][1] = newV[ci][1];
                 }
+                // v3.49: el Inicial de valle (baja y media) de Comfort, XL y Premium pasa a ser el literal de la pantalla de tarifas de Bolt:
+                // si tenias guardados los de fabrica de antes pasan a los nuevos; si los cambiaste, se respetan
+                {
+                    final double[][][] oldIni = { { {3.87, 0.92, 0.15, 7.35}, {2.35, 0.90, 0.17, 7.90} }, { {1.90, 1.35, 0.22, 10.75}, {3.96, 1.32, 0.25, 11.55} }, { {5.43, 1.15, 0.18, 9.10}, {3.37, 1.12, 0.21, 9.80} } };
+                    OfferAnalyzer.Card[][] newIni = OfferAnalyzer.defaultCat(false);
+                    for (int ci = 0; ci < 3; ci++) for (int zi = 0; zi < 2; zi++)
+                        if (sameCard(c.catV[ci][zi], oldIni[ci][zi][0], oldIni[ci][zi][1], oldIni[ci][zi][2], oldIni[ci][zi][3])) c.catV[ci][zi] = newIni[ci][zi];
+                }
                 // v3.15g: tarjetas normal / aeropuerto x entre semana / fin de semana. Solo se aprovecha lo que el conductor habia cambiado de fabrica.
                 if (cm.get("nwd") != null) { OfferAnalyzer.Card x = card(cm.get("nwd"), c.midV); if (!sameCard(x, 2.10, 0.77, 0.15, 6.75)) c.midV = x; }
                 if (cm.get("nwe") != null) { OfferAnalyzer.Card x = card(cm.get("nwe"), c.midP); if (!sameCard(x, 2.10, 0.77, 0.15, 6.75)) c.midP = x; }
@@ -306,6 +332,7 @@ public class BoltConfig {
                 c.holidays = h;
             }
             c.zone = zone(m.get("zone"), c.zone);
+            if (dbl(m.get("cpv"), 0, 0, 100000) < 349 && c.zone.good.isEmpty()) { c.zone.good = defaultAreas(); if (c.zoneDef == OfferAnalyzer.Z_MID) c.zoneDef = OfferAnalyzer.Z_LOW; }   // v3.49: zonas de fabrica (y la zona por defecto de fabrica), una sola vez, a quien no tiene ninguna
             if (dbl(m.get("cpv"), 0, 0, 100000) < 337) addCpv337(c.zone);   // v3.37: los ajustes guardados antes de la v3.37 reciben los codigos que faltaban (la marca cpv la escribe Java al guardar los ajustes)
             // v3.34: los ajustes guardados con las reglas anteriores pasan a las nuevas (la punta sube el precio en viajes cortos; sin el extra de cortos de fabrica)
             if (dbl(m.get("v"), 0, 0, 100000) < CFG_VER) {
@@ -314,7 +341,7 @@ public class BoltConfig {
             }
             return c;
         } catch (Exception e) {
-            return new OfferAnalyzer.BoltCfg();
+            return withDefaultZones(new OfferAnalyzer.BoltCfg());
         }
     }
 
@@ -387,7 +414,7 @@ public class BoltConfig {
         StringBuilder b = new StringBuilder("{");
         b.append("\"on\":").append(c.on).append(",\"mode\":\"").append(c.mode).append("\",\"comm\":").append(n(c.comm));
         b.append(",\"peakApplies\":").append(c.peakApplies).append(",\"round5\":").append(c.round5).append(",\"fine\":").append(n(c.fine));
-        b.append(",\"peakKm\":").append(n(c.peakKm)).append(",\"longKm\":").append(n(c.longKm)).append(",\"longDisc\":").append(n(c.longDisc)).append(",\"eventOn\":").append(c.eventOn).append(",\"v\":").append(CFG_VER).append(",\"cpv\":337");
+        b.append(",\"peakKm\":").append(n(c.peakKm)).append(",\"longKm\":").append(n(c.longKm)).append(",\"longDisc\":").append(n(c.longDisc)).append(",\"eventOn\":").append(c.eventOn).append(",\"v\":").append(CFG_VER).append(",\"cpv\":349");
         b.append(",\"zoneForce\":\"").append(c.zoneForce).append("\",\"zoneDef\":\"").append(kindWordKey(c.zoneDef)).append('"');
         b.append(",\"short\":{\"km\":").append(n(c.shortKm)).append(",\"from\":").append(n(c.shortFrom)).append(",\"lo\":").append(n(c.bumpLo)).append(",\"hi\":").append(n(c.bumpHi)).append('}');
         b.append(",\"airOn\":").append(c.airOn).append(",\"airFee\":").append(n(c.airFee)).append(",\"airFlatKm\":").append(n(c.airFlatKm));
@@ -421,5 +448,5 @@ public class BoltConfig {
     }
 
     /** Configuracion inicial (la unica fuente de verdad de los valores por defecto; la pantalla de ajustes la pide aqui). */
-    public static String defaultsJson() { return toJson(new OfferAnalyzer.BoltCfg()); }
+    public static String defaultsJson() { return toJson(withDefaultZones(new OfferAnalyzer.BoltCfg())); }
 }

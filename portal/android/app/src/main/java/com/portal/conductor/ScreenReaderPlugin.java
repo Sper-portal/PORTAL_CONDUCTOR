@@ -42,7 +42,9 @@ public class ScreenReaderPlugin extends Plugin {
         ScreenReaderService s = ScreenReaderService.instance;
         if (s == null) { call.reject("not_enabled"); return; }
         JSObject r = new JSObject();
+        long t0 = System.nanoTime();
         r.put("windows", s.readWithCache(getContext().getPackageName(), r));
+        r.put("ms", (int) ((System.nanoTime() - t0) / 1000000L));          // v3.49
         call.resolve(r);
     }
 

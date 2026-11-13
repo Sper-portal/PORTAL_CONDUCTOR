@@ -25,6 +25,7 @@ public class OfferAnalyzer {
         public boolean offer;
         public String verdict = "DATA";           // OK, NO, DATA
         public double price = -1, tripKm = -1, tripMin = -1, pickupKm = -1, pickupMin = -1, perHour = -1, perKm = -1;
+        public String ocrFix = "";                // v3.49: lo que se corrigio al leer por imagen (precio entero, coma de los km, 0 km)
         public String reason = "";
         public boolean orderAssumed;
         public String why = "";
@@ -49,6 +50,7 @@ public class OfferAnalyzer {
         public String estArea = "";                 // nombre de la zona dibujada donde se detecto la ubicacion
         public String estZoneSrc = "";              // "area" (dibujada) | "default" (fuera de tus zonas) | "forced" (forzada en Ajustes) | "postal" (codigo postal) | "manual" (elegida por ti en el aviso)
         public String estCpUnlisted = "";           // v3.37: codigo postal de la recogida que NO esta en ninguna lista de Ajustes (se uso la ubicacion); "" si no hay
+        public int estCpKind = -1;                  // v3.49: zona que dice el codigo postal de la recogida cuando manda la zona pintada y es distinta (-1 si no); se ofrece como boton
         public String baseSig = "";                 // v3.37: huella de la oferta SIN la zona (viaje y recogida)
         public double estNetAuto = -1;              // v3.37: neto con la zona de la ubicacion (sin tu eleccion); -1 si no hay estimacion
         public int zoneAuto = -1;                   // v3.37: zona que sale de la ubicacion; -1 si no hay botones de zona
@@ -260,9 +262,10 @@ public class OfferAnalyzer {
     // =====================================================================
     // v3.48: la 4 es Child Seat / Booster Seat (valle con los precios reales de Bolt). En la zona media de valle el minuto es el de la pantalla de Bolt (Comfort 0,17, XL 0,25, Premium 0,21).
     private static final double[][][] CAT_V = {
-        { {3.87, 0.92, 0.15, 7.35}, {2.35, 0.90, 0.17, 7.90}, {2.80, 0.99, 0.18, 7.85} },
-        { {1.90, 1.35, 0.22, 10.75}, {3.96, 1.32, 0.25, 11.55}, {4.09, 1.45, 0.27, 11.50} },
-        { {5.43, 1.15, 0.18, 9.10}, {3.37, 1.12, 0.21, 9.80}, {3.47, 1.23, 0.23, 9.75} },
+        // v3.49: el Inicial de baja y media de Comfort, XL y Premium es el literal de la pantalla de tarifas de Bolt (km, minuto y minima ya lo eran); la alta no cambia
+        { {6.49, 0.92, 0.15, 7.35}, {4.24, 0.90, 0.17, 7.90}, {2.80, 0.99, 0.18, 7.85} },
+        { {4.52, 1.35, 0.22, 10.75}, {5.85, 1.32, 0.25, 11.55}, {4.09, 1.45, 0.27, 11.50} },
+        { {8.05, 1.15, 0.18, 9.10}, {5.26, 1.12, 0.21, 9.80}, {3.47, 1.23, 0.23, 9.75} },
         { {3.80, 0.92, 0.15, 7.30}, {3.00, 0.89, 0.17, 7.85}, {2.77, 0.99, 0.18, 7.80} }
     };
     // v3.47: hora punta = precios reales de la pantalla de tarifas de Bolt (antes eran aproximados): [categoria][baja, media, alta] = {inicial, km, min, minima}
@@ -675,7 +678,12 @@ public class OfferAnalyzer {
         return out;
     }
 
-    private static final Pattern LONEPRICE = Pattern.compile("^\\D{0,3}(\\d{1,3}[.,]\\d{2})\\s*\\S{0,2}$");
+    // v3.49: grupo 1 = lo que va delante, 2 = el importe, 3 = lo que va detras (el simbolo del euro, a veces mal leido)
+    private static final Pattern LONEPRICE = Pattern.compile("^(\\D{0,3}?)(\\d{1,3}[.,]\\d{2})\\s*(\\S{0,2})$");
+    /** v3.49 (solo lectura por imagen): precio SIN decimales: \u00AB13 \u20AC\u00BB, \u00AB13\u20AC\u00BB, \u00AB13 E\u00BB (el euro mal leido) */
+    private static final Pattern INTPRICE = Pattern.compile("^[^\\d]{0,3}?(\\d{1,3})\\s*(?:\u20AC|eur\\b|[EC\u00A3])[^A-Za-z0-9]{0,2}$|^\u20AC\\s*(\\d{1,3})[^A-Za-z0-9]{0,2}$", Pattern.CASE_INSENSITIVE);
+    /** v3.49: la nota del pasajero lleva estrella (\u2605 4,60): nunca es el precio */
+    private static final Pattern STAR = Pattern.compile("[\u2605\u2606\u2B50\u272D\u2729\u272A*]");
 
     private static int stMin(double v, double min, double tolPct) {
         if (v >= min) return 0;
@@ -766,6 +774,7 @@ public class OfferAnalyzer {
         else if (b.fixOk) reachKinds(b, r.pickupKm, reach);
         else return;
         if (manual && r.estZone >= Z_LOW && r.estZone <= Z_HIGH) reach[r.estZone] = true;
+        if (r.estCpKind >= Z_LOW && r.estCpKind <= Z_HIGH) reach[r.estCpKind] = true;      // v3.49: la zona que dice el codigo postal tambien se puede elegir
         int cnt = 0;
         for (int k = 0; k < 3; k++) if (reach[k]) cnt++;
         if (cnt < 2) return;
@@ -805,7 +814,30 @@ public class OfferAnalyzer {
             if (v >= 1.0 && v < 1000) { r.price = v; break; }
         }
         if (r.price <= 0 && lenient) {
-            for (String t : priceNodes) { Matcher m = LONEPRICE.matcher(t.trim()); if (m.find()) { double v = num(m.group(1)); if (v >= 1.0 && v < 1000) { r.price = v; break; } } }
+            // v3.49: precio entero (\u00AB13 \u20AC\u00BB) y sin confundirlo con la nota del pasajero (\u00AB\u2605 4,60\u00BB). Se prefiere el importe con simbolo de euro (aunque venga mal leido);
+            // el importe suelto solo vale por encima de los tramos (km / min) o si pasa de 5,00 (una nota no pasa de 5)
+            int firstSeg = priceNodes.size();
+            for (int i = 0; i < priceNodes.size(); i++) { String t = priceNodes.get(i); if (KM.matcher(t).find() || MIN.matcher(t).find()) { firstSeg = i; break; } }
+            double bestV = -1; int bestRank = 99; boolean bestInt = false;
+            for (int i = 0; i < priceNodes.size(); i++) {
+                String t = priceNodes.get(i).trim();
+                if (STAR.matcher(t).find()) continue;
+                if (i > 0 && priceNodes.get(i - 1).trim().length() <= 2 && STAR.matcher(priceNodes.get(i - 1)).find()) continue;   // la estrella va en la linea de encima
+                double v = -1; int rank = 99; boolean isInt = false;
+                Matcher mi = INTPRICE.matcher(t);
+                Matcher ml = LONEPRICE.matcher(t);
+                if (mi.find()) { v = num(mi.group(1) != null ? mi.group(1) : mi.group(2)); rank = 1; isInt = true; }
+                else if (ml.find()) {
+                    v = num(ml.group(2));
+                    String suf = ml.group(3);
+                    boolean euroish = suf.length() > 0 && !suf.matches(".*[\u2022\u00B7.,:;|\\-].*");
+                    rank = euroish ? 1 : (i < firstSeg ? 2 : (v > 5.0 ? 3 : 99));
+                }
+                if (!(v >= 1.0 && v < 1000) || rank == 99) continue;
+                // mismo grado: gana el primero, pero un importe de mas de 5,00 le gana a uno de 5,00 o menos (puede ser una nota)
+                if (rank < bestRank || (rank == bestRank && bestV <= 5.0 && v > 5.0)) { bestV = v; bestRank = rank; bestInt = isInt; }
+            }
+            if (bestV > 0) { r.price = bestV; if (bestInt) r.ocrFix = "precio entero"; }
         }
         // ---- elementos km / min por nodo
         List<Item> items = new ArrayList<Item>();
@@ -874,6 +906,18 @@ public class OfferAnalyzer {
             if (b.kind == 'm' && !b.used) { Seg s = new Seg(); s.min = b.v; s.first = b.node; s.ctx = norm(nodes.get(b.node)) + (b.node > 0 ? " " + norm(nodes.get(b.node - 1)) : ""); segs.add(s); }
         }
         java.util.Collections.sort(segs, new java.util.Comparator<Seg>() { public int compare(Seg x, Seg y) { return x.first - y.first; } });
+        // v3.49 (solo lectura por imagen): el OCR pierde a veces la coma de los km ("1.8" -> "18", "4.6" -> "46") y lee "0 km" en la recogida.
+        // Una velocidad de mas de 130 km/h no existe en la ciudad: si dividiendo los km entre 10 sale una velocidad normal, era la coma. "0 km" con 3 min o menos es una recogida de verdad.
+        if (lenient) {
+            for (Seg s : segs) {
+                if (s.min > 0 && s.km > 0) {
+                    double sp = s.km / (s.min / 60.0);
+                    if (sp > 130 && sp / 10.0 >= 4) { s.km = s.km / 10.0; r.ocrFix += (r.ocrFix.length() > 0 ? " + " : "") + "coma de los km"; }
+                } else if (s.km == 0 && s.min > 0 && s.min <= 3) {
+                    s.km = 0.01; r.ocrFix += (r.ocrFix.length() > 0 ? " + " : "") + "0 km";
+                }
+            }
+        }
         // v3.41: si ya hay dos tramos completos (km y minutos), los trozos sueltos que sobran no cuentan como recogida ni como viaje
         int completeSegs = 0;
         for (Seg s : segs) if (s.km > 0 && s.min > 0) completeSegs++;
@@ -907,10 +951,14 @@ public class OfferAnalyzer {
                     if (p.bolt.zoneForce == null || "auto".equals(p.bolt.zoneForce)) {
                         String cpZ = trip == null ? null : pickupPostal(nodes, trip.first);
                         int kz = cpZ == null || p.bolt.zone == null ? -1 : p.bolt.zone.postalKind(cpZ);
+                        boolean cpListed = kz >= 0;
+                        // v3.49: si tienes zonas pintadas y el movil da la ubicacion, manda tu mapa ENTERO (tus zonas y, fuera de ellas, la zona por defecto); el codigo postal solo vale sin zonas pintadas o sin ubicacion
+                        boolean mapRules = "area".equals(zs0) || (p.bolt.fixOk && p.bolt.zone != null && p.bolt.zone.good != null && !p.bolt.zone.good.isEmpty());
+                        if (mapRules) { if (cpListed) r.estCpKind = kz; kz = -1; }   // y se apunta la zona del codigo para ofrecerla como boton
                         if (kz >= 0) {
                             p.bolt.zoneKind = kz; p.bolt.zoneName = "c\u00F3digo postal " + cpZ; p.bolt.zoneSrc = "postal";
                             if (kz != zk0) { java.util.Calendar calZ = java.util.Calendar.getInstance(); if (p.nowMs > 0) calZ.setTimeInMillis(p.nowMs); peakZ = isPeak(p.bolt, kz, calZ); }
-                        } else if (cpZ != null) {
+                        } else if (cpZ != null && !cpListed) {
                             r.estCpUnlisted = cpZ;      // v3.37: la oferta trae codigo postal pero no esta en tus listas: se usa la ubicacion y se avisa
                         }
                         // v3.37: zona elegida a mano en el aviso: solo vale para ESTA oferta y solo si la zona salia de la ubicacion (no de un codigo postal de tus listas ni de Ajustes)
