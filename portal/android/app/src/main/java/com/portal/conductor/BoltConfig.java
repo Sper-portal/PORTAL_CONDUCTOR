@@ -264,7 +264,9 @@ public class BoltConfig {
             c.airFlatKm = dbl(m.get("airFlatKm"), c.airFlatKm, 0, 100);
             c.holidaysWe = bool(m.get("holidaysWe"), c.holidaysWe);
             c.slots = slots(m.get("slots"), c.slots);
+            c.slotsL = slots(m.get("slotsL"), OfferAnalyzer.copySlots(c.slots));   // v3.51: la baja tiene su lista; si no la habia, empieza como la que tenias para media y baja
             c.slotsH = slots(m.get("slotsH"), c.slotsH);
+            if (dbl(m.get("cpv"), 0, 0, 100000) < 351 && OfferAnalyzer.sameSlots(c.slotsH, OfferAnalyzer.defaultSlotsHighOld())) c.slotsH = OfferAnalyzer.defaultSlotsHigh();   // v3.51: la alta de fabrica de antes pasa a la nueva; si la habias cambiado, se respeta
             Map<String, Object> cm = map(m.get("cards"));
             if (cm != null) {
                 c.lowV = card(cm.get("lv"), c.lowV); c.lowP = card(cm.get("lp"), c.lowP);
@@ -414,7 +416,7 @@ public class BoltConfig {
         StringBuilder b = new StringBuilder("{");
         b.append("\"on\":").append(c.on).append(",\"mode\":\"").append(c.mode).append("\",\"comm\":").append(n(c.comm));
         b.append(",\"peakApplies\":").append(c.peakApplies).append(",\"round5\":").append(c.round5).append(",\"fine\":").append(n(c.fine));
-        b.append(",\"peakKm\":").append(n(c.peakKm)).append(",\"longKm\":").append(n(c.longKm)).append(",\"longDisc\":").append(n(c.longDisc)).append(",\"eventOn\":").append(c.eventOn).append(",\"v\":").append(CFG_VER).append(",\"cpv\":349");
+        b.append(",\"peakKm\":").append(n(c.peakKm)).append(",\"longKm\":").append(n(c.longKm)).append(",\"longDisc\":").append(n(c.longDisc)).append(",\"eventOn\":").append(c.eventOn).append(",\"v\":").append(CFG_VER).append(",\"cpv\":351");
         b.append(",\"zoneForce\":\"").append(c.zoneForce).append("\",\"zoneDef\":\"").append(kindWordKey(c.zoneDef)).append('"');
         b.append(",\"short\":{\"km\":").append(n(c.shortKm)).append(",\"from\":").append(n(c.shortFrom)).append(",\"lo\":").append(n(c.bumpLo)).append(",\"hi\":").append(n(c.bumpHi)).append('}');
         b.append(",\"airOn\":").append(c.airOn).append(",\"airFee\":").append(n(c.airFee)).append(",\"airFlatKm\":").append(n(c.airFlatKm));
@@ -428,6 +430,8 @@ public class BoltConfig {
         }
         b.append("],\"slots\":");
         slotsJson(b, c.slots);
+        b.append(",\"slotsL\":");
+        slotsJson(b, c.slotsL);
         b.append(",\"slotsH\":");
         slotsJson(b, c.slotsH);
         b.append(",\"cards\":{\"lv\":").append(cardJson(c.lowV)).append(",\"lp\":").append(cardJson(c.lowP))

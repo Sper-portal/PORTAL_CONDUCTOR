@@ -106,7 +106,7 @@ public class OfferAnalyzer {
         }
     }
 
-    private static final int WEEKDAYS = 31, WEEKEND = 96;     // lunes a viernes / sabado y domingo
+    private static final int WEEKDAYS = 31, WEEKEND = 96, FRIDAY = 16;     // lunes a viernes / sabado y domingo / viernes
 
     /** Franjas de hora punta iniciales de zona media y baja: lunes a viernes 07:00-10:00 y 17:00-20:00, sabado y domingo todo el dia. */
     public static List<Slot> defaultSlots() {
@@ -117,12 +117,39 @@ public class OfferAnalyzer {
         return l;
     }
 
-    /** Zona alta: igual, pero por la manana empieza a las 08:00 (visto el 29-10; sin confirmar). */
+    /** Zona alta: igual, pero por la manana empieza a las 08:00 (visto el 29-10) y el viernes sigue de 20:00 a 24:00 (visto el 13-11); sin confirmar. */
     public static List<Slot> defaultSlotsHigh() {
         List<Slot> l = new ArrayList<Slot>();
         l.add(new Slot(WEEKDAYS, 8 * 60, 10 * 60));
         l.add(new Slot(WEEKDAYS, 17 * 60, 20 * 60));
+        l.add(new Slot(FRIDAY, 20 * 60, 1440));
         l.add(new Slot(WEEKEND, 0, 1440));
+        return l;
+    }
+
+    /** v3.51: la zona alta de fabrica de la v3.50 y anteriores (para pasar a la nueva a quien no la cambio). */
+    public static List<Slot> defaultSlotsHighOld() {
+        List<Slot> l = new ArrayList<Slot>();
+        l.add(new Slot(WEEKDAYS, 8 * 60, 10 * 60));
+        l.add(new Slot(WEEKDAYS, 17 * 60, 20 * 60));
+        l.add(new Slot(WEEKEND, 0, 1440));
+        return l;
+    }
+
+    /** v3.51: dos listas de franjas iguales (mismos dias, horas y estado). */
+    public static boolean sameSlots(List<Slot> a, List<Slot> b) {
+        if (a == null || b == null || a.size() != b.size()) return false;
+        for (int i = 0; i < a.size(); i++) {
+            Slot x = a.get(i), y = b.get(i);
+            if (x == null || y == null || x.on != y.on || x.days != y.days || x.a != y.a || x.b != y.b) return false;
+        }
+        return true;
+    }
+
+    /** v3.51: copia de una lista de franjas. */
+    public static List<Slot> copySlots(List<Slot> a) {
+        List<Slot> l = new ArrayList<Slot>();
+        if (a != null) for (Slot s : a) if (s != null) l.add(s.copy());
         return l;
     }
 
@@ -249,7 +276,8 @@ public class OfferAnalyzer {
         public boolean airOn = true;         // usar la tarjeta del aeropuerto en las recogidas
         public double airFee = 2.57;         // tasa del aeropuerto (recogidas y viajes hacia el aeropuerto): se resta del bruto ANTES de la comision
         public double airFlatKm = 11;        // recogida en el aeropuerto: hasta estos km solo vale la minima
-        public List<Slot> slots = defaultSlots();         // hora punta de zona media y baja
+        public List<Slot> slots = defaultSlots();         // hora punta de zona media
+        public List<Slot> slotsL = defaultSlots();        // v3.51: hora punta de zona baja (lista propia)
         public List<Slot> slotsH = defaultSlotsHigh();    // hora punta de zona alta
         public boolean holidaysWe = true;    // los festivos cuentan como hora punta todo el dia
         public List<String> holidays = defaultHolidays();   // "yyyy-MM-dd" o "MM-dd"
@@ -368,7 +396,7 @@ public class OfferAnalyzer {
         if ("weekend".equals(c.mode)) return true;
         if (c.holidaysWe && isHoliday(c, cal)) return true;
         int w = weekMinute(cal);
-        List<Slot> l = kind == Z_HIGH ? c.slotsH : c.slots;
+        List<Slot> l = kind == Z_HIGH ? c.slotsH : (kind == Z_LOW ? c.slotsL : c.slots);
         if (l != null) for (Slot s : l) if (s != null && s.on && s.contains(w)) return true;
         return false;
     }
