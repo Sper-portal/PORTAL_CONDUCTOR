@@ -2024,7 +2024,7 @@ function setAuthStatus(msg,error=false){const el=document.querySelector('#authSt
 function setAuthMode(mode){authMode=mode;document.querySelector('#authTitle').textContent=mode==='register'?'Crear cuenta':'Bienvenido';document.querySelector('#authSub').textContent=mode==='register'?'Crea una cuenta para asociar los datos que ya tienes en este dispositivo.':'Accede con tu correo electrónico o móvil. Tus datos actuales de este dispositivo se conservarán durante la migración.';document.querySelector('#authPrimary').textContent=mode==='register'?'CREAR CUENTA':'INICIAR SESIÓN';document.querySelector('#authPass2Wrap').classList.toggle('auth-hide',mode!=='register');document.querySelector('#registerContacts').classList.toggle('auth-hide',mode!=='register');document.querySelector('#authResend').classList.add('auth-hide');setAuthStatus('')}
 function togglePassword(id,btn){const el=document.getElementById(id);if(!el)return;const show=el.type==='password';el.type=show?'text':'password';btn.textContent='👁️';btn.setAttribute('aria-label',show?'Ocultar contraseña':'Mostrar contraseña')}
 function normalizeAuthId(v){return String(v||'').trim().toLowerCase()}
-function currentDbSnapshot(){try{const c=JSON.parse(JSON.stringify(db));if(c.settings)c.settings.tripBackups=[];return c}catch(e){return db}}
+function currentDbSnapshot(){try{try{if(window.PDC314&&PDC314.beforeSnapshot)PDC314.beforeSnapshot()}catch(e){}const c=JSON.parse(JSON.stringify(db));if(c.settings)c.settings.tripBackups=[];return c}catch(e){return db}}
 function normalizeDbSettings(){
   db.settings=db.settings||{};
   db.settings.commission=Number(db.settings.commission??45);
@@ -2610,8 +2610,8 @@ const J_KB=[
 ['gasolina','⛽','¿Cómo apunto la gasolina?','gasolin,combustible,repost,gasoil,diesel','En Control elige el día, escribe lo que has repostado y guarda. Puedes apuntar varios repostajes en el mismo día.'],
 ['km','📍','Kilómetros y GPS','kilomet,odometro,km,gps,recorrid,distancia','Si activas el odómetro automático (GPS) en Control o en Ajustes, la app cuenta tus kilómetros sola mientras la jornada está iniciada. También puedes escribirlos a mano.'],
 ['gpsfalla','🛰️','El GPS no cuenta kilómetros','gps no,no cuenta,no suma,permiso,ubicacion,no funciona gps,kilometros no','Revisa tres cosas: que la jornada esté iniciada, que le diste permiso de ubicación a la app (mejor «Permitir siempre») y que el ahorro de batería no la esté frenando. Si sigue igual, ciérrala y ábrela otra vez.'],
-['lector','🔍','Importe automático','importe automatico,leer precio,lector,leer pantalla,accesibilidad,lee el precio,automatic','El botón Importe automático lee el precio que ves en Bolt, Uber o Cabify, sin hacer fotos. Para que funcione, activa Portal Lector en Ajustes de Android → Accesibilidad y tócalo con el viaje en pantalla.'],
-['lectorfalla','❌','El lector no detecta el precio','no me lee^5,no lee^5,no me detecta^5,no detecta^5,no me reconoce^5,no reconoce^5,no me coge^5,no pilla^5,no sale el precio^5,no funciona lector^5','Suele pasar si el viaje no está visible o si el servicio se apagó. Mira que Portal Lector siga activado en Accesibilidad, ten el viaje en pantalla y toca otra vez. Si no hay manera, escribe el importe a mano.'],
+['lector','🔍','Importe automático','importe automatico,leer precio,lector,leer pantalla,accesibilidad,lee el precio,automatic','El botón Importe automático lee el precio que ves en Bolt, Uber o Cabify, sin hacer fotos. Para que funcione, activa Driver Hub 360 en Ajustes de Android → Accesibilidad y tócalo con el viaje en pantalla.'],
+['lectorfalla','❌','El lector no detecta el precio','no me lee^5,no lee^5,no me detecta^5,no detecta^5,no me reconoce^5,no reconoce^5,no me coge^5,no pilla^5,no sale el precio^5,no funciona lector^5','Suele pasar si el viaje no está visible o si el servicio se apagó. Mira que Driver Hub 360 siga activado en Accesibilidad, ten el viaje en pantalla y toca otra vez. Si no hay manera, escribe el importe a mano.'],
 ['burbuja','🫧','Burbuja flotante','burbuja,flotante,widget,bolita,circulo','Es el botón redondo con el icono de la app que aparece sobre Bolt, Uber y Cabify. Arrástrala a donde menos moleste y tócala para leer el precio. Se activa o se apaga en Ajustes.'],
 ['informe','📊','Informe','informe,reporte,resumen,periodo','En Informe eliges el periodo y lo generas: total, efectivo, tarjeta, viajes, comisión, gasolina, horas y kilómetros.'],
 ['pdf','📄','PDF o imagen del informe','pdf^4,compartir^4,enviar^3,mandar^3,imagen^3,whatsapp^4','Genera el informe y usa «Compartir PDF» o «Compartir imagen». Se abre el menú de tu móvil para mandarlo por WhatsApp, por correo o guardarlo.'],
@@ -2664,7 +2664,7 @@ function renderSendSupport(){jPanel('Pregúntale a Jenny','helpBack()','<div cla
 function renderWriteQuestion(){jPanel('Escribir mi pregunta','renderSendSupport()','<div class="help-hero"><h2>¿Qué necesitas?</h2><p>Escríbelo como lo dirías hablando. Por ejemplo: «se me olvidó iniciar la jornada» o «cómo apunto una propina».</p></div><textarea id="autoQuery" rows="6" placeholder="Escribe aquí tu pregunta…" style="width:100%;margin-top:6px;border-radius:14px;padding:12px;box-sizing:border-box"></textarea><button class="action" style="width:100%;margin-top:10px" onclick="answerUserQuery()">😊 Preguntar a Jenny</button>')}
 function renderAutoHelp(){jPanel('Preguntas rápidas','renderSendSupport()','<div class="subpage-list">'+['viajes','freenow','aeropuerto','compensaciones','pago','corregir','jornada','gasolina','km','lector','pdf','tema','nocuadra'].map(id=>{const e=jEntry(id);return jRow(e[1],e[2],'','showAutoAnswer(\''+id+'\')')}).join('')+'</div>')}
 function renderFaq(){jPanel('Preguntas frecuentes','helpBack()','<div class="subpage-list">'+J_KB.filter(e=>e[0]!=='contacto').map(e=>'<details class="subpage-row" style="display:block"><summary style="cursor:pointer;list-style:none"><span class="sicon" style="display:inline-grid;margin-right:8px">'+e[1]+'</span><b>'+e[2]+'</b></summary><small style="display:block;color:#64748b;margin:8px 0 2px;line-height:1.45">'+e[4]+'</small></details>').join('')+'</div>')}
-function renderHelpCarga(){const S=[['🧮','Calculadora','Escribe el importe y pulsa la plataforma (Bolt, Uber, Cabify, Privados, Free Now o Pide Taxi). Para aeropuerto, usa el botón verde de Aeropuerto. Si te cancelan un viaje, pulsa Cancelaciones, escribe el importe y toca la app: se guarda al instante. Con «Importe automático» la app lee el precio de la otra ventana. Elige tarjeta o efectivo cuando te lo pregunte. En Últimos viajes puedes añadir propina (🎁), editar (✏️) o borrar (🗑) cada viaje.'],['🧾','Facturación','Diario, Semanal y Mensual, con totales por plataforma y facturación manual. Las cancelaciones se suman al día y a la app que elijas; en Semanal, las compensaciones sueltas y la nómina. En Mensual, cada mes cerrado tiene un botón para cambiar su nómina con los ajustes de ahora (porcentaje, mínimo, propinas).'],['◉','Control','Iniciar y finalizar jornada, corregir horas de días anteriores, apuntar gasolina y kilómetros (con GPS automático o a mano). Aquí eliges tu aplicación prioritaria (Bolt, Uber, Cabify, Free Now o Pide Taxi).'],['📍','GPS y lector de pantalla','El odómetro GPS cuenta los kilómetros con la jornada iniciada. El lector y la burbuja necesitan activar Portal Lector en Accesibilidad de Android.'],['📊','Informe','Elige el periodo, genera el informe y compártelo en PDF o imagen.'],['⚙️','Ajustes','Tema (claro, oscuro o automático), comisión, tasa de aeropuerto, objetivos, horarios prioritarios, burbuja, GPS, copia de seguridad y Rentabilidad de viajes (aviso de si compensa cada oferta).'],['🌤️','Madrid hoy','En el menú de las tres rayitas: el tiempo y los eventos del día (Ticketmaster e IFEMA) para saber dónde puede haber más movimiento.'],['👤','Cuenta','Inicia sesión para guardar tus datos en la nube y recuperarlos si cambias de móvil.']];jPanel('Ayuda con cargar datos','helpBack()','<div class="help-hero"><h2>Dónde se carga cada cosa</h2><p>Un repaso rápido por pantallas. Si te queda alguna duda, pregúntale a Jenny.</p></div><div class="subpage-list">'+S.map(s=>'<div class="subpage-row"><span class="sicon">'+s[0]+'</span><div><b>'+s[1]+'</b><small style="display:block;color:#64748b;margin-top:3px;line-height:1.45">'+s[2]+'</small></div></div>').join('')+'</div>')}
+function renderHelpCarga(){const S=[['🧮','Calculadora','Escribe el importe y pulsa la plataforma (Bolt, Uber, Cabify, Privados, Free Now o Pide Taxi). Para aeropuerto, usa el botón verde de Aeropuerto. Si te cancelan un viaje, pulsa Cancelaciones, escribe el importe y toca la app: se guarda al instante. Con «Importe automático» la app lee el precio de la otra ventana. Elige tarjeta o efectivo cuando te lo pregunte. En Últimos viajes puedes añadir propina (🎁), editar (✏️) o borrar (🗑) cada viaje.'],['🧾','Facturación','Diario, Semanal y Mensual, con totales por plataforma y facturación manual. Las cancelaciones se suman al día y a la app que elijas; en Semanal, las compensaciones sueltas y la nómina. En Mensual, cada mes cerrado tiene un botón para cambiar su nómina con los ajustes de ahora (porcentaje, mínimo, propinas).'],['◉','Control','Iniciar y finalizar jornada, corregir horas de días anteriores, apuntar gasolina y kilómetros (con GPS automático o a mano). Aquí eliges tu aplicación prioritaria (Bolt, Uber, Cabify, Free Now o Pide Taxi).'],['📍','GPS y lector de pantalla','El odómetro GPS cuenta los kilómetros con la jornada iniciada. El lector y la burbuja necesitan activar Driver Hub 360 en Accesibilidad de Android.'],['📊','Informe','Elige el periodo, genera el informe y compártelo en PDF o imagen.'],['⚙️','Ajustes','Tema (claro, oscuro o automático), comisión, tasa de aeropuerto, objetivos, horarios prioritarios, burbuja, GPS, copia de seguridad y Rentabilidad de viajes (aviso de si compensa cada oferta).'],['🌤️','Madrid hoy','En el menú de las tres rayitas: el tiempo y los eventos del día (Ticketmaster e IFEMA) para saber dónde puede haber más movimiento.'],['👤','Cuenta','Inicia sesión para guardar tus datos en la nube y recuperarlos si cambias de móvil.']];jPanel('Ayuda con cargar datos','helpBack()','<div class="help-hero"><h2>Dónde se carga cada cosa</h2><p>Un repaso rápido por pantallas. Si te queda alguna duda, pregúntale a Jenny.</p></div><div class="subpage-list">'+S.map(s=>'<div class="subpage-row"><span class="sicon">'+s[0]+'</span><div><b>'+s[1]+'</b><small style="display:block;color:#64748b;margin-top:3px;line-height:1.45">'+s[2]+'</small></div></div>').join('')+'</div>')}
 /* PDF e imagen del informe */
 function reportCanvas(light){const out=document.querySelector('#reportOut');if(!out||!out.dataset.ready){alert('Primero genera el informe.');return null}const clean=x=>String(x||'').replace(/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/gu,'').replace(/\s+/g,' ').trim();const period=clean((out.querySelector('.metric b')||{}).innerText),plats=[...out.querySelectorAll('.platform-summary .ps')].map(e=>[clean(e.childNodes[0].textContent),clean((e.querySelector('b')||{}).innerText)]),rows=[...out.querySelectorAll('table tr')].map(tr=>[...tr.children].map(c=>clean(c.innerText))).filter(r=>r.length>=2&&r[0]);const W=1080,P=56,RH=84,H=260+(plats.length?190*Math.ceil(plats.length/3):0)+rows.length*RH+150,cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d'),C=light?{bg:'#ffffff',row:'#f1f5f9',txt:'#0f172a',mut:'#475569',acc:'#1d4ed8'}:{bg:'#07111f',row:'#0e2038',txt:'#ffffff',mut:'#9fb4c8',acc:'#5fe6ff'};g.fillStyle=C.bg;g.fillRect(0,0,W,H);const hg=g.createLinearGradient(0,0,W,0);hg.addColorStop(0,'#0a3d9c');hg.addColorStop(1,'#0b6fd6');g.fillStyle=hg;g.fillRect(0,0,W,210);g.fillStyle='#fff';g.font='bold 54px sans-serif';g.textBaseline='alphabetic';g.fillText('Super Portal del Conductor',P,92);g.font='36px sans-serif';g.fillStyle='#dff3ff';g.fillText('Informe · '+period,P,152);let y=250;const fit=(t,mx,font)=>{g.font=font;while(g.measureText(t).width>mx&&t.length>3)t=t.slice(0,-2);return t};if(plats.length){const per=3,cw=(W-2*P-(per-1)*16)/per,col={Bolt:'#00b85c',Uber:'#1f2937',Cabify:'#7c3aed',Privados:'#2563eb','Free Now':'#d6046f','Pide Taxi':'#ffbf00'};plats.forEach((p,i)=>{const x=P+(i%per)*(cw+16),yy=y+Math.floor(i/per)*190;g.fillStyle=col[p[0]]||'#2563eb';g.beginPath();g.roundRect?g.roundRect(x,yy,cw,150,22):g.rect(x,yy,cw,150);g.fill();g.fillStyle=p[0]==='Pide Taxi'?'#2b2100':'#fff';g.font='bold 30px sans-serif';g.textAlign='center';g.fillText(p[0],x+cw/2,yy+54);g.font='bold 40px sans-serif';g.fillText(fit(p[1],cw-16,'bold 40px sans-serif'),x+cw/2,yy+114);g.textAlign='left'});y+=190*Math.ceil(plats.length/per)}rows.forEach((r,i)=>{if(i%2===0){g.fillStyle=C.row;g.fillRect(P-16,y,W-2*P+32,RH-6)}g.fillStyle=C.mut;g.textAlign='left';g.fillText(fit(r[0],W-2*P-300,'30px sans-serif'),P,y+52);g.fillStyle=C.txt;g.textAlign='right';g.font='bold 34px sans-serif';g.fillText(r[r.length-1],W-P,y+52);g.textAlign='left';y+=RH});g.fillStyle=C.mut;g.font='26px sans-serif';g.fillText('Generado el '+new Date().toLocaleDateString('es-ES')+' · Portal del Conductor',P,H-56);return cv}
 function jpegToPdf(jb,w,h){const pw=595,ph=Math.round(595*h/w),enc=new TextEncoder(),parts=[],offs=[];let off=0;const push=x=>{const b=typeof x==='string'?enc.encode(x):x;parts.push(b);off+=b.length};push('%PDF-1.4\n');offs[1]=off;push('1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n');offs[2]=off;push('2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n');offs[3]=off;push('3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 '+pw+' '+ph+']/Resources<</XObject<</Im0 4 0 R>>>>/Contents 5 0 R>>endobj\n');offs[4]=off;push('4 0 obj<</Type/XObject/Subtype/Image/Width '+w+'/Height '+h+'/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length '+jb.length+'>>stream\n');push(jb);push('\nendstream endobj\n');const cs='q '+pw+' 0 0 '+ph+' 0 0 cm /Im0 Do Q';offs[5]=off;push('5 0 obj<</Length '+cs.length+'>>stream\n'+cs+'\nendstream endobj\n');const xo=off;let x='xref\n0 6\n0000000000 65535 f \n';for(let i=1;i<=5;i++)x+=String(offs[i]).padStart(10,'0')+' 00000 n \n';push(x+'trailer<</Size 6/Root 1 0 R>>\nstartxref\n'+xo+'\n%%EOF');const all=new Uint8Array(off);let p=0;parts.forEach(b=>{all.set(b,p);p+=b.length});return all}
@@ -2677,7 +2677,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.52';
+const APP_VERSION='v3.54';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -2747,7 +2747,7 @@ J_KB.push(['rentabilidad','🚦','Rentabilidad de viajes','rentabilidad,rentable
 J_KB.push(['burbujafalla','🫧','La burbuja no me sale','burbuja no^6,no sale la burbuja^7,no me sale la burbuja^7,no aparece la burbuja^7,no veo la burbuja^7,burbuja no aparece^7,sin burbuja^5,desaparecio la burbuja^6','Prueba esto: 1) Ajustes del móvil → Accesibilidad → «Portal lector de pantalla» activado. 2) En Android 13 o superior: Ajustes → Apps → Portal → ⋮ → «Permitir ajustes restringidos». 3) En la app, Ajustes → «Burbuja flotante» encendida. 4) Batería de la app en «Sin restricciones». 5) Abre Bolt, Uber o Cabify: la burbuja solo sale encima de ellas. En Ajustes tienes el botón «Diagnóstico» para ver qué falla.']);
 const sx=(id,a)=>{const e=jEntry(id);if(e)e[4]=a};
 {const e=jEntry('rentab');if(e)e[3]=e[3].replace('rentabil,','')}
-{const e=jEntry('lectorfalla');if(e){e[3]+=',no me lee si es^9,no lee si es^9,no detecta si es^9,no distingue^8,no pone el pago^8';e[4]='Suele pasar si el viaje no está a la vista. En el móvil, abre antes Bolt, Uber o Cabify con el viaje en pantalla (la app recuerda lo último que ve durante 2 minutos) o usa la burbuja. Mira que Portal Lector siga activado en Accesibilidad. Si no detecta si es tarjeta o efectivo, esa pantalla no lo muestra: elige el pago a mano. En Ajustes → «Último texto leído» puedes mandar por Telegram lo que lee la app, para mejorarlo.'}}
+{const e=jEntry('lectorfalla');if(e){e[3]+=',no me lee si es^9,no lee si es^9,no detecta si es^9,no distingue^8,no pone el pago^8';e[4]='Suele pasar si el viaje no está a la vista. En el móvil, abre antes Bolt, Uber o Cabify con el viaje en pantalla (la app recuerda lo último que ve durante 2 minutos) o usa la burbuja. Mira que Driver Hub 360 siga activado en Accesibilidad. Si no detecta si es tarjeta o efectivo, esa pantalla no lo muestra: elige el pago a mano. En Ajustes → «Último texto leído» puedes mandar por Telegram lo que lee la app, para mejorarlo.'}}
 {const e=jEntry('rentabilidad');if(e)e[3]='rentabilidad de viajes^8,rentabilidad^5,rentable^4,semaforo^4,aceptar o rechazar^6,aviso de oferta^5,ofertas,compensa^3,merece la pena^4,viaje rentable^5'}
 J_KB.push(['kmdia','📍','Kilómetros del día y €/km','euro km^5,eurokm^6,€/km^5,primera parte^5,segundo tramo^6,varios tramos^6,por tramos^5,mañana y tarde^5,medianoche^6,12 de la noche^6,vuelve a cero^6','El €/km usa todos los kilómetros del día, sumando todos tus tramos de jornada (por ejemplo, mañana y tarde). A las 12 de la noche empieza un día nuevo y el contador vuelve a cero. Si algo no cuadra, mira en Control los kilómetros del día.']);
 sx('rentab','Son tu rendimiento del día: lo que facturas por hora trabajada, por viaje y por kilómetro. El €/km usa todos los kilómetros del día, sumando todos tus tramos de jornada, y empieza de cero a medianoche.');
@@ -4581,7 +4581,7 @@ const P=window.PDC314;if(!P||P.sync)return;P.sync=true;
 const DIRTY='pdc_sync_dirty',BASE='pdc_cloud_base',PRE='pdc_pre_merge_backup';
 /* v3.40: menos datos del movil. Antes se subia el paquete entero cada ~45 s mientras hubiera cambios (855 subidas de 114 KB en un dia = unos 3 GB al mes).
    Ahora: como mucho 1 subida por hora (gap) y, ademas, al dejar la app (si hace mas de 5 min de la ultima subida: leaveMin). «Sincronizar ahora» sube siempre. */
-const cfg=()=>Object.assign({pull:4000,sess:5000,gap:3600000,boot:3000,debounce:20000,leaveMin:300000},window.__pdcSyncCfg||{});
+const cfg=()=>Object.assign({pull:4000,sess:5000,gap:3600000,boot:3000,debounce:20000,leaveMin:300000,resumeMin:60000,resumeWait:400},window.__pdcSyncCfg||{});
 const nm=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
 const hasNum=v=>v!==''&&v!=null&&Number.isFinite(Number(v));
 const jget=k=>{try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}};
@@ -4671,6 +4671,17 @@ P.mergeDb=function(L,C){
   if(Object.keys(bc).length||Cs.billingCompensations||Ls.billingCompensations)s.billingCompensations=bc;
   if(Object.keys(dead).length)s.deletedTrips=dead;else delete s.deletedTrips;
   if('tripBackups' in s)s.tripBackups=[];
+  /* v3.53: la configuracion de Bolt que se queda es la MAS NUEVA (sello boltCfgAt; sin sello = copia antigua = 1; la de fabrica sembrada = 0) y se queda entera, con su voz, su volumen y su sello */
+  {
+    const eff=x=>x&&x.boltCfg?(typeof x.boltCfgAt==='number'?x.boltCfgAt:1):0;
+    const src=(Cs.boltCfg&&Ls.boltCfg)?(eff(Cs)>eff(Ls)?Cs:Ls):(Ls.boltCfg?Ls:Cs);
+    if(src.boltCfg){for(const k of ['boltCfg','boltVoice','boltVol','boltCfgAt']){if(k in src)s[k]=src[k];else delete s[k]}}
+    if(Cs.rateLedger||Ls.rateLedger){
+      let m=Ls.rateLedger||Cs.rateLedger;
+      try{const R=window.__pdcRate;if(R&&R.mergeLedgers&&Cs.rateLedger&&Ls.rateLedger)m=R.mergeLedgers(Cs.rateLedger,Ls.rateLedger)}catch(e){}
+      s.rateLedger=m;
+    }
+  }
   out.settings=s;
   if('activeSession' in L)out.activeSession=L.activeSession;
   // el resto (mensajes de soporte, etc.)
@@ -4910,6 +4921,30 @@ try{const A=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.App;if(A&&A.a
 // cambios pendientes de una vez anterior (la app se cerró antes de subirlos)
 setTimeout(()=>{if(isCloudProfile()&&navigator.onLine!==false&&P.syncDirty())window.cloudPushData()},cfg().boot);
 
+/* ---------- v3.53 · al volver a la app, el movil se pone al dia ----------
+   Para ver en un segundo movil lo que pasa en el que trabaja. Solo si aqui NO hay nada sin subir y la nube tiene una revision que este movil no conoce;
+   la decision es la de siempre (decide → «tomar la nube»). Si hay cambios sin subir no se toca nada: se suben y se unen como siempre.
+   Gasta casi nada: una pregunta muy corta (solo la fecha de la ultima revision) como mucho 1 vez por minuto. */
+let lastResume=0,resuming=false;
+async function resumePull(){
+  try{
+    if(resuming||pushing||pullsInFlight>0||!isCloudProfile()||navigator.onLine===false||!hasRealCloud())return;
+    if(P.syncDirty())return;
+    const now=Date.now();if(now-lastResume<cfg().resumeMin)return;lastResume=now;
+    resuming=true;
+    const uid=await userId();if(!uid)return;
+    const cu=await cloudMeta(uid);const base=jget(BASE);
+    if(!cu||(own(base,uid)&&base.updated_at===cu))return;
+    const full=await cloudFull(uid);if(!full||!full.data)return;
+    if(P.syncDirty()||pushing)return;
+    const res=await decide({data:full,error:null},{started:Date.now()});
+    P.applyLate(res);
+  }catch(e){console.warn('v3.53 al volver',e)}finally{resuming=false}
+}
+P.resumePull=resumePull;
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(resumePull,cfg().resumeWait)});
+try{const A2=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.App;if(A2&&A2.addListener)A2.addListener('resume',()=>setTimeout(resumePull,cfg().resumeWait))}catch(e){}
+
 /* ---------- abrir la app aunque no haya conexión ---------- */
 function rescueOffline(){
   try{
@@ -4950,7 +4985,7 @@ if(typeof _sam==='function')window.setAuthMode=function(m){
 (function(){
 const P=window.PDC314;if(!P||P.bolt)return;P.bolt=true;
 const SR=()=>{try{if(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform())return (Capacitor.Plugins&&Capacitor.Plugins.ScreenReader)||Capacitor.registerPlugin('ScreenReader')}catch(e){}return null};
-const LSK='pdc_bolt',CFG_VER=334;
+const LSK='pdc_bolt',CFG_VER=334,AT='pdc_bolt_at';
 const MAXZ=40,MAXPT=200,MAXS=30,WEEK=10080;
 const Z_LOW=0,Z_MID=1,Z_HIGH=2,ZW=['low','mid','high'],ZN=['baja','media','alta'],ZK=['l','m','h'];
 /* v3.46: categorías de Bolt */
@@ -5188,9 +5223,16 @@ const B={cfg:defaults(),voice:true,vol:1,weekendNow:false,open:false,panel:'',
   native:false,loaded:false,zoneLast:'',holOpen:null,base:'',slotEdit:null,hour:null};
 const snap=()=>JSON.stringify(B.cfg)+'|'+B.voice+'|'+B.vol;B.base=snap();
 P.boltState=B;
-function mirrorToDb(cfgJson){
-  try{db.settings.boltCfg=cfgJson;db.settings.boltVoice=B.voice;db.settings.boltVol=B.vol}catch(e){}
+function mirrorToDb(cfgJson,at){
+  try{db.settings.boltCfg=cfgJson;db.settings.boltVoice=B.voice;db.settings.boltVol=B.vol;if(typeof at==='number')db.settings.boltCfgAt=at}catch(e){}
 }
+/* v3.53 · SELLO de la configuracion: `pdc_bolt_at` (en el movil) y `boltCfgAt` (en la cuenta) = la hora en que TU guardaste por ultima vez.
+   Sin sello en la cuenta = copia antigua (vale 1); la de fabrica que se siembra sola vale 0, asi que nunca gana a la tuya. */
+function getAt(){try{return Number(localStorage.getItem(AT))||0}catch(e){return 0}}
+function setAt(v){try{localStorage.setItem(AT,String(v))}catch(e){}}
+function effAt(s){return s&&typeof s.boltCfg==='string'&&s.boltCfg?(typeof s.boltCfgAt==='number'?s.boltCfgAt:1):0}
+/* «de fabrica» = igual que los valores iniciales sin contar las zonas (la M-30 y las de fabrica se siembran solas) */
+function factoryLike(c){try{const a=clone(norm(c)),b=clone(norm(defaults()));delete a.zone;delete b.zone;return JSON.stringify(a)===JSON.stringify(b)}catch(e){return false}}
 /*v319-m30*/
 /* v3.19 · la zona «M-30 (aprox.)» (todo lo de dentro de la M-30 = zona media) viene ya dibujada, UNA sola vez. Se puede editar o borrar como cualquier otra y no vuelve a salir. */
 const M30_NAME='M-30 (aprox.)';
@@ -5229,14 +5271,15 @@ async function load(guard){
   }
   B.sim.c.zone=B.sim.d.zone=B.sim.a.zone=String(kindOfKey(B.cfg.zoneDef==='high'?'h':B.cfg.zoneDef==='low'?'l':'m'));
   const m30=seedM30();
+  try{if(localStorage.getItem(AT)===null)setAt(factoryLike(B.cfg)?0:1)}catch(e){}   // primera vez con la v3.53: de fabrica = 0 (la cuenta gana); con tus valores = 1 (empata con la copia antigua)
   B.loaded=true;B.base=snap();
-  if(m30)setTimeout(()=>{try{persist().then(m30Mark).catch(()=>{})}catch(e){}},0);
+  if(m30)setTimeout(()=>{try{persist(true).then(m30Mark).catch(()=>{})}catch(e){}},0);
   return true;
 }
 P.boltLoad=load;
 setTimeout(()=>{try{load(true).catch(()=>{})}catch(e){}},3500);
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
-async function persist(){
+async function persist(sys){
   const sent=clone(B.cfg),json=JSON.stringify(sent);let back=sent;
   const sr=SR();
   if(sr){
@@ -5247,10 +5290,44 @@ async function persist(){
   B.cfg=back;B.base=snap();
   const out=JSON.stringify(back);
   try{localStorage.setItem(LSK,JSON.stringify({cfg:back,voice:B.voice,vol:B.vol}))}catch(e){}
-  mirrorToDb(out);P.saveNow();
+  if(sys){if(db&&db.settings&&!db.settings.boltCfg)mirrorToDb(out,factoryLike(back)?0:1)}   // v3.53: la siembra de la M-30 no es un cambio tuyo: no sella ni pisa la copia buena de la cuenta
+  else{const at=Date.now();setAt(at);mirrorToDb(out,at)}
+  P.saveNow();
   B.weekendNow=isWeekend(B.cfg,new Date());
   return !same(sent,back);                       // true = algún valor se corrigió
 }
+
+/* v3.53 · llega la configuracion de la cuenta (entrar a la cuenta, abrir la app, volver a ella): si la de la cuenta es mas nueva que la de este movil, se pone aqui,
+   tambien en el lector nativo. Si estas tocando la pantalla de Bolt no se te cambia por debajo: se espera. */
+let seenDb=null,pend=false;
+async function fromCloud(){
+  try{
+    if(!B.loaded)return;
+    const s=db&&db.settings;if(!s||typeof s.boltCfg!=='string'||!s.boltCfg)return;
+    const cat=effAt(s);
+    const at=getAt();
+    if(cat<=at){
+      pend=false;
+      if(cat<at&&B.saved&&snap()===B.base){try{mirrorToDb(JSON.stringify(B.cfg),at);P.saveNow()}catch(e){}}   // este movil es mas nuevo que la cuenta: la copia de la cuenta se pone al dia
+      return;
+    }
+    if(snap()!==B.base){pend=true;return}
+    let cloud;try{cloud=norm(JSON.parse(s.boltCfg))}catch(e){return}
+    const voice=s.boltVoice!==false,vol=isN(s.boltVol)?s.boltVol:1;
+    if(!(same(cloud,B.cfg)&&voice===B.voice&&vol===B.vol)){
+      let back=cloud;const sr=SR();
+      if(sr){const r=await sr.setBolt({cfg:JSON.stringify(cloud),voice,vol});if(r&&r.cfg){try{back=norm(JSON.parse(r.cfg))}catch(e){}}B.saved=true}
+      if(snap()!==B.base){pend=true;return}
+      B.cfg=back;B.voice=voice;B.vol=vol;B.base=snap();
+      try{localStorage.setItem(LSK,JSON.stringify({cfg:back,voice,vol}))}catch(e){}
+      B.weekendNow=isWeekend(B.cfg,new Date());
+      try{const b=document.getElementById('bz_body');if(b&&!errors.size){b.innerHTML=bodyHtml();afterBody()}}catch(e){}
+    }
+    setAt(cat);pend=false;
+  }catch(e){}
+}
+P.boltFromCloud=fromCloud;
+setInterval(()=>{try{if(B.loaded&&(db!==seenDb||pend)){seenDb=db;fromCloud()}}catch(e){}},1500);
 
 /* ---------- textos y piezas de la pantalla ---------- */
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -6069,7 +6146,7 @@ setTimeout(async()=>{
     const sr=SR();if(!sr)return;
     const before=snap(),fresh=await load(true);
     if(fresh&&snap()!==before){const b=document.getElementById('bz_body');if(b&&!errors.size){b.innerHTML=bodyHtml();afterBody()}}
-    if(B.saved&&db&&db.settings&&!db.settings.boltCfg){mirrorToDb(JSON.stringify(B.cfg));P.saveNow()}
+    if(B.saved&&db&&db.settings&&!db.settings.boltCfg){mirrorToDb(JSON.stringify(B.cfg),factoryLike(B.cfg)?0:1);P.saveNow()}
   }catch(e){}
 },1500);
 })();
@@ -8088,6 +8165,293 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick()});
 setTimeout(tick,300);
 })();
 </script>
+<style id="pdc-sos-css">
+#sosFab{position:fixed;top:44px;right:10px;width:50px;height:50px;border-radius:50%;z-index:99000;display:flex;align-items:center;justify-content:center;padding:0;border:0;cursor:pointer;
+ background:radial-gradient(circle at 35% 30%,#ff6b6b,#d32f2f 55%,#8e0000);color:#fff;font:900 15px Inter,system-ui,sans-serif;letter-spacing:.5px;
+ box-shadow:0 4px 14px rgba(0,0,0,.55),0 0 0 2px rgba(255,255,255,.55) inset;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+#sosFab.hold{transform:scale(1.12)}
+#sosFab .ring{position:absolute;inset:-6px;border-radius:50%;pointer-events:none;opacity:0;background:conic-gradient(#fff var(--p,0deg),rgba(255,255,255,.2) 0);-webkit-mask:radial-gradient(circle,transparent 57%,#000 59%);mask:radial-gradient(circle,transparent 57%,#000 59%)}
+#sosFab.hold .ring{opacity:1}
+#sosFab span.t{position:relative;pointer-events:none}
+#sosTip{display:none;position:fixed;top:100px;right:10px;max-width:230px;z-index:99001;background:#fff;color:#14202e;border-radius:14px;padding:10px 12px;font:600 13.5px/1.35 Inter,system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+#sosTip b{color:#c62828}#sosTip span{font-weight:500;color:#52606d}
+#sosPanel{position:fixed;inset:0;z-index:100040;background:linear-gradient(160deg,#3b0a0a,#14070b 60%);color:#fff;overflow:auto;font-family:Inter,system-ui,sans-serif;padding:16px 14px 28px;-webkit-overflow-scrolling:touch}
+#sosPanel .sos-top{display:flex;align-items:center;justify-content:space-between}
+#sosPanel .sos-h{font-size:26px;font-weight:900;color:#ff6b6b}
+#sosPanel .sos-x{background:none;border:0;color:#fff;font-size:34px;line-height:1;padding:2px 10px;opacity:.85;cursor:pointer}
+#sosPanel .sos-test{background:#f59e0b;color:#1a1000;border-radius:12px;padding:8px 11px;margin-top:10px;font-weight:800;font-size:13.5px}
+#sosPanel .sos-box{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:14px;padding:11px 13px;margin-top:10px;font-size:13.5px;line-height:1.4;word-break:break-word}
+#sosPanel .sos-ok{color:#7ee2a8;font-weight:800;margin-bottom:5px}
+#sosPanel .sos-wait{color:#ffd27a;font-weight:800;margin-bottom:5px}
+#sosPanel .sos-bad{color:#ffb4a8;font-weight:700;margin-bottom:5px}
+#sosPanel .sos-link{background:none;border:0;color:#9ec5ff;text-decoration:underline;font-size:13.5px;padding:2px 0 8px;cursor:pointer}
+#sosPanel .sos-big{display:block;width:100%;text-align:left;border:0;border-radius:16px;padding:14px 16px;margin:10px 0;color:#fff;font:800 17px Inter,system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.4);cursor:pointer}
+#sosPanel .sos-big small{display:block;font-weight:500;font-size:12.5px;opacity:.88;margin-top:2px}
+#sosPanel .sos-red{background:linear-gradient(135deg,#e53935,#b71c1c)}
+#sosPanel .sos-green{background:#1f8f4a}
+#sosPanel .sos-dark{background:rgba(255,255,255,.14)}
+#sosPanel .sos-white{background:#fff;color:#8e0000}
+#sosPanel .sos-sub{font-size:12.5px;opacity:.72;margin:14px 2px 0}
+#sosPanel .sos-foot{font-size:12px;opacity:.68;margin-top:12px;line-height:1.4}
+#sosPanel #sosNote{display:none;background:#fff;color:#14202e;border-radius:12px;padding:9px 12px;margin-top:10px;font-weight:700;font-size:13.5px}
+.settings-menu>.sosopt{order:0}
+.sos-in{width:100%;box-sizing:border-box;background:#fff;color:#14202e;border:1px solid #c9d6e2;border-radius:12px;padding:12px 13px;font:600 16px Inter,system-ui,sans-serif}
+textarea.sos-in{min-height:84px;resize:vertical;font-weight:500;font-size:15px;line-height:1.4}
+.sos-lab{font-size:12.5px;opacity:.78;margin:12px 0 4px}
+.sos-con{display:flex;align-items:center;gap:10px;background:rgba(127,127,127,.12);border:1px solid rgba(127,127,127,.35);border-radius:14px;padding:10px 12px;margin:8px 0}
+.sos-con>div{flex:1;min-width:0}.sos-con b{display:block;font-size:16px}.sos-con span{font-size:13.5px;opacity:.8}
+.sos-del{background:none;border:0;font-size:20px;padding:6px;cursor:pointer}
+.sos-err{color:#ff8a80;font-weight:700;font-size:13px;margin:6px 0 0;min-height:1px}
+.sos-ok2{color:#2ecc71;font-weight:800;font-size:13.5px;margin:8px 0 0}
+.sos-prev{font-size:13px;opacity:.85;line-height:1.4;margin:8px 0;word-break:break-word}
+</style>
+<script id="pdc-sos">
+/* v3.54 · SOS sencillo: boton rojo (se mantiene pulsado 2 s), contactos de confianza en Ajustes y aviso con tu ubicacion.
+   No envia nada solo: abre tu app de mensajes / WhatsApp / compartir / marcador con todo escrito y tu pulsas «enviar». */
+(function(){
+'use strict';
+if(window.PDCSOS)return;
+const HOLD=2000,MAXC=8,SELF='Driver Hub 360';
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const S=window.PDCSOS={holdMs:HOLD,open:function(url){window.location.href=url}};
+
+/* ---------- datos: db.settings.sos = {v,name,msg,contacts:[{n,p}]} (se guarda con tu cuenta; no se crea hasta que guardas algo) ---------- */
+function get(){
+  let s=null;try{s=db&&db.settings&&db.settings.sos}catch(e){}
+  const c=(s&&typeof s==='object')?s:{};
+  const list=Array.isArray(c.contacts)?c.contacts.filter(x=>x&&typeof x.p==='string'&&x.p).map(x=>({n:String(x.n==null?'':x.n),p:String(x.p)})):[];
+  return {name:typeof c.name==='string'?c.name:'',msg:typeof c.msg==='string'?c.msg:'',contacts:list};
+}
+function put(c){
+  db.settings=db.settings||{};
+  db.settings.sos={v:1,name:c.name,msg:c.msg,contacts:c.contacts};
+  try{if(window.PDC314&&PDC314.saveNow)PDC314.saveNow();else if(typeof save==='function')save()}catch(e){console.warn('v3.54 sos guardar',e)}
+}
+function cleanPhone(raw){
+  let t=String(raw==null?'':raw).trim();if(!t)return '';
+  let plus=false;if(t[0]==='+'){plus=true;t=t.slice(1)}
+  if(/[^\d\s.\-()]/.test(t))return '';
+  let d=t.replace(/\D/g,'');
+  if(!plus&&d.slice(0,2)==='00'){plus=true;d=d.slice(2)}
+  if(d.length<9||d.length>15)return '';
+  return (plus?'+':'')+d;
+}
+function waNum(p){if(p[0]==='+')return p.slice(1);if(/^[6-9]\d{8}$/.test(p))return '34'+p;return p}
+
+/* ---------- el mensaje ---------- */
+const hhmm=()=>{const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
+const link=p=>'https://maps.google.com/?q='+p.lat.toFixed(5)+','+p.lon.toFixed(5);
+function intro(c){let m=(c.msg||'').trim();if(m){if(!/[.!?…]$/.test(m))m+='.';return m}const n=(c.name||'').trim();return n?('Soy '+n+' y necesito ayuda.'):'Necesito ayuda.'}
+function build(c,pos){return '🆘 AYUDA. '+intro(c)+(pos?' Estoy aquí: '+link(pos):' No he podido sacar mi ubicación.')+' ('+hhmm()+'). Enviado desde '+SELF+'.'}
+S.cleanPhone=cleanPhone;S.waNum=waNum;S.build=build;S.get=get;
+
+/* ---------- ubicacion ---------- */
+let last=null,inflight=null;
+function fix(o){return new Promise(res=>{try{
+  if(!navigator.geolocation)return res({err:'fail'});
+  navigator.geolocation.getCurrentPosition(p=>res({lat:p.coords.latitude,lon:p.coords.longitude,acc:Math.round(p.coords.accuracy||0),t:Date.now()}),e=>res({err:(e&&e.code===1)?'denied':'fail'}),o);
+}catch(e){res({err:'fail'})}})}
+async function locate(){
+  let r=await fix({enableHighAccuracy:true,timeout:9000,maximumAge:0});
+  if(r.err&&r.err!=='denied')r=await fix({enableHighAccuracy:false,timeout:5000,maximumAge:300000});
+  if(!r.err)last=r;
+  return r;
+}
+const warm=()=>inflight||(inflight=locate().then(r=>{inflight=null;return r},e=>{inflight=null;return {err:'fail'}}));
+S.warm=warm;
+
+/* ---------- pantalla roja de ayuda ---------- */
+let panel=null,test=false,st={pos:null,state:'buscando',err:''},backH=null,noteT=0;
+function backOn(){try{const A=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.App;if(A&&A.addListener&&!backH)backH=A.addListener('backButton',()=>{closePanel()})}catch(e){}}
+function backOff(){try{if(backH){const h=backH;backH=null;Promise.resolve(h).then(x=>{try{x&&x.remove&&x.remove()}catch(e){}})}}catch(e){}}
+function note(t){const n=panel&&panel.querySelector('#sosNote');if(!n)return;n.textContent=t;n.style.display='block';clearTimeout(noteT);noteT=setTimeout(()=>{try{n.style.display='none'}catch(e){}},5000)}
+function closePanel(quiet){
+  if(panel){try{panel.remove()}catch(e){}}
+  panel=null;backOff();
+}
+function render(){
+  if(!panel)return;
+  const c=get(),n=c.contacts.length,msg=build(c,st.pos);
+  let loc;
+  if(st.state==='ok')loc='<div class="sos-ok">📍 Ubicación encontrada'+(st.pos&&st.pos.acc?' (precisión '+st.pos.acc+' m)':'')+'</div>';
+  else if(st.state==='buscando')loc='<div class="sos-wait">📍 Buscando tu ubicación…</div>';
+  else loc='<div class="sos-bad">⚠️ '+(st.err==='denied'?'La app no tiene permiso de ubicación (Ajustes de Android → Aplicaciones → '+SELF+' → Permisos).':'No he podido sacar tu ubicación.')+' El mensaje saldrá sin ella.</div><button class="sos-link" data-a="retry">Buscar otra vez</button>';
+  let h='<div class="sos-top"><div class="sos-h">🆘 AYUDA</div><button class="sos-x" data-a="close" aria-label="Cerrar">×</button></div>';
+  if(test)h+='<div class="sos-test">PRUEBA: no se envía nada. Los botones solo te enseñan lo que harían.</div>';
+  h+='<div class="sos-box">'+loc+'<span id="sosMsg">'+esc(msg)+'</span></div><div id="sosNote"></div>';
+  if(n){
+    h+='<button class="sos-big sos-red" data-a="sms">📩 SMS a todos ('+n+')<small>'+esc(c.contacts.map(x=>x.n||x.p).join(', '))+' · se abre tu app de mensajes con todo escrito</small></button>';
+    h+='<div class="sos-sub">O por WhatsApp, uno a uno:</div>';
+    c.contacts.forEach((x,i)=>{h+='<button class="sos-big sos-green" data-a="wa" data-i="'+i+'">💬 WhatsApp · '+esc(x.n||x.p)+'</button>'});
+  }else{
+    h+='<div class="sos-box">Aún no tienes contactos de confianza.</div><button class="sos-big sos-dark" data-a="cfg">＋ Añadir contactos</button>';
+  }
+  h+='<button class="sos-big sos-dark" data-a="share">↗ Compartir…<small>Elige un grupo u otra app</small></button>';
+  h+='<button class="sos-big sos-white" data-a="call">📞 Llamar al 112<small>Se abre el marcador: tú pulsas llamar</small></button>';
+  h+='<div class="sos-foot">Los mensajes salen de tu móvil. Tú solo pulsas «enviar». No hay ningún envío automático.</div>';
+  panel.innerHTML=h;
+}
+function go(url,what){
+  if(test){note('PRUEBA: aquí se abriría '+what+'.');return}
+  try{S.open(url)}catch(e){note('No se ha podido abrir. Prueba con «Compartir».')}
+}
+function share(text){
+  if(test){note('PRUEBA: aquí saldría la ventana de compartir.');return}
+  try{if(navigator.share){navigator.share({text:text}).catch(()=>{});return}}catch(e){}
+  try{navigator.clipboard.writeText(text).then(()=>note('Mensaje copiado: pégalo donde quieras.')).catch(()=>note('No se ha podido compartir.'))}catch(e){note('No se ha podido compartir.')}
+}
+async function refresh(){
+  const mine=panel;
+  const r=await warm();
+  if(panel!==mine||!panel)return;
+  if(r&&!r.err){st.pos=r;st.state='ok';st.err=''}
+  else if(!st.pos){st.state='error';st.err=(r&&r.err)||'fail'}
+  render();
+}
+function openPanel(isTest){
+  closePanel();
+  test=!!isTest;
+  const fresh=last&&Date.now()-last.t<60000;
+  st={pos:fresh?last:null,state:fresh?'ok':'buscando',err:''};
+  panel=document.createElement('div');panel.id='sosPanel';
+  panel.addEventListener('click',ev=>{
+    const b=ev.target.closest&&ev.target.closest('[data-a]');if(!b)return;
+    const a=b.getAttribute('data-a'),c=get(),text=build(c,st.pos);
+    if(a==='close'){closePanel();return}
+    if(a==='retry'){st.state='buscando';render();refresh();return}
+    if(a==='cfg'){closePanel();try{show('settings')}catch(e){}try{settingsFrom=1}catch(e){}page();return}
+    if(a==='share'){share(text);return}
+    if(a==='call'){go('tel:112','el marcador con el 112');return}
+    if(a==='sms'){if(c.contacts.length)go('sms:'+c.contacts.map(x=>x.p).join(',')+'?body='+encodeURIComponent(text),'tu app de mensajes con '+c.contacts.length+' contactos');return}
+    if(a==='wa'){const x=c.contacts[+b.getAttribute('data-i')];if(x)go('https://wa.me/'+waNum(x.p)+'?text='+encodeURIComponent(text),'WhatsApp con '+(x.n||x.p))}
+  });
+  document.body.appendChild(panel);
+  render();
+  try{if(navigator.vibrate)navigator.vibrate([150,80,150])}catch(e){}
+  backOn();
+  refresh();
+}
+S.openPanel=openPanel;S.closePanel=closePanel;
+
+/* ---------- boton rojo fijo: se mantiene pulsado 2 s ---------- */
+let fab=null,t0=0,raf=0,timer=0,armed=false,fired=false,tipT=0;
+function showTip(){
+  let t=document.getElementById('sosTip');
+  if(!t){t=document.createElement('div');t.id='sosTip';document.body.appendChild(t)}
+  t.innerHTML='Para avisar, <b>mantén pulsado '+Math.round(S.holdMs/1000)+' segundos</b>.<br><span>Así no se envía por error.</span>';
+  t.style.display='block';clearTimeout(tipT);tipT=setTimeout(()=>{t.style.display='none'},4000);
+}
+function ringTick(){
+  if(!armed)return;
+  const p=Math.min(1,(performance.now()-t0)/S.holdMs);
+  fab.style.setProperty('--p',(p*360)+'deg');
+  if(p<1)raf=requestAnimationFrame(ringTick);
+}
+function stopHold(){clearTimeout(timer);cancelAnimationFrame(raf);armed=false;if(fab){fab.classList.remove('hold');fab.style.setProperty('--p','0deg')}}
+function fire(){
+  fired=true;stopHold();
+  openPanel(false);
+}
+function down(e){
+  if(armed||(e.button!==undefined&&e.button>0))return;
+  try{e.preventDefault()}catch(_){}
+  try{fab.setPointerCapture(e.pointerId)}catch(_){}
+  fired=false;armed=true;t0=performance.now();
+  fab.classList.add('hold');
+  try{warm()}catch(_){}
+  ringTick();
+  timer=setTimeout(fire,S.holdMs);
+}
+function up(){
+  if(!armed)return;
+  const dur=performance.now()-t0;
+  stopHold();
+  if(!fired&&dur<700)showTip();
+}
+function move(e){
+  if(!armed)return;
+  const r=fab.getBoundingClientRect(),m=30;
+  if(e.clientX<r.left-m||e.clientX>r.right+m||e.clientY<r.top-m||e.clientY>r.bottom+m)stopHold();
+}
+function mkFab(){
+  if(document.getElementById('sosFab'))return;
+  fab=document.createElement('button');fab.id='sosFab';fab.type='button';
+  fab.setAttribute('aria-label','SOS: mantén pulsado 2 segundos para pedir ayuda');
+  fab.innerHTML='<span class="ring"></span><span class="t">SOS</span>';
+  fab.addEventListener('pointerdown',down);
+  fab.addEventListener('pointerup',up);
+  fab.addEventListener('pointercancel',stopHold);
+  fab.addEventListener('pointermove',move);
+  fab.addEventListener('contextmenu',e=>e.preventDefault());
+  fab.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();showTip()}});
+  document.body.appendChild(fab);
+}
+
+/* ---------- Ajustes: tarjeta «SOS y contactos de confianza» y su pagina ---------- */
+function addOption(){
+  const menu=document.querySelector('#content .settings-menu');
+  if(!menu||menu.querySelector('.settings-option.sosopt'))return;
+  const n=get().contacts.length;
+  const sub=n?(n+(n===1?' contacto de confianza':' contactos de confianza')):'Botón de ayuda con tu ubicación';
+  menu.insertAdjacentHTML('afterbegin','<button class="settings-option sosopt" id="sosRow" onclick="settingsFrom=1;PDCSOS.page()"><span class="ico" style="background:#c62828">🆘</span><span><b>SOS y contactos de confianza</b><small>'+esc(sub)+'</small></span><span style="margin-left:auto;font-size:24px;color:#7b8794">›</span></button>');
+}
+function fields(){
+  const g=id=>{const e=document.getElementById(id);return e?e.value:null};
+  const c=get();
+  const nm=g('sosName'),ms=g('sosMsg2');
+  return {name:nm===null?c.name:nm.trim().slice(0,40),msg:ms===null?c.msg:ms.trim().slice(0,240),contacts:c.contacts};
+}
+function page(){
+  const el=document.querySelector('#content');if(!el)return;
+  const c=get(),n=c.contacts.length;
+  let h='<section class="panel futuristic" id="sosPage"><div class="settings-head"><button class="back" onclick="backToGeneralMenu()">←</button><div class="section-title" style="margin:0">🆘 SOS y contactos</div></div>';
+  h+='<div class="note" style="margin:12px 0">Mantén pulsado el botón rojo <b>SOS</b> (arriba a la derecha) '+Math.round(S.holdMs/1000)+' segundos y se abre el aviso con tu ubicación. Los mensajes los envías tú desde tu móvil: no se manda nada solo.</div>';
+  h+='<div class="sos-lab">Tu nombre (sale en el mensaje)</div><input class="sos-in" id="sosName" maxlength="40" autocomplete="off" value="'+esc(c.name)+'" placeholder="Por ejemplo: Juan">';
+  h+='<div class="sos-lab">Contactos de confianza</div>';
+  if(!n)h+='<div class="note" style="margin:8px 0">Aún no hay ninguno. Añade a quien quieras que reciba tu aviso.</div>';
+  c.contacts.forEach((x,i)=>{h+='<div class="sos-con"><div><b>'+esc(x.n||'(sin nombre)')+'</b><span>'+esc(x.p)+'</span></div><button class="sos-del" data-a="del" data-i="'+i+'" aria-label="Quitar a '+esc(x.n||x.p)+'">🗑</button></div>'});
+  if(n<MAXC)h+='<button class="secondary" style="width:100%;margin:8px 0" data-a="addopen" id="sosAddBtn">＋ Añadir contacto</button>';
+  else h+='<div class="note" style="margin:8px 0">Máximo '+MAXC+' contactos.</div>';
+  h+='<div id="sosAdd" style="display:none"><div class="sos-lab">Nombre</div><input class="sos-in" id="sosN" maxlength="30" autocomplete="off" placeholder="Nombre"><div class="sos-lab">Teléfono (con el que tiene WhatsApp)</div><input class="sos-in" id="sosP" type="tel" inputmode="tel" autocomplete="off" placeholder="600 123 456"><div class="sos-err" id="sosErr"></div><button class="secondary" style="width:100%;margin:8px 0" data-a="addsave">Guardar contacto</button></div>';
+  h+='<div class="sos-lab">Mensaje (la primera frase; la ubicación y la hora se añaden solas)</div><textarea class="sos-in" id="sosMsg2" maxlength="240" placeholder="Vacío = «Soy … y necesito ayuda.»">'+esc(c.msg)+'</textarea>';
+  h+='<div class="sos-prev" id="sosPrev"></div>';
+  h+='<button class="secondary" style="width:100%;margin:8px 0" data-a="save" id="sosSaveBtn">Guardar nombre y mensaje</button><div class="sos-ok2" id="sosOk" style="display:none">Guardado ✓</div>';
+  h+='<button class="secondary" style="width:100%;margin:14px 0 4px" data-a="test" id="sosTestBtn">🧪 Probar (no envía nada)</button>';
+  h+='<div class="note" style="margin:12px 0;font-size:12.5px">Los contactos se guardan en el móvil y también en tu cuenta, para tenerlos en otro móvil.</div></section>';
+  el.innerHTML=h;
+  const root=document.getElementById('sosPage');
+  const prev=()=>{const f=fields();const pv=document.getElementById('sosPrev');if(pv)pv.textContent='Así saldrá: '+build({name:f.name,msg:f.msg,contacts:[]},{lat:40.41683,lon:-3.70379})};
+  prev();
+  root.addEventListener('input',e=>{if(e.target&&(e.target.id==='sosName'||e.target.id==='sosMsg2'))prev()});
+  root.addEventListener('click',ev=>{
+    const b=ev.target.closest&&ev.target.closest('[data-a]');if(!b)return;
+    const a=b.getAttribute('data-a');
+    if(a==='addopen'){const f=document.getElementById('sosAdd');if(f){f.style.display='block';const i=document.getElementById('sosN');if(i)i.focus()}b.style.display='none';return}
+    if(a==='save'){put(fields());const o=document.getElementById('sosOk');if(o){o.style.display='block';setTimeout(()=>{try{o.style.display='none'}catch(e){}},3000)}return}
+    if(a==='test'){put(fields());openPanel(true);return}
+    if(a==='del'){
+      const f=fields(),x=f.contacts[+b.getAttribute('data-i')];if(!x)return;
+      let ok=true;try{ok=confirm('¿Quitar a '+(x.n||x.p)+' de tus contactos de confianza?')}catch(e){}
+      if(!ok)return;
+      f.contacts=f.contacts.filter((_,i)=>i!==+b.getAttribute('data-i'));put(f);page();return;
+    }
+    if(a==='addsave'){
+      const f=fields(),nm=(document.getElementById('sosN').value||'').trim().slice(0,30),ph=cleanPhone(document.getElementById('sosP').value),er=document.getElementById('sosErr');
+      const bad=t=>{if(er)er.textContent=t};
+      if(!nm)return bad('Escribe el nombre.');
+      if(!ph)return bad('Escribe un teléfono válido (9 cifras, o con +34).');
+      if(f.contacts.some(x=>x.p===ph))return bad('Ese teléfono ya está en la lista.');
+      if(f.contacts.length>=MAXC)return bad('Máximo '+MAXC+' contactos.');
+      f.contacts=f.contacts.concat([{n:nm,p:ph}]);put(f);page();
+    }
+  });
+}
+S.page=page;
+(function(){const _rs=window.renderSettings;if(typeof _rs==='function')window.renderSettings=function(){const r=_rs.apply(this,arguments);try{addOption()}catch(e){console.warn('v3.54 sos',e)}return r}})();
+
+if(document.body)mkFab();else document.addEventListener('DOMContentLoaded',mkFab);
+})();
+</script>
 <script id="pdc-rate">
 /* v3.43 · MI TASA DE FINALIZACIÓN (propia, de lunes a domingo)
    Bolt enseña su «tasa de aceptación» y su «calidad de servicio», pero la tasa interna que de verdad cuenta no la ves. Esta es la tuya, calculada con lo que pasa en tu móvil:
@@ -8148,9 +8512,76 @@ function ledger(){
   L.cfg=Object.assign(DEF(),L.cfg||{});
   if(!Array.isArray(L.win))L.win=[];
   if(!L.bolt||typeof L.bolt!=='object')L.bolt={};
-  LK=k;return L;
+  LK=k;sigInit(L);return L;
 }
-function save(){try{const l=ledger();const ks=Object.keys(l.days).sort();while(ks.length>400)delete l.days[ks.shift()];localStorage.setItem(LK,JSON.stringify(l))}catch(e){}}
+/* v3.53 · LA TASA SUBE A LA CUENTA (db.settings.rateLedger) para verla en otro movil. Sube: limites, dias, ultimos 100 viajes, punto de partida y cifras de Bolt.
+   NO sube: el puntero de la ultima oferta (`last`, es de cada movil) ni la lista de viajes con ✓.
+   Cada dia lleva `u` (la hora en que se toco por ultima vez) y la parte comun `cu`: al unir dos copias gana, dia a dia, la tocada mas tarde (un dia vacio nunca borra uno con datos). */
+let SIG={},CSIG='';
+const isEmptyDay=d=>!d||(KS.every(k=>!d[k])&&!(d.m&&KS.some(k=>d.m[k])));
+const dsig=d=>{const o={};for(const k of Object.keys(d))if(k!=='u')o[k]=d[k];return JSON.stringify(o)};
+const csig=l=>JSON.stringify([l.cfg,l.win,l.seed,l.bolt]);
+function sigInit(l){SIG={};for(const k of Object.keys(l.days))SIG[k]=dsig(l.days[k]);CSIG=csig(l)}
+function stamp(l){
+  let ch=false;const now=Date.now();
+  for(const k of Object.keys(l.days)){const d=l.days[k],s=dsig(d);if(SIG[k]!==s){SIG[k]=s;if(!isEmptyDay(d)||d.u){d.u=now;ch=true}}}
+  const c=csig(l);if(c!==CSIG){CSIG=c;l.cu=now;ch=true}
+  return ch;
+}
+function pack(l){
+  const days={};for(const k of Object.keys(l.days).sort()){const d=l.days[k];if(!isEmptyDay(d)||d.u)days[k]=JSON.parse(JSON.stringify(d))}
+  return {v:1,cfg:JSON.parse(JSON.stringify(l.cfg)),cu:l.cu||0,days,win:JSON.parse(JSON.stringify(l.win||[])),seed:l.seed?JSON.parse(JSON.stringify(l.seed)):null,bolt:JSON.parse(JSON.stringify(l.bolt||{}))};
+}
+function sumDay(d){let n=0;for(const k of KS)n+=(d[k]||0)+((d.m&&d.m[k])||0);return n}
+function pickDay(x,y){
+  if(isEmptyDay(x)&&!x.u)return y;
+  if(isEmptyDay(y)&&!y.u)return x;
+  const ux=x.u||0,uy=y.u||0;if(ux!==uy)return ux>uy?x:y;
+  return sumDay(x)>=sumDay(y)?x:y;
+}
+/* a = copia de la cuenta, b = la de este movil; empate = la de este movil */
+function mergeL(a,b){
+  if(!a||typeof a!=='object'||!a.days)return b;
+  if(!b||typeof b!=='object'||!b.days)return a;
+  const da=a.days,dbb=b.days,days={};
+  const ks=Object.keys(Object.assign({},da,dbb)).sort();
+  const keep=ks.length>400?ks.slice(ks.length-400):ks;
+  for(const k of keep){const x=da[k],y=dbb[k];days[k]=!x?y:!y?x:pickDay(x,y)}
+  const src=(Number(b.cu)||0)>=(Number(a.cu)||0)?b:a;
+  return {v:1,cfg:src.cfg,cu:src.cu||0,days,win:Array.isArray(src.win)?src.win:[],seed:src.seed||null,bolt:src.bolt||{}};
+}
+/* antes de subir: la copia de la cuenta (la que ya hay en `db`) se UNE con la de este movil, asi nunca se pierde lo de otro movil */
+function mirror(){
+  try{
+    const l=ledger(),p=pack(l);
+    if(!Object.keys(p.days).length&&!p.seed&&!Object.keys(p.bolt).length)return;
+    db.settings=db.settings||{};
+    const m=mergeL(db.settings.rateLedger,p);
+    if(JSON.stringify(m)!==JSON.stringify(db.settings.rateLedger))db.settings.rateLedger=m;
+  }catch(e){}
+}
+/* llega la copia de la cuenta (abrir la app, entrar a la cuenta, volver a ella): se une con la de este movil */
+let seenDb=null;
+function cloudIn(){
+  try{
+    const c=db&&db.settings&&db.settings.rateLedger;if(!c||!c.days)return;
+    const l=ledger(),loc=pack(l),m=mergeL(c,loc);
+    if(JSON.stringify(m)!==JSON.stringify(loc)){
+      l.days=m.days;l.cfg=Object.assign(DEF(),m.cfg||{});l.win=Array.isArray(m.win)?m.win:[];l.seed=m.seed||null;l.bolt=m.bolt&&typeof m.bolt==='object'?m.bolt:{};l.cu=m.cu||0;
+      sigInit(l);
+      try{localStorage.setItem(LK,JSON.stringify(l))}catch(e){}
+      paintAll();
+    }
+    if(JSON.stringify(m)!==JSON.stringify(c)){
+      try{const P=window.PDC314;if(P&&P.syncMark&&!P.syncDirty())P.syncMark();if(window.scheduleCloudPush)window.scheduleCloudPush()}catch(e){}
+    }
+  }catch(e){}
+}
+try{if(window.PDC314)window.PDC314.beforeSnapshot=mirror}catch(e){}
+function save(){try{const l=ledger();const ks=Object.keys(l.days).sort();while(ks.length>400)delete l.days[ks.shift()];
+  const ch=stamp(l);localStorage.setItem(LK,JSON.stringify(l));
+  if(ch){try{const P=window.PDC314;if(P&&P.syncMark&&!P.syncDirty())P.syncMark()}catch(e){}}
+}catch(e){}}
 function D(k){const l=ledger();return l.days[k]||(l.days[k]=zero())}
 function peek(k){return ledger().days[k]||null}
 function tot(w){const t={};for(const k of KS)t[k]=(w[k]||0)+((w.m&&w.m[k])||0);return t}
@@ -8697,7 +9128,7 @@ const HELP='<p><b>Cómo cuenta la app</b></p>'
   +'<p>• Sin cartel y sin ✓: cuenta como no aceptada y baja la tasa.</p>'
   +'<p>• ✓ y la haces: sube. ✓ y luego la borras de la lista: es una cancelación y baja.</p>'
   +'<p>• Si el cliente cancela en pocos minutos (los eliges abajo) no penaliza.</p>'
-  +'<p>• Es una estimación tuya: Bolt no enseña su tasa interna. Los datos se quedan en el móvil.</p>';
+  +'<p>• Es una estimación tuya: Bolt no enseña su tasa interna. Los datos se guardan en el móvil y también en tu cuenta, para verlos en otro móvil (la lista de viajes con ✓ se queda solo en el móvil donde la haces).</p>';
 function pageHtml(){
   const l=ledger(),cfg=l.cfg;
   let h='<div class="rp"><div class="rp-hd"><button type="button" class="rp-bk" data-rt="close" aria-label="Volver">‹</button><h1>Tasa de finalización</h1><button type="button" class="rp-q" data-rt="help" aria-label="Ayuda">?</button></div>';
@@ -8800,9 +9231,9 @@ window.addEventListener('pdc-trip',ev=>{
 });
 
 /* ---------------- arranque ---------------- */
-function tick(){try{if(document.hidden)return;poll();injectCard()}catch(e){}}
+function tick(){try{if(document.hidden)return;poll();injectCard();if(typeof db!=='undefined'&&db!==seenDb){seenDb=db;cloudIn()}}catch(e){}}
 window.__pdcRate={ledger,save,calc,tot,sumKeys,weekKey,weekInfo,zone,margin,recover,whatIf,winStats,seedArr,poll,setRes,setDay,bump,dayVals,setSeed,setBolt,setCfg,
-  openPage,closePage,paintAll,onYes,onManual,onNo,onDelete,banner,hideBanner,ask,closeAsk,FLAG,setFlag,tick,get pg(){return pg},get askS(){return askS}};
+  openPage,closePage,paintAll,onYes,onManual,onNo,onDelete,banner,hideBanner,ask,closeAsk,FLAG,setFlag,tick,mergeLedgers:mergeL,cloudIn,pack,mirror,get pg(){return pg},get askS(){return askS}};
 const content=$('#content');
 let rq=0;
 if(content){new MutationObserver(()=>{if(rq)return;rq=setTimeout(()=>{rq=0;try{injectCard()}catch(e){}},80)}).observe(content,{childList:true,subtree:true});injectCard()}
