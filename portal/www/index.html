@@ -1260,7 +1260,7 @@ function renderTema(){
 function daySplitHtml(k){
   const all=totalMinutesForDay(k),b=boltMinutesForDay(k),o=Math.max(0,all-b),kb=appKmForDay(k,'bolt'),ko=appKmForDay(k,'other'),kt=kilometersForDay(k);
   const note=all>0&&kb<=0&&ko<=0?'<div class="note">Los km de '+prioName()+' y de otras apps se cuentan con el GPS encendido durante la jornada.</div>':'';
-  return `<div class="appblk">🔵 Todas las apps (${prioName()} + otras)</div><div class="summary-grid control-circles c4">${grayCircle('Total de horas',hoursText(all))}${grayCircle('Km del día',kt===null||kt===undefined?'—':kmTxt(kt))}${grayCircle(prioName(),hoursText(b),kmcHtml(kb),'cg-'+prioKey())}${otherCircle('d',hoursText(o),kmcHtml(ko))}</div>${otherBdHtml('d',[k])}${note}`;
+  return `<div class="appblk">🔵 Todas las apps (${prioName()} + otras)</div><div class="summary-grid control-circles c4">${grayCircle('Total apps',hoursText(all),'','cg-tot')}${grayCircle('Km del día',kt===null||kt===undefined?'—':kmTxt(kt))}${grayCircle(prioName(),hoursText(b),kmcHtml(kb),'cg-'+prioKey())}${otherCircle('d',hoursText(o),kmcHtml(ko))}</div>${otherBdHtml('d',[k])}${note}`;
 }
 function allBlockHtml(x,id){
   return `<div class="appblk">🔵 Todas las apps (${prioName()} + otras)</div><div class="summary-grid control-circles">${grayCircle('Total · todas',hoursText(x.all))}${grayCircle(prioName(),hoursText(x.total),kmcHtml(x.kmBolt),'cg-'+prioKey())}${otherCircle(id,hoursText(x.other),kmcHtml(x.kmOther))}</div>${otherBdHtml(id,otherKeysOf(x))}`;
@@ -2677,7 +2677,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.55';
+const APP_VERSION='v3.56';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -3302,12 +3302,8 @@ function decorateCalc(){
       const el=ps.querySelector('.ps.'+cls(p)+' b');
       if(el)el.innerHTML=money(platTotal(k,p));
     }
-    // 3) resumen del día
-    if(!root.querySelector('.canc-sum')){
-      let anchor=ps.nextElementSibling;
-      if(!(anchor&&anchor.classList.contains('note')))anchor=ps;
-      anchor.insertAdjacentHTML('afterend',daySummary(k,'Resumen del día'));
-    }
+    // 3) v3.56: ya no hay «Resumen del día» en la Calculadora (la facturación está arriba y los viajes en «Últimos viajes»); se marca el cuadro como ya preparado
+    ps.setAttribute('data-dec356','1');
   }
   // 4) cancelaciones dentro de la lista del día (no cuentan como viaje)
   const list=root.querySelector('.triplist');
@@ -3328,6 +3324,18 @@ function decorateCalc(){
     const empty=list.querySelector('.empty');
     if(empty&&items.length)empty.style.display='none';
   }
+  // 5) v3.56: «Cancelaciones · N» al lado de «Últimos viajes · N» (solo cuando ese día hay cancelaciones)
+  try{
+    const hd=list&&list.querySelector('.triplist-head');
+    if(hd){
+      let n=0;for(const it of P.compEntriesOnDate(k)){if((Number(it.entry&&it.entry.cancellations)||0)>0)n++}
+      let ch=hd.querySelector('.cn-n');
+      if(n>0){
+        if(!ch){ch=document.createElement('span');ch.className='cn-n';hd.appendChild(ch)}
+        ch.textContent='Cancelaciones · '+n;hd.classList.add('has-cn');
+      }else{if(ch)ch.remove();hd.classList.remove('has-cn')}
+    }
+  }catch(e){console.warn('v3.56 cancelaciones',e)}
 }
 const _rc=window.renderCalc;
 window.renderCalc=function(){const r=_rc.apply(this,arguments);try{decorateCalc()}catch(e){console.warn('v3.14 calc',e)}return r};
@@ -3336,7 +3344,10 @@ window.renderCalc=function(){const r=_rc.apply(this,arguments);try{decorateCalc(
 function calcNeeds(root){
   if(!root)return false;
   if(root.querySelector('.airport-premium')&&!root.querySelector('.airport-row'))return true;
-  if(calcPS(root)&&!root.querySelector('.canc-sum'))return true;
+  {   // v3.56: solo en la Calculadora (en Facturación también hay un cuadro .platform-summary con los importes DEL PERIODO y no se toca)
+    const vv=document.body&&document.body.getAttribute('data-vista');
+    if(!vv||vv==='calc'){const q=calcPS(root);if(q&&!q.hasAttribute('data-dec356'))return true}
+  }
   return false;
 }
 try{if(calcNeeds(document.getElementById('content')))decorateCalc()}catch(e){console.warn('v3.15 calc inicial',e)}
@@ -5097,7 +5108,7 @@ function calc(c,up,km,min,om,ak,zk,ev,cat){
   else if(card.minFare>0&&raw<card.minFare){raw=card.minFare;ma=true}
   const m=om>1?Math.min(10,om):1,fm=m>1+1e-9?1+c.fine/100:1;
   let disc=0,evShown='';
-  if(c.longDisc>0&&!ma&&!air&&km>=c.longKm&&m>1+1e-9){if(c.eventOn&&ev)evShown=ev;else{disc=c.longDisc;raw=raw*(1-disc/100)}}
+  if(c.longDisc>0&&!ma&&km>=c.longKm){if(c.eventOn&&ev)evShown=ev;else{disc=c.longDisc;raw=raw*(1-disc/100)}}   /* v3.56: con o sin demanda, y tambien al aeropuerto */
   const range=false;   /* v3.44: nunca hay rango: un solo neto. Lo que hubiera guardado en «short» se ignora */
   const mid=range?raw+(c.short.lo+c.short.hi)/2:raw;
   const pct=Math.max(0,Math.min(90,c.comm)),fee=air?c.airFee:0,gross=r5(c,mid*m*fm+(flat?fee:0));   /* v3.47: con la mínima fija el cliente paga la mínima (con la demanda) + la tasa aparte; a la tasa no le afecta la demanda */
@@ -5111,8 +5122,8 @@ function calc(c,up,km,min,om,ak,zk,ev,cat){
   return e;
 }
 /* peak = ¿es hora punta ahora en esa zona? (por las franjas). La tarjeta de punta solo se usa si además c.peakApplies; si no, se calcula con valle y se guarda en alt lo que saldría con punta */
-/* v3.34: la tarjeta de punta solo cuenta en viajes de menos de c.peakKm km (0 = en todos). Los viajes largos (desde c.longKm km) CON demanda bajan la tarjeta c.longDisc % (0 = sin descuento),
-   salvo en un lugar de evento (event = su nombre, '' si no hay): ahí se cobra la tarifa normal. El aeropuerto no lleva descuento. */
+/* v3.34: la tarjeta de punta solo cuenta en viajes de menos de c.peakKm km (0 = en todos). Los viajes largos (desde c.longKm km), con o sin demanda y también al aeropuerto (v3.56), bajan la tarjeta c.longDisc % (0 = sin descuento),
+   salvo en un lugar de evento (event = su nombre, '' si no hay): ahí se cobra la tarifa normal. */
 function estimate(c,peak,km,min,offerMult,airKind,zoneKind,event,cat){
   const air=!!c.airOn&&(airKind==='pickup'||airKind==='dest'),ak=air?airKind:'';
   const zk=zoneKind==null?Z_MID:zoneKind,ev=typeof event==='string'?event:'';
@@ -5158,7 +5169,7 @@ function detectCategory(nodes){
   return '';
 }
 P.boltCategory=detectCategory;
-/* v3.34 · lugares de eventos (igual que OfferAnalyzer.detectEvent / eventAt de Java): ahí no se aplica el descuento de los viajes largos con demanda */
+/* v3.34 · lugares de eventos (igual que OfferAnalyzer.detectEvent / eventAt de Java): ahí no se aplica el descuento de los viajes largos */
 const EV_NAME=['IFEMA','Bernabéu','Metropolitano','Palacio Vistalegre','WiZink Center'];
 const EV_GEO=[[40.46778,-3.61722,1000],[40.45305,-3.68834,400],[40.43614,-3.59947,500],[40.38611,-3.73889,300],[40.4239,-3.6717,300]];
 const EV_TXT=[/\bifema\b|feria de madrid|\bpartenon\b/,/bernabeu/,/estadio metropolitano|civitas|wanda metropolitano|riyadh air|luis aragones/,/palacio (?:de )?vista(?:legre| alegre)/,/wi ?zink|palacio de deportes/];
@@ -5373,7 +5384,7 @@ function demandLine(e,om){
 }
 const rangeLine=e=>'Viaje corto con demanda: el neto puede ir de '+money(e.netLo)+' a '+money(e.netHi)+' €';
 const peakLine=e=>e.peakShort?'Hora punta, pero es un viaje largo: tarifa de valle':e.weekend&&!e.peakUsed?'Ahora es hora punta: no sube tu precio'+(e.alt>=0?' (con tarifa de punta: neto '+money(e.alt)+' €)':''):'';
-const longLine=e=>e.disc>1e-9?'Viaje largo con demanda: precio base −'+num1(e.disc)+' %':e.event?'Lugar de evento ('+e.event+'): sin descuento':'';
+const longLine=e=>e.disc>1e-9?'Viaje largo: precio base −'+num1(e.disc)+' %':e.event?'Lugar de evento ('+e.event+'): sin descuento':'';
 P.boltZoneTxt={card:cardLine,demand:demandLine,range:rangeLine,peak:peakLine,long:longLine};
 
 /* ---------- apartado «Tarjetas de precios» ---------- */
@@ -5620,8 +5631,8 @@ function pDem(){
    +'<div class="bz-g">'+cell('Ajuste fino de la demanda (%)','bz_fine',show(c.fine),'fine',{step:'0.5',min:-50})+'<div></div></div>'
    +'<div class="bz-hint">Súmale o réstale un porcentaje al precio cuando hay demanda (0 = nada). Útil si ves que Bolt paga siempre un poco más o menos que la cuenta.</div>'
    /* v3.44: ya no hay ajustes de viajes cortos (nunca hay rango) */
-   +'<b class="bz-sub">Viajes largos con demanda</b>'
-   +'<div class="bz-hint">En los viajes largos con demanda, Bolt suele pagar menos de lo que sale al multiplicar la tarjeta. La app baja la tarjeta este porcentaje antes de multiplicar por la demanda (unos 13 % de media en tus viajes, pero cambia mucho de uno a otro). 0 = sin descuento.</div>'
+   +'<b class="bz-sub">Viajes largos</b>'
+   +'<div class="bz-hint">En los viajes largos, con o sin demanda y también al aeropuerto, Bolt suele pagar menos de lo que sale al multiplicar la tarjeta. La app baja la tarjeta este porcentaje antes de multiplicar por la demanda (unos 11 % de media en tus viajes de más de 10 km del 5 al 16 de noviembre, pero cambia mucho de uno a otro). 0 = sin descuento.</div>'
    +'<div class="bz-g">'+cell('Largo: desde (km)','bz_lg_km',show(c.longKm),'longKm',{step:'0.5'})+cell('Descuento de la tarjeta (%)','bz_lg_disc',show(c.longDisc),'longDisc',{step:'0.5'})+'</div>'
    +sw('En lugares de eventos, sin descuento','IFEMA, Bernabéu, Metropolitano, Palacio Vistalegre y WiZink Center: ahí se usa la tarifa normal, sin el descuento (es una suposición tuya; solo se ha visto un viaje a IFEMA). Se detecta por tu ubicación al llegar la oferta o por el nombre en la oferta.','bz_eventOn','eventOn',c.eventOn)
    +'<div class="bz-btns"><button type="button" class="secondary" id="bz_dem_def" onclick="boltReset(\'dem\')">↺ Valores iniciales de demanda</button></div>'
@@ -6138,7 +6149,7 @@ try{
   const e=jEntry('rentabilidad');
   if(e)e[4]='Es un aviso que salta arriba cuando te llega una oferta de Bolt, Uber o Cabify. Cada dato (€/hora, €/km y distancia de recogida) sale con su color: verde si cumple tu objetivo, naranja si se queda un poco corto y rojo si está lejos. Arriba del todo: ACEPTAR si todo está bien, RECHAZAR si algo está muy mal, y A VALORAR si está justo. Se activa en Ajustes → Rentabilidad de viajes. La oferta de Bolt no muestra el precio: la app lo ESTIMA con tus tarjetas de precios (por zona de la recogida —alta, media o baja—, por hora —valle o punta— y con la demanda que trae la oferta) y te dice bruto, comisión y NETO estimados, en pantalla y por voz. Son estimaciones tuyas, no tarifas oficiales de Bolt: los valores se corrigen en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt, que está dividida en apartados (General, Tarjetas, Aeropuerto, Horas punta y valle, Zonas y mapa, Demanda y viajes largos, Voz), cada uno con su prueba. En Uber la app lee una captura de la pantalla (dentro del móvil, sin guardarla). Solo avisa: no pulsa nada por ti.';
   J_KB.push(['boltzonas','📍','Zonas de Bolt (alta, media y baja)','zona alta^8,zona media^8,zona baja^8,zonas bolt^7,dibujar zona^8,poligono^7,mapa zonas^8,marcar zonas^7,forzar zona^8,zona forzada^8,zona por defecto^7,probar ubicacion^6,mover punto^6,borrar punto^6,borrar zona^6,gps bolt^6,recogida zona^6,zona de la recogida^7','El precio estimado de Bolt depende de la ZONA donde RECOGES (tu ubicación cuando llega la oferta), nunca de la del destino. Hay tres tipos: zona alta (donde Bolt paga más), media y baja, y cada una tiene su tarjeta de valle y de hora punta. Las zonas las dibujas tú como polígonos en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt → Zonas y mapa → «Dibujar zona nueva»: eliges el tipo (alta, media o baja), tocas el mapa para ir poniendo puntos alrededor de la zona (arrastras para mover el mapa, ＋/－ o pellizcar para acercar) y la cierras tocando el punto 1 (el verde) o con «Cerrar zona». En el mapa el color dice el tipo: verde alta, ámbar media y gris baja. Para cambiar una zona la tocas: arrastras un punto blanco para moverlo, tocas un punto y «Borrar punto» (mínimo 3), tocas el círculo pequeño del medio de un lado para añadir un punto, cambias el tipo con los botones Alta/Media/Baja o «Borrar zona». Una zona no puede cruzarse consigo misma. Si caes en varias zonas manda la alta, luego la media y luego la baja. Fuera de todas vale la «zona por defecto» (media al principio, se puede cambiar). «Forzar la zona» hace que TODAS las ofertas se calculen con esa zona hasta que vuelvas a «Automática» (no es solo para un viaje; el resumen avisa en mayúsculas mientras esté forzada). «Probar ubicación» dice en qué zona cree la app que estás y qué ve el lector de pantalla. Si el móvil no da la ubicación (sin permiso o sin datos recientes) se usa la zona por defecto y el aviso lo dice. Orden: 1) la zona forzada en Ajustes; 2) tu mapa: la zona que has pintado donde está tu móvil (GPS) y, fuera de todas, la zona por defecto; 3) si no tienes zonas pintadas o el móvil no da la ubicación, el código postal de la recogida, si la tarjeta lo trae y está en tus listas de «Códigos postales de la recogida»; 4) la zona por defecto. Si el código postal dice otra zona, sale como botón en el aviso. Las imágenes del mapa necesitan internet; sin internet las zonas se ven igual sobre un fondo liso. Son estimaciones, no tarifas oficiales de Bolt.']);
-  J_KB.push(['boltestimacion','💶','Precio estimado de Bolt','tarjetas bolt^7,tarjeta aeropuerto^7,tarjeta zona^7,valle punta^8,hora punta^8,horas punta^8,franjas^8,franja hora punta^8,aeropuerto bolt^6,tasa aeropuerto^6,precio bolt^6,estimar bolt^7,estimacion bolt^7,neto bolt^6,neto estimado^7,bolt no muestra el precio^8,tarifa bolt^5,comision bolt^5,bruto estimado^6,voz bolt^5,demanda^5,ajuste fino^6,viajes cortos^7,rango neto^7,festivos bolt^5,minima aeropuerto^6,redondeo 5 centimos^6','Bolt no enseña el precio en la oferta, así que la app lo estima con ocho tarjetas de precios que editas en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt: zona alta, media y baja, cada una de valle y de hora punta, más las dos del aeropuerto (valle y punta), con su inicial, su precio por km, su precio por minuto y su mínima. La zona es la de la RECOGIDA. Al principio, por ejemplo, la zona media en valle es 2,10 + 0,77 €/km + 0,15 €/min (mínima 6,75 €) y la alta en valle 2,39 + 0,85 + 0,16 (mínima 6,70 €). La DEMANDA que muestra la oferta (×1,2, ×1,4…) se lee siempre y multiplica todo, incluida la mínima, desde la primera décima. El bruto se redondea a 5 céntimos (como hace Bolt) y el neto no. HORA PUNTA: sale de tus franjas (una lista para cada zona (baja, media y alta), todas editables; al principio lunes a viernes de 07 a 10 y de 17 a 20, sábados y domingos todo el día; la alta empieza a las 08:00 por la mañana y el viernes sigue de 20:00 a 24:00, sin confirmar; los festivos cuentan como punta). Por defecto la tarjeta de punta NO sube el precio («La hora punta sube lo que cobro», en General): en los viajes largos que hemos comparado, Bolt pagó la tarifa de valle aunque fuera hora punta; con la casilla apagada la app calcula con la de valle y el aviso añade «Ahora es hora punta: no sube tu precio (con tarifa de punta: neto X €)». Si ves que Bolt sí te paga la de punta, enciéndela. VIAJES CORTOS con demanda: el aviso y la voz dan siempre UN SOLO neto estimado (sin rangos). Hay un ajuste fino de la demanda (en %, 0 al principio). AEROPUERTO: las recogidas (parking P1 de la T1, parking express T2, parking módulo D … T4) usan la tarjeta del aeropuerto (con Comfort, XL o Premium, la de esa categoría) y, hasta 11 km, el cliente paga la mínima (13,70 € en Bolt) y la tasa aparte; los viajes HACIA el aeropuerto (Terminal 1–4, «Aeropuerto…») usan la tarjeta de la zona; el barrio de Barajas o la Avenida de la Hispanidad no cuentan. En los dos se resta primero la tasa de 2,57 € (el precio de Bolt ya la incluye) y sobre lo que queda se aplica la comisión (25 % al principio). Ejemplo: recogida en el aeropuerto de 13 km y 20 min sin demanda: 3,04 + 13 × 0,86 + 20 × 0,15 = 17,22 € (17,20 € redondeado); menos la tasa 2,57 € = 14,63 €; comisión 25 % = 3,66 €; neto 10,97 €. Ejemplo corto: recogida de 10,6 km: el cliente paga la mínima 13,70 € + la tasa 2,57 € = 16,27 € (16,25 €); sin la tasa quedan 13,68 €; comisión 25 % = 3,42 €; neto 10,26 €. Son estimaciones, no tarifas oficiales: todos los valores se cambian en esa pantalla, donde cada apartado tiene una prueba para contrastarlos con viajes reales.']);
+  J_KB.push(['boltestimacion','💶','Precio estimado de Bolt','tarjetas bolt^7,tarjeta aeropuerto^7,tarjeta zona^7,valle punta^8,hora punta^8,horas punta^8,franjas^8,franja hora punta^8,aeropuerto bolt^6,tasa aeropuerto^6,precio bolt^6,estimar bolt^7,estimacion bolt^7,neto bolt^6,neto estimado^7,bolt no muestra el precio^8,tarifa bolt^5,comision bolt^5,bruto estimado^6,voz bolt^5,demanda^5,ajuste fino^6,viajes cortos^7,rango neto^7,festivos bolt^5,minima aeropuerto^6,redondeo 5 centimos^6','Bolt no enseña el precio en la oferta, así que la app lo estima con ocho tarjetas de precios que editas en Ajustes → Rentabilidad de viajes → Estimación del precio de Bolt: zona alta, media y baja, cada una de valle y de hora punta, más las dos del aeropuerto (valle y punta), con su inicial, su precio por km, su precio por minuto y su mínima. La zona es la de la RECOGIDA. Al principio, por ejemplo, la zona media en valle es 2,10 + 0,77 €/km + 0,15 €/min (mínima 6,75 €) y la alta en valle 2,39 + 0,85 + 0,16 (mínima 6,70 €). La DEMANDA que muestra la oferta (×1,2, ×1,4…) se lee siempre y multiplica todo, incluida la mínima, desde la primera décima. El bruto se redondea a 5 céntimos (como hace Bolt) y el neto no. HORA PUNTA: sale de tus franjas (una lista para cada zona (baja, media y alta), todas editables; al principio lunes a viernes de 07 a 10 y de 17 a 20, sábados y domingos todo el día; la alta empieza a las 08:00 por la mañana y el viernes sigue de 20:00 a 24:00, sin confirmar; los festivos cuentan como punta). Por defecto la tarjeta de punta NO sube el precio («La hora punta sube lo que cobro», en General): en los viajes largos que hemos comparado, Bolt pagó la tarifa de valle aunque fuera hora punta; con la casilla apagada la app calcula con la de valle y el aviso añade «Ahora es hora punta: no sube tu precio (con tarifa de punta: neto X €)». Si ves que Bolt sí te paga la de punta, enciéndela. VIAJES CORTOS con demanda: el aviso y la voz dan siempre UN SOLO neto estimado (sin rangos). Hay un ajuste fino de la demanda (en %, 0 al principio). AEROPUERTO: las recogidas (parking P1 de la T1, parking express T2, parking módulo D … T4) usan la tarjeta del aeropuerto (con Comfort, XL o Premium, la de esa categoría) y, hasta 11 km, el cliente paga la mínima (13,70 € en Bolt) y la tasa aparte; los viajes HACIA el aeropuerto (Terminal 1–4, «Aeropuerto…») usan la tarjeta de la zona; el barrio de Barajas o la Avenida de la Hispanidad no cuentan. En los dos se resta primero la tasa de 2,57 € (el precio de Bolt ya la incluye) y sobre lo que queda se aplica la comisión (25 % al principio). VIAJES LARGOS (10 km o más, sin contar la mínima): al precio base se le quita un 13 % (se cambia en esa pantalla), con o sin demanda y también en el aeropuerto. Ejemplo: recogida en el aeropuerto de 13 km y 20 min sin demanda: 3,04 + 13 × 0,86 + 20 × 0,15 = 17,22 €; como es un viaje largo se descuenta un 13 % = 14,98 € (15,00 € redondeado); menos la tasa 2,57 € = 12,43 €; comisión 25 % = 3,11 €; neto 9,32 €. Ejemplo corto: recogida de 10,6 km: el cliente paga la mínima 13,70 € + la tasa 2,57 € = 16,27 € (16,25 €); sin la tasa quedan 13,68 €; comisión 25 % = 3,42 €; neto 10,26 €. Son estimaciones, no tarifas oficiales: todos los valores se cambian en esa pantalla, donde cada apartado tiene una prueba para contrastarlos con viajes reales.']);
 }catch(e){}
 // al abrir: si el teléfono perdió los ajustes de Bolt y la cuenta los tiene, se recuperan; y la cuenta guarda una copia
 setTimeout(async()=>{
@@ -7985,7 +7996,7 @@ function detailCalc(t){
   if(fin(o.gross)&&o.gross>=0)x+=kv('Bruto estimado',eur(o.gross));
   if(fin(o.fee)&&o.fee>0)x+=kv('Tasa de aeropuerto',eur(o.fee));
   if(fin(o.comm)&&o.comm>=0)x+=kv('Comisión Bolt'+(fin(o.commPct)&&o.commPct>=0?' ('+new Intl.NumberFormat('es-ES',{maximumFractionDigits:1}).format(o.commPct)+' %)':''),eur(o.comm));
-  if(fin(o.disc)&&o.disc>0)x+=kv('Viaje largo con demanda','−'+o.disc+' % al precio base');
+  if(fin(o.disc)&&o.disc>0)x+=kv('Viaje largo','−'+o.disc+' % al precio base');
   if(o.event)x+=kv('Lugar de evento',esc(o.event));
   if(o.airport)x+=kv('Aeropuerto',o.airport==='pickup'?'recogida':'destino');
   if(x)h+='<div class="box"><h4>Cómo salió el cálculo</h4>'+x+'</div>';
@@ -8281,6 +8292,11 @@ function render(){
   if(test)h+='<div class="sos-test">PRUEBA: no se envía nada. Los botones solo te enseñan lo que harían.</div>';
   h+='<div class="sos-box">'+loc+'<span id="sosMsg">'+esc(msg)+'</span></div><div id="sosNote"></div>';
   try{h+=(S.panelTop?S.panelTop(test,st):'')}catch(e){console.warn('v3.55 sos',e)}
+  const okApp=!!(S.appOk&&S.appOk()),moreOpen=!!st.more||!okApp;S._okR=okApp;   // v3.56: si el aviso por la app no es posible, SMS/WhatsApp salen abiertos
+  h+='<button class="sos-big sos-white" data-a="call">📞 Llamar al 112<small>Se abre el marcador: tú pulsas llamar</small></button>';
+  if(okApp)h+='<button class="sos-more-b" data-a="more" aria-expanded="'+(moreOpen?'true':'false')+'">Otras formas de avisar (SMS, WhatsApp…) '+(moreOpen?'▴':'▾')+'</button>';
+  else h+='<div class="sos-sub">Otras formas de avisar:</div>';
+  h+='<div id="sosMore" class="sos-more'+(moreOpen?' open':'')+'">';
   if(n){
     h+='<button class="sos-big sos-red" data-a="sms">📩 SMS a todos ('+n+')<small>'+esc(c.contacts.map(x=>x.n||x.p).join(', '))+' · se abre tu app de mensajes con todo escrito</small></button>';
     h+='<div class="sos-sub">O por WhatsApp, uno a uno:</div>';
@@ -8289,8 +8305,8 @@ function render(){
     h+='<div class="sos-box">Aún no tienes contactos de confianza.</div><button class="sos-big sos-dark" data-a="cfg">＋ Añadir contactos</button>';
   }
   h+='<button class="sos-big sos-dark" data-a="share">↗ Compartir…<small>Elige un grupo u otra app</small></button>';
-  h+='<button class="sos-big sos-white" data-a="call">📞 Llamar al 112<small>Se abre el marcador: tú pulsas llamar</small></button>';
-  h+='<div class="sos-foot">Los mensajes salen de tu móvil. Tú solo pulsas «enviar». No hay ningún envío automático.</div>';
+  h+='</div>';
+  h+='<div class="sos-foot">Con SMS, WhatsApp o Compartir, tú pulsas «enviar». El aviso por la app sale solo al acabar la cuenta atrás, salvo que pulses Cancelar.</div>';
   panel.innerHTML=h;
 }
 function go(url,what){
@@ -8315,11 +8331,13 @@ function openPanel(isTest){
   closePanel();
   test=!!isTest;
   const fresh=last&&Date.now()-last.t<60000;
-  st={pos:fresh?last:null,state:fresh?'ok':'buscando',err:''};
-  panel=document.createElement('div');panel.id='sosPanel';
+  st={pos:fresh?last:null,state:fresh?'ok':'buscando',err:'',more:false};
+  panel=document.createElement('div');panel.id='sosPanel';S._t0=Date.now();
   panel.addEventListener('click',ev=>{
     const b=ev.target.closest&&ev.target.closest('[data-a]');if(!b)return;
+    if(Date.now()-(S._t0||0)<350)return;   // v3.56: el mismo toque que abre el aviso no puede pulsar nada dentro
     const a=b.getAttribute('data-a'),c=get(),text=build(c,st.pos);
+    if(a==='more'){st.more=!st.more;render();return}
     if(a&&a.indexOf('app-')===0){try{S.panelClick&&S.panelClick(a,b)}catch(e){console.warn('v3.55 sos',e)}return}
     if(a==='close'){closePanel();return}
     if(a==='retry'){st.state='buscando';render();refresh();return}
@@ -8371,7 +8389,7 @@ function up(){
   if(!armed)return;
   const dur=performance.now()-t0;
   stopHold();
-  if(!fired&&dur<700)showTip();
+  if(!fired)fire();   // v3.56: basta un toque (la cuenta atrás de 3 s y el botón Cancelar evitan los avisos por error)
 }
 function move(e){
   if(!armed)return;
@@ -8381,14 +8399,14 @@ function move(e){
 function mkFab(){
   if(document.getElementById('sosFab'))return;
   fab=document.createElement('button');fab.id='sosFab';fab.type='button';
-  fab.setAttribute('aria-label','SOS: mantén pulsado 2 segundos para pedir ayuda');
+  fab.setAttribute('aria-label','SOS: pulsa para pedir ayuda; se avisa a tus contactos en 3 segundos si no cancelas');
   fab.innerHTML='<span class="ring"></span><span class="t">SOS</span>';
   fab.addEventListener('pointerdown',down);
   fab.addEventListener('pointerup',up);
   fab.addEventListener('pointercancel',stopHold);
   fab.addEventListener('pointermove',move);
   fab.addEventListener('contextmenu',e=>e.preventDefault());
-  fab.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();showTip()}});
+  fab.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fire()}});
   document.body.appendChild(fab);
 }
 
@@ -8410,7 +8428,7 @@ function page(){
   const el=document.querySelector('#content');if(!el)return;
   const c=get(),n=c.contacts.length;
   let h='<section class="panel futuristic" id="sosPage"><div class="settings-head"><button class="back" onclick="backToGeneralMenu()">←</button><div class="section-title" style="margin:0">🆘 SOS y contactos</div></div>';
-  h+='<div class="note" style="margin:12px 0">Mantén pulsado el botón rojo <b>SOS</b> (arriba a la derecha) '+Math.round(S.holdMs/1000)+' segundos y se abre el aviso con tu ubicación. Los mensajes los envías tú desde tu móvil: no se manda nada solo.</div>';
+  h+='<div class="note" style="margin:12px 0">Pulsa el botón rojo <b>SOS</b> (arriba a la izquierda, debajo del botón MENÚ). Empieza una cuenta atrás de '+((window.PDCSOS2&&PDCSOS2.cdSec)||3)+' segundos y, si no pulsas <b>Cancelar</b>, se avisa solo a tus contactos de la app, con tu ubicación. SMS y WhatsApp están en «Otras formas de avisar»: ahí sí envías tú.</div>';
   h+='<div class="sos-lab">Tu nombre (sale en el mensaje)</div><input class="sos-in" id="sosName" maxlength="40" autocomplete="off" value="'+esc(c.name)+'" placeholder="Por ejemplo: Juan">';
   h+='<div class="sos-lab" id="sosPhLab">Contactos de confianza (por teléfono: SMS y WhatsApp)</div>';
   if(!n)h+='<div class="note" style="margin:8px 0">Aún no hay ninguno. Añade a quien quieras que reciba tu aviso.</div>';
@@ -8487,7 +8505,7 @@ if(document.body)mkFab();else document.addEventListener('DOMContentLoaded',mkFab
 'use strict';
 const S=window.PDCSOS;
 if(!S||window.PDCSOS2)return;
-const X=window.PDCSOS2={cdSec:5,tickMs:1000,pollMs:20000,watchMs:60000,gapMs:15000,windowMs:3*3600e3};
+const X=window.PDCSOS2={cdSec:3,tickMs:1000,pollMs:20000,watchMs:60000,gapMs:15000,windowMs:3*3600e3};
 const FN='sos-send',K_DEV='pdc_sos2_dev',K_SEEN='pdc_sos2_seen',K_MINE='pdc_sos2_mine';
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ls={get(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
@@ -8513,7 +8531,7 @@ async function callFn(body){
   const c=sb();if(!c)return {ok:false,error:'sin_nube'};
   try{
     const r=await tmo(c.functions.invoke(FN,{body:body}),20000);
-    if(r&&r.error){let j=null;try{j=await r.error.context.json()}catch(e){}return {ok:false,error:(j&&j.error)||'red'}}
+    if(r&&r.error){let j=null,stt=0;try{stt=Number(r.error.context&&r.error.context.status)||0}catch(e){}try{j=await r.error.context.json()}catch(e){}return {ok:false,error:(j&&j.error)||(stt===404?'sin_servidor':'red')}}
     return (r&&r.data&&typeof r.data==='object')?r.data:{ok:false,error:'respuesta'};
   }catch(e){return {ok:false,error:'red'}}
 }
@@ -8717,8 +8735,8 @@ function paHtml(){
     else s='🧪 PRUEBA: el aviso solo llegará a <b>tu propio móvil</b>, a nadie más.';
     if(a.state==='tidle'||a.state==='terr'||a.state==='tdone')b='<button class="go" data-a="app-test">🔔 Probar en mi móvil</button>';
   }else if(a.state==='wait'){
-    s='<div class="sa-w">⏳ Avisando a tus contactos de la app en <span id="sosAppCd">'+a.cd+'</span> s…</div>';
-    b='<button class="go" data-a="app-now">Avisar ya</button><button data-a="app-cancel">Cancelar</button>';
+    s='<div class="sa-w sa-cd">🚨 Aviso a tus contactos en <span id="sosAppCd">'+a.cd+'</span> s</div><div class="sa-sm">Se envía solo, con tu ubicación. Si ha sido sin querer, pulsa Cancelar.</div>';
+    b='<button class="sa-cancel" data-a="app-cancel">✖ CANCELAR</button><button class="go" data-a="app-now">Avisar ya</button>';
   }else if(a.state==='sending')s='<div class="sa-w">📡 Avisando a tus contactos de la app…</div>';
   else if(a.state==='done'){
     const r=a.res||{};
@@ -8731,10 +8749,10 @@ function paHtml(){
   else if(a.state==='none'){s='ℹ️ Nadie ha aceptado todavía ser tu contacto en la app. Invítalos en Ajustes → SOS.';b='<button data-a="app-cfg">Ir a Ajustes</button>'}
   else if(a.state==='cancel'){s='Aviso por la app cancelado.';b='<button class="go" data-a="app-now">Avisar ahora</button>'}
   else if(a.state==='nologin'){s='ℹ️ Entra en tu cuenta (Ajustes → Cuenta) para avisar también por la app.'}
-  else if(a.state==='err'){s='<div class="sa-b">⚠️ No he podido avisar por la app ('+esc(a.error==='demasiados'?'demasiados avisos seguidos':(a.error==='sin_firebase'?'falta configurar Firebase en el servidor':'sin conexión o error'))+'). Usa SMS o WhatsApp.</div>';b='<button class="go" data-a="app-now">Reintentar</button>'}
+  else if(a.state==='err'){s='<div class="sa-b">⚠️ No he podido avisar por la app ('+esc(a.error==='demasiados'?'demasiados avisos seguidos':(a.error==='sin_firebase'?'falta configurar Firebase en el servidor':(a.error==='sin_servidor'?'el servidor aún no está preparado':'sin conexión o error')))+'). Usa SMS o WhatsApp.</div>';b='<button class="go" data-a="app-now">Reintentar</button>'}
   return '<div class="sos-box" id="sosAppBox"><b>📲 Aviso a mis contactos con la app</b><div id="sosAppSt">'+s+'</div><div class="sa-btns" id="sosAppBt">'+b+'</div></div>';
 }
-function paPaint(){const box=document.getElementById('sosAppBox');if(!box){try{S.render&&S.render()}catch(e){}return}const h=paHtml();const tmp=document.createElement('div');tmp.innerHTML=h;const nb=tmp.firstChild;if(nb)box.replaceWith(nb)}
+function paPaint(){const box=document.getElementById('sosAppBox');if(!box){try{S.render&&S.render()}catch(e){}return}const h=paHtml();const tmp=document.createElement('div');tmp.innerHTML=h;const nb=tmp.firstChild;if(nb)box.replaceWith(nb);try{if(S.appOk&&S._okR!==undefined&&S._okR!==!!S.appOk())S.render()}catch(e){}}
 function paBody(test){
   const f=PST&&PST.pos;
   const b={action:'alert',name:myName(),phone:myPhone(),msg:(S.get().msg||'').trim(),test:!!test};
@@ -8794,11 +8812,21 @@ S.panelOpened=function(test,st){
   })();
 };
 S.panelClosed=function(){clearInterval(cdT);cdT=0;PA=null;PST=null};
+/* v3.56: ¿el aviso por la app está en marcha (cuenta atrás, enviándose o enviado)? Si no, SMS / WhatsApp salen abiertos. */
+S.appOk=function(){
+  if(!sb())return false;
+  if(!PA)return true;
+  if(PA.test)return true;
+  const s=PA.state;
+  if(s==='check'||s==='wait'||s==='sending'||s==='fine')return true;
+  if(s==='done')return !!(PA.res&&PA.res.devices>0&&PA.res.sent>0);
+  return false;
+};
 S.panelPos=function(pos){if(PA&&PA.id&&PA.sentNoLoc)paUpdate(pos)};
 S.panelClick=function(a){
   if(!PA)return;
   if(a==='app-now'){PA.cd=0;paSend()}
-  else if(a==='app-cancel'){clearInterval(cdT);cdT=0;PA.state='cancel';paPaint()}
+  else if(a==='app-cancel'){clearInterval(cdT);cdT=0;S.closePanel()}
   else if(a==='app-test')paTest();
   else if(a==='app-cfg'){S.closePanel();try{show('settings')}catch(e){}try{settingsFrom=1}catch(e){}S.page()}
   else if(a==='app-fine'){
@@ -8885,9 +8913,11 @@ S.pageAfter=function(root){
     if(a==='app-snd'){try{const N=NOTI();if(N&&N.openSettings)await N.openSettings({what:'channel'})}catch(e){}return}
     if(a==='app-probe'){
       b.disabled=true;const old=b.textContent;b.textContent='Enviando…';
-      const r=await callFn({action:'alert',test:true,name:myName(),phone:myPhone()});
+      let pp=null;try{const g=S.warm&&await Promise.race([S.warm(),new Promise(rs=>setTimeout(()=>rs({err:'t'}),9000))]);if(g&&!g.err&&g.lat!=null&&g.lon!=null)pp=g}catch(e){}   // v3.56: la prueba lleva tu ubicación (si se puede sacar)
+      const pb={action:'alert',test:true,name:myName(),phone:myPhone()};if(pp){pb.lat=pp.lat;pb.lon=pp.lon;pb.acc=pp.acc}
+      const r=await callFn(pb);
       b.disabled=false;b.textContent=old;
-      msg(r.ok?(r.devices>0?'✅ Prueba enviada: debe sonar o vibrar en tu móvil en unos segundos.':'Este móvil aún no está activado: pulsa «Activar avisos en este móvil».'):'No se ha podido enviar la prueba ('+(r.error==='demasiados'?'demasiadas pruebas seguidas':'sin conexión o error')+').',r.ok&&r.devices>0?'sos-ok2':'sos-err');
+      msg(r.ok?(r.devices>0?'✅ Prueba enviada'+(pp?' con tu ubicación':' (sin ubicación: no he podido sacarla)')+': debe sonar o vibrar en tu móvil en unos segundos.':'Este móvil aún no está activado: pulsa «Activar avisos en este móvil».'):'No se ha podido enviar la prueba ('+(r.error==='demasiados'?'demasiadas pruebas seguidas':'sin conexión o error')+').',r.ok&&r.devices>0?'sos-ok2':'sos-err');
       return;
     }
     if(a==='app-inv'){
@@ -8945,6 +8975,60 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 /* con la app abierta y los avisos activos en este movil: mira cada minuto si hay un aviso nuevo (con la app en primer plano el sistema no muestra la notificacion) */
 setInterval(()=>{try{if(document.visibilityState==='visible'&&dev().on&&nowMs()-lastCheck>=X.watchMs)checkAlerts(false)}catch(e){}},5000);
 setTimeout(()=>{silentStart().then(()=>checkAlerts(true))},3500);
+})();
+</script>
+<style id="pdc-v356-css">
+/* v3.56 · boton SOS a la izquierda, debajo del boton MENU (la posicion exacta la calcula el modulo de abajo; estos valores son por si falla) */
+#sosFab{left:var(--sos-l,9px)!important;right:auto!important;top:var(--sos-t,69px)!important}
+#sosPanel .sos-more{display:none}
+#sosPanel .sos-more.open{display:block}
+#sosPanel .sos-more-b{display:block;width:100%;text-align:center;border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;border-radius:14px;padding:12px;margin:10px 0;font:800 15px Inter,system-ui,sans-serif;cursor:pointer}
+#sosAppBox .sa-cd{font-size:19px}
+#sosAppBox .sa-cd #sosAppCd{font-size:46px;font-weight:900;line-height:1;margin:0 6px;color:#fff;vertical-align:middle}
+#sosAppBox .sa-sm{font-size:13px;opacity:.88;margin-top:4px;line-height:1.35}
+/* v3.56 · pantalla roja del contacto: el boton «Llamar al 112» salia blanco sobre blanco (la regla del boton ganaba al color rojo) */
+#sosAlertScr button.b.e112{background:#fff;color:#8e0000}
+#sosAppBox button.sa-cancel{flex:1 1 100%;font-size:24px;padding:20px 14px;border-radius:16px;background:#fff;color:#c62828;box-shadow:0 4px 14px rgba(0,0,0,.45);letter-spacing:.5px}
+/* v3.56 · Calculadora: «Cancelaciones · N» al lado de «Ultimos viajes · N» */
+.triplist-head.has-cn{flex-direction:row!important;align-items:baseline;justify-content:space-between;gap:10px}
+.triplist-head .cn-n{font-weight:900;color:#e5484d;white-space:nowrap}
+/* v3.56 · cuadros € / hora, € / viaje y € / km: las cantidades de abajo, un 20 % mas grandes y en negrita */
+html body #content .efficiency-card .sub{font-size:12px!important;font-weight:800!important;line-height:1.25!important}
+/* v3.56 · Control · «Todas las apps»: circulo «Total apps» con colores fijos (siempre se lee) */
+.control-circles .control-metric.cg-tot small,.control-circles .control-metric.cg-tot b{opacity:1!important;visibility:visible!important;-webkit-text-fill-color:currentColor!important}
+html body .control-circles .control-metric.cg-tot small{color:#f5fbff!important}
+html body .control-circles .control-metric.cg-tot b{color:#f5fbff!important}
+html body.lt #content .control-circles .control-metric.cg-tot small{color:#5a6b85!important}
+html body.lt #content .control-circles .control-metric.cg-tot b{color:#0b1f3f!important}
+</style>
+<script id="pdc-v356">
+/* v3.56 · el boton SOS (fijo) se coloca a la izquierda, JUSTO debajo del boton MENU de la cabecera. Al desplazar la pantalla sigue a la cabecera y,
+   cuando esta se sale por arriba, se queda arriba a la izquierda (siempre a mano). En Control, Facturacion, Informe y Ajustes (sin boton MENU) va en la esquina izquierda de la cabecera. */
+(function(){
+  var raf=0;
+  function put(){
+    raf=0;
+    try{
+      var f=document.getElementById('sosFab');if(!f)return;
+      var sz=f.offsetWidth||50,t=null,l=null;
+      var m=document.querySelector('.hdr-menu-hit');
+      if(m&&getComputedStyle(m).display!=='none'){var r=m.getBoundingClientRect();if(r.width>0){t=r.bottom+6;l=r.left+(r.width-sz)/2;
+        var hd0=document.querySelector('.app .header');if(hd0){var hb=hd0.getBoundingClientRect().bottom,lim=hb-4-sz;if(t>lim)t=Math.max(r.bottom+2,lim)}}}   /* si la cabecera es corta (pantallas muy estrechas) se acerca al MENU para no tocar el borde */
+      if(t===null){var h=document.querySelector('.app .header');if(h){var q=h.getBoundingClientRect();if(q.width>0){t=q.top+7;l=q.left+9}}}
+      if(t===null){t=8;l=9}
+      var maxT=Math.max(8,(window.innerHeight||600)-sz-8);
+      t=Math.min(maxT,Math.max(8,Math.round(t)));l=Math.max(4,Math.round(l));
+      f.style.setProperty('--sos-t',t+'px');f.style.setProperty('--sos-l',l+'px');
+    }catch(e){}
+  }
+  function req(){if(!raf)raf=requestAnimationFrame(put)}
+  window.PDC356=window.PDC356||{};window.PDC356.sosPlace=put;
+  window.addEventListener('scroll',req,{passive:true,capture:true});
+  window.addEventListener('resize',req);window.addEventListener('orientationchange',function(){setTimeout(req,200)});
+  window.addEventListener('load',function(){req();setTimeout(req,400)});
+  document.addEventListener('DOMContentLoaded',req);
+  try{if(window.MutationObserver&&document.body)new MutationObserver(req).observe(document.body,{attributes:true,attributeFilter:['class','data-vista']})}catch(e){}
+  req();setTimeout(req,300);setTimeout(req,1200);
 })();
 </script>
 <script id="pdc-rate">

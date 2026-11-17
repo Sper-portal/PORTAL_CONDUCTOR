@@ -255,7 +255,7 @@ public class OfferAnalyzer {
         public boolean round5 = true;        // el bruto se redondea a 5 centimos (como hace Bolt); el neto nunca se redondea
         public double fine = 0;              // ajuste fino (%) que se suma al calculo cuando hay demanda
         public double peakKm = 6.5;          // v3.34: la tarjeta de punta solo se usa en viajes de menos de estos km (0 = en todos)
-        public double longKm = 10, longDisc = 13;   // v3.34: viajes largos (desde longKm km) con demanda: la tarjeta baja longDisc % (0 = sin descuento)
+        public double longKm = 10, longDisc = 13;   // v3.34: viajes largos (desde longKm km; desde la v3.56 con o sin demanda y tambien al aeropuerto): la tarjeta baja longDisc % (0 = sin descuento)
         public boolean eventOn = true;       // v3.34: en lugares de eventos (IFEMA, Bernabeu...) no se aplica ese descuento
         public boolean atEvent = false;      // lo pone el servicio en cada lectura segun la ubicacion (no se guarda)
         public boolean fixOk = false;        // v3.37: hay ubicacion reciente (la pone ZoneLocator; no se guarda)
@@ -518,7 +518,7 @@ public class OfferAnalyzer {
         double fm = m > 1.0 + 1e-9 ? 1 + c.fine / 100.0 : 1.0;
         double disc = 0;
         String evShown = "";
-        if (c.longDisc > 0 && !ma && !air && km >= c.longKm && m > 1.0 + 1e-9) {   // el aeropuerto no cambia
+        if (c.longDisc > 0 && !ma && km >= c.longKm) {   // v3.56: con o sin demanda, y tambien al aeropuerto
             if (c.eventOn && ev.length() > 0) evShown = ev;
             else { disc = c.longDisc; raw = raw * (1 - disc / 100.0); }
         }

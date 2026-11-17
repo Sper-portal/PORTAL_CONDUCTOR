@@ -1231,9 +1231,9 @@ public class ScreenReaderService extends AccessibilityService {
         return "";
     }
 
-    /** viaje largo con demanda: el descuento medio de la tarjeta; en un lugar de evento, sin descuento (v3.34) */
+    /** viaje largo (con o sin demanda desde la v3.56): el descuento medio de la tarjeta; en un lugar de evento, sin descuento (v3.34) */
     static String longLine(OfferAnalyzer.Result r) {
-        if (r.estDisc > 1e-9) return "Viaje largo con demanda: precio base \u2212" + num1(r.estDisc) + " %";
+        if (r.estDisc > 1e-9) return "Viaje largo: precio base \u2212" + num1(r.estDisc) + " %";
         if (r.estEvent != null && r.estEvent.length() > 0) return "Lugar de evento (" + r.estEvent + "): sin descuento";
         return "";
     }
