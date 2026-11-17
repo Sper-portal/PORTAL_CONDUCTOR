@@ -19,6 +19,8 @@ public class OfferAnalyzer {
         public boolean weekendNow = false;       // v3.15h: \u00abahora es hora punta\u00bb para la zona actual (lo decide quien llama con isWeekend)
         public int manualKind = -1;              // v3.37: zona de la recogida elegida a mano en el aviso (0 baja, 1 media, 2 alta; -1 = ninguna)
         public String manualSig = "";            // v3.37: huella de la oferta (sin zona) a la que vale esa eleccion; si no coincide, se ignora
+        public List<StreetMemory.Entry> streets = null;   // v3.57: calles guardadas («Calles limitrofes»); null = ninguna
+        public boolean noStreets = false;                 // v3.57: true = no mirar las calles guardadas (para calcular la zona «de la ubicacion» que se ofrece como boton)
     }
 
     public static class Result {
@@ -56,6 +58,8 @@ public class OfferAnalyzer {
         public int zoneAuto = -1;                   // v3.37: zona que sale de la ubicacion; -1 si no hay botones de zona
         public int[] zoneKinds = new int[0];        // v3.37: zonas que se pueden elegir en el aviso (0 baja, 1 media, 2 alta); vacio = no hay duda que resolver
         public double[] zoneNets = new double[0];   // v3.37: neto estimado con cada una de ellas
+        public String pickStreet = "", pickNum = "", pickCp = "";   // v3.57: direccion de la RECOGIDA leida de la tarjeta (para guardar la zona que elijas)
+        public String memKey = "";                                    // v3.57: clave de la calle guardada que se uso ("" = ninguna)
     }
 
     // =====================================================================
@@ -769,15 +773,16 @@ public class OfferAnalyzer {
 
     /** v3.37: neto de la oferta con la zona "kind" (la de la ubicacion si kind == auto); -1 si no se puede */
     private static double netWith(List<String> rawNodes, Params p, boolean lenient, boolean isBolt, int kind, int auto, String sig) {
-        int k0 = p.manualKind; String s0 = p.manualSig;
+        int k0 = p.manualKind; String s0 = p.manualSig; boolean n0 = p.noStreets;
         try {
             p.manualKind = kind == auto ? -1 : kind;
             p.manualSig = sig;
+            p.noStreets = kind == auto;      // v3.57: la zona «de la ubicacion» no mira las calles guardadas
             Result q = analyzeCore(rawNodes, p, lenient, isBolt);
             if (!q.estimated || q.estNet < 0) return -1;
             if (kind != auto && !"manual".equals(q.estZoneSrc)) return -1;
             return q.estNet;
-        } finally { p.manualKind = k0; p.manualSig = s0; }
+        } finally { p.manualKind = k0; p.manualSig = s0; p.noStreets = n0; }
     }
 
     /**
@@ -790,7 +795,7 @@ public class OfferAnalyzer {
         r.baseSig = baseSig(r);
         r.estNetAuto = r.estNet;
         String src = r.estZoneSrc == null ? "" : r.estZoneSrc;
-        boolean manual = "manual".equals(src);
+        boolean manual = "manual".equals(src) || "street".equals(src);   // v3.57: la calle guardada se trata como una eleccion tuya (se puede cambiar con los botones)
         int auto = b.zoneKind;
         if (auto < Z_LOW || auto > Z_HIGH) return;
         if (manual) { double na = netWith(rawNodes, p, lenient, isBolt, auto, auto, r.baseSig); if (na >= 0) r.estNetAuto = na; }
@@ -989,11 +994,22 @@ public class OfferAnalyzer {
                         } else if (cpZ != null && !cpListed) {
                             r.estCpUnlisted = cpZ;      // v3.37: la oferta trae codigo postal pero no esta en tus listas: se usa la ubicacion y se avisa
                         }
-                        // v3.37: zona elegida a mano en el aviso: solo vale para ESTA oferta y solo si la zona salia de la ubicacion (no de un codigo postal de tus listas ni de Ajustes)
-                        if (kz < 0 && p.manualKind >= Z_LOW && p.manualKind <= Z_HIGH && p.manualSig != null && p.manualSig.length() > 0 && p.manualSig.equals(baseSig(r))) {
+                        // v3.57: direccion de la recogida y, si esta en tus calles guardadas, su zona (manda sobre el codigo postal y el mapa; no sobre lo que acabas de elegir en este aviso)
+                        StreetMemory.Addr adr = trip == null ? null : StreetMemory.pickupAddress(nodes, trip.first);
+                        int mk = -1; StreetMemory.Entry me = null;
+                        if (adr != null) {
+                            r.pickStreet = adr.street; r.pickNum = adr.num; r.pickCp = adr.cp;
+                            if (p.streets != null && !p.noStreets) { me = StreetMemory.find(p.streets, adr); if (me != null && me.num.length() > 0) mk = me.zone; }   // un tramo dudoso (sin numero) no se aplica solo: hasta que le pongas el numero sigues eligiendo en el aviso
+                        }
+                        // v3.37: zona elegida a mano en el aviso: solo vale para ESTA oferta y solo si la zona salia de la ubicacion (no de un codigo postal de tus listas ni de Ajustes) o de una calle guardada
+                        if ((kz < 0 || mk >= 0) && p.manualKind >= Z_LOW && p.manualKind <= Z_HIGH && p.manualSig != null && p.manualSig.length() > 0 && p.manualSig.equals(baseSig(r))) {
                             p.bolt.zoneKind = p.manualKind; p.bolt.zoneName = ""; p.bolt.zoneSrc = "manual";
                             java.util.Calendar calM = java.util.Calendar.getInstance(); if (p.nowMs > 0) calM.setTimeInMillis(p.nowMs);
                             peakZ = isPeak(p.bolt, p.manualKind, calM);
+                        } else if (mk >= Z_LOW && mk <= Z_HIGH) {
+                            p.bolt.zoneKind = mk; p.bolt.zoneName = me.street + (me.num.length() > 0 ? " " + me.num : ""); p.bolt.zoneSrc = "street"; r.memKey = me.key();
+                            java.util.Calendar calS = java.util.Calendar.getInstance(); if (p.nowMs > 0) calS.setTimeInMillis(p.nowMs);
+                            peakZ = isPeak(p.bolt, mk, calS);
                         }
                     }
                 } catch (Exception ex) { p.bolt.zoneKind = zk0; p.bolt.zoneName = zn0; p.bolt.zoneSrc = zs0; peakZ = p.weekendNow; }

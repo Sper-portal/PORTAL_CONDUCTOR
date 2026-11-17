@@ -657,6 +657,7 @@ public class ScreenReaderService extends AccessibilityService {
         p.tolPct = sp.getFloat("rent_tolPct", 15f);
         p.tolPickup = sp.getFloat("rent_tolPickup", 1f);
         p.bolt = boltCfg();
+        p.streets = streetList();   // v3.57
         p.weekendNow = OfferAnalyzer.isWeekend(p.bolt, java.util.Calendar.getInstance());
         if (manualKind >= 0 && manualSig.length() > 0 && System.currentTimeMillis() - manualTs < 120000L) { p.manualKind = manualKind; p.manualSig = manualSig; }   // v3.37
         return p;
@@ -840,6 +841,7 @@ public class ScreenReaderService extends AccessibilityService {
                     sp.edit().putString("snap_" + pkg, ta.length() + " textos visibles: " + (all.length() > 600 ? all.substring(0, 600) : all)).apply();
                 }
                 OfferAnalyzer.Result r = OfferAnalyzer.analyze(nodes, rentParams(), false, BOLT_PKG.matcher(pkg).find());
+                touchStreet(r);   // v3.57
                 if (all.contains("\u20AC") || all.toLowerCase().contains("km")) {
                     sp.edit().putLong("rent_evalTs", now).putString("rent_why", r.offer
                         ? ("Oferta reconocida: " + r.verdict + (r.estimated ? " | neto estimado Bolt " : " | precio ") + r.price + " | viaje " + r.tripKm + " km/" + r.tripMin + " min | recogida " + r.pickupKm + " km/" + r.pickupMin + " min" + (r.orderAssumed ? " (orden estimado)" : ""))
@@ -1103,6 +1105,48 @@ public class ScreenReaderService extends AccessibilityService {
         return boltCfgCache;
     }
 
+    // ===================== v3.57: calles limitrofes (memoria de la zona por direccion) =====================
+    private String streetsJsonCache = null;
+    private List<StreetMemory.Entry> streetsCache = null;
+
+    /** calles guardadas (se vuelven a leer solo si han cambiado) */
+    private List<StreetMemory.Entry> streetList() {
+        try {
+            String js = getSharedPreferences("portal", Context.MODE_PRIVATE).getString("bolt_streets", "");
+            if (js == null) js = "";
+            if (streetsCache == null || !js.equals(streetsJsonCache)) { streetsCache = StreetMemory.parseJson(js); streetsJsonCache = js; }
+            return streetsCache;
+        } catch (Exception e) { return null; }
+    }
+
+    /** apunta la zona que acabas de elegir en el aviso para la direccion de la recogida (solo hay botones cuando habia duda entre zonas) */
+    private void rememberStreet(String street, String num, String cp, int kind) {
+        try {
+            if (street == null || street.length() == 0 || kind < 0 || kind > 2) return;
+            StreetMemory.Addr a = StreetMemory.addrOf(street, num, cp);
+            if (a == null) return;
+            SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);
+            List<StreetMemory.Entry> l = StreetMemory.parseJson(sp.getString("bolt_streets", ""));
+            StreetMemory.put(l, a, kind, 'u', System.currentTimeMillis());
+            sp.edit().putString("bolt_streets", StreetMemory.toJson(l)).apply();
+        } catch (Exception e) { }
+    }
+
+    /** anota que una calle guardada se ha usado (como mucho cada 12 horas) para olvidar primero las que no se usan */
+    private void touchStreet(OfferAnalyzer.Result r) {
+        try {
+            if (r == null || !"street".equals(r.estZoneSrc) || r.memKey == null || r.memKey.length() == 0) return;
+            SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);
+            List<StreetMemory.Entry> l = StreetMemory.parseJson(sp.getString("bolt_streets", ""));
+            for (StreetMemory.Entry e : l) {
+                if (!e.del && e.key().equals(r.memKey)) {
+                    if (StreetMemory.touch(e, System.currentTimeMillis())) sp.edit().putString("bolt_streets", StreetMemory.toJson(l)).apply();
+                    break;
+                }
+            }
+        } catch (Exception e) { }
+    }
+
     // ---- voz (texto a voz del movil) ----
     private TextToSpeech tts = null;
     private boolean ttsReady = false;
@@ -1193,10 +1237,12 @@ public class ScreenReaderService extends AccessibilityService {
         String z = "Zona " + OfferAnalyzer.zoneName(r.estZone);
         String cp = r.estCpUnlisted != null && r.estCpUnlisted.length() > 0 ? " \u00B7 CP " + r.estCpUnlisted + " sin zona en tus listas" : "";
         if ("forced".equals(r.estZoneSrc)) return z + " (forzada en Ajustes)";
+        if ("street".equals(r.estZoneSrc)) return z + " (calle guardada: " + (r.estArea == null ? "" : r.estArea) + (r.zoneAuto >= 0 && r.zoneAuto != r.estZone ? "; por ubicaci\u00F3n: " + OfferAnalyzer.zoneName(r.zoneAuto) : "") + ")" + cp;
         if ("manual".equals(r.estZoneSrc)) return z + " (elegida por ti" + (r.zoneAuto >= 0 ? "; por ubicaci\u00F3n: " + OfferAnalyzer.zoneName(r.zoneAuto) : "") + ")" + cp;
-        if ("area".equals(r.estZoneSrc) || "postal".equals(r.estZoneSrc)) return z + (r.estArea != null && r.estArea.length() > 0 ? " (" + r.estArea + ")" : "") + cp;
+        String dud = r.zoneKinds != null && r.zoneKinds.length >= 2 ? " \u00B7 zona no confirmada: elige abajo" : "";   // v3.57: hay botones de zona y esta direccion no esta guardada
+        if ("area".equals(r.estZoneSrc) || "postal".equals(r.estZoneSrc)) return z + (r.estArea != null && r.estArea.length() > 0 ? " (" + r.estArea + ")" : "") + cp + dud;
         String w = ZoneLocator.why();
-        return z + " (" + (w.length() > 0 ? w + " \u2192 zona por defecto" : "fuera de tus zonas dibujadas") + ")" + cp;
+        return z + " (" + (w.length() > 0 ? w + " \u2192 zona por defecto" : "fuera de tus zonas dibujadas") + ")" + cp + dud;
     }
 
     /** linea de la tarjeta usada: la del aeropuerto (recogidas) o la de la zona de la recogida, de valle o de hora punta */
@@ -1333,11 +1379,12 @@ public class ScreenReaderService extends AccessibilityService {
         } catch (Exception e) { }
     }
 
-    private void chooseZone(int kind, int auto, String sig) {
+    private void chooseZone(int kind, int auto, String sig, String street, String num, String cp) {
         try {
             manualKind = kind == auto ? -1 : kind;
             manualSig = manualKind < 0 || sig == null ? "" : sig;
             manualTs = System.currentTimeMillis();
+            rememberStreet(street, num, cp, kind);      // v3.57: la zona que eliges se guarda con la direccion de la recogida
             zcSig = "";
             evaluateOffer();      // se vuelve a leer la oferta que sigue en pantalla y se recalcula con la zona elegida
         } catch (Exception e) { }
@@ -1384,6 +1431,7 @@ public class ScreenReaderService extends AccessibilityService {
                 zcView.addView(lab);
                 final String sigC = r.baseSig;
                 final int autoC = r.zoneAuto;
+                final String stS = r.pickStreet, stN = r.pickNum, stC = r.pickCp;   // v3.57
                 for (int i = 0; i < r.zoneKinds.length; i++) {
                     final int kind = r.zoneKinds[i];
                     boolean sel = kind == r.estZone;
@@ -1401,7 +1449,7 @@ public class ScreenReaderService extends AccessibilityService {
                     g.setColor(Color.parseColor(sel ? "#2563EB" : "#1E3A8A"));
                     g.setStroke((int) (2 * d), Color.parseColor(sel ? "#FFFFFF" : "#60A5FA"));
                     c.setBackground(g);
-                    c.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { chooseZone(kind, autoC, sigC); } });
+                    c.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { chooseZone(kind, autoC, sigC, stS, stN, stC); } });
                     LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
                     clp.setMargins((int) (3 * d), 0, (int) (3 * d), 0);
                     zcView.addView(c, clp);

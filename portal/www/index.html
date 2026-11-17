@@ -2677,7 +2677,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.56';
+const APP_VERSION='v3.57';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -4693,6 +4693,9 @@ P.mergeDb=function(L,C){
       s.rateLedger=m;
     }
   }
+  if(Cs.boltStreets||Ls.boltStreets){   // v3.57: calles limítrofes: se unen las dos listas (por dirección gana el cambio más reciente)
+    try{const St=window.__pdcSt;s.boltStreets=St&&St.merge?St.merge(Cs.boltStreets,Ls.boltStreets):(Ls.boltStreets||Cs.boltStreets)}catch(e){s.boltStreets=Ls.boltStreets||Cs.boltStreets}
+  }
   out.settings=s;
   if('activeSession' in L)out.activeSession=L.activeSession;
   // el resto (mensajes de soporte, etc.)
@@ -5340,6 +5343,87 @@ async function fromCloud(){
 P.boltFromCloud=fromCloud;
 setInterval(()=>{try{if(B.loaded&&(db!==seenDb||pend)){seenDb=db;fromCloud()}}catch(e){}},1500);
 
+/* ---------- v3.57 · CALLES LIMÍTROFES ----------
+   Direcciones de recogida donde TÚ elegiste la zona (baja, media o alta) cuando el aviso dudaba entre dos. Se guardan aparte de tus ajustes (no pisan tus tarjetas ni tu mapa),
+   se unen entre tus móviles (por dirección gana el cambio más reciente) y el lector de Bolt las usa la próxima vez que sale esa misma dirección. Máximo 300.
+   Cada una: s = calle como se ve, n = número, c = código postal, k = nombre sin «Calle de…» (clave), z = zona 0/1/2, o = u (la elegiste en un aviso) / m (a mano) / d (tramo dudoso, sin número),
+   t = último cambio, l = último uso (segundos), x = borrada (se recuerda 60 días para que el borrado llegue a tus otros móviles). Igual que StreetMemory.java. */
+const ST_MAX=300,ST_ALL=600,ST_TOMB=60*86400,ST_LS='pdc_streets_v1';
+const ST={list:[],ready:false,edit:null,f:{s:'',n:'',c:'',z:'0'},q:'',more:false,msg:'',err:'',busy:false,undo:null};
+const stNow=()=>Math.floor(Date.now()/1000);
+const stPlain=s=>String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]+/g,'').replace(/[º°ª]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+const ST_TYPES=' calle c cl avenida avda av paseo p po plaza pza pl camino carretera ctra travesia trv ronda glorieta bulevar via urbanizacion urb callejon cuesta pasaje costanilla autovia parque ';
+const ST_CONN=' de del la las los el ';
+function stCore(s){const tk=stPlain(s).split(' ');let i=0;if(tk[0]&&ST_TYPES.indexOf(' '+tk[0]+' ')>=0)i=1;while(i<tk.length-1&&ST_CONN.indexOf(' '+tk[i]+' ')>=0)i++;const c=tk.slice(i).filter(Boolean).join(' ');return c.length>60?c.slice(0,60).trim():c}
+const stNum=s=>{const x=stPlain(s).replace(/ /g,'');return /^\d{1,4}[a-z]?$/.test(x)?x:''};
+const stCp=s=>{const x=String(s==null?'':s).trim();return /^28\d{3}$/.test(x)?x:''};
+const stKey=e=>e.k+'|'+(e.n||'')+'|'+(e.c||'');
+const stLive=l=>l.filter(e=>!e.x);
+const stDate=t=>{if(!t)return '';const d=new Date(t*1000);return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0')};
+function stSan(arr){
+  let a=arr;if(typeof a==='string'){try{a=JSON.parse(a)}catch(e){a=[]}}
+  if(!Array.isArray(a))return [];
+  const out=[];
+  for(const x of a){
+    if(!x||typeof x!=='object')continue;
+    const z=Number(x.z);if(!(z===0||z===1||z===2))continue;
+    const s=String(x.s==null?'':x.s).trim().replace(/\s+/g,' ').slice(0,60);let k=String(x.k==null?'':x.k).trim();if(!k)k=stCore(s);if(k.length<2)continue;
+    out.push({s:s||k,n:stNum(x.n),c:stCp(x.c),k,z,o:x.o==='m'?'m':x.o==='d'?'d':'u',t:Math.max(0,Math.floor(Number(x.t))||0),l:Math.max(0,Math.floor(Number(x.l))||0),x:x.x?1:0});
+  }
+  return out;
+}
+const stJson=l=>JSON.stringify(l.slice().sort((a,b)=>stKey(a)<stKey(b)?-1:stKey(a)>stKey(b)?1:0).map(e=>{const o={s:e.s,n:e.n,c:e.c,k:e.k,z:e.z,o:e.o,t:e.t,l:e.l};if(e.x)o.x=1;return o}));
+/* une dos listas: por dirección gana el cambio más reciente (t; a igualdad, el borrado); el último uso (l) es el mayor de los dos */
+function stMerge(a,b){
+  const m=new Map();
+  for(const e of a.concat(b)){
+    const k=stKey(e),p=m.get(k);
+    if(!p){m.set(k,Object.assign({},e));continue}
+    const l=Math.max(p.l,e.l);
+    if(e.t>p.t||(e.t===p.t&&e.x&&!p.x))m.set(k,Object.assign({},e,{l}));else p.l=l;
+  }
+  return Array.from(m.values());
+}
+/* quita las borradas viejas; si hay más de 300 vivas se olvidan las que llevan más tiempo sin usarse */
+function stPrune(l,now){
+  l=l.filter(e=>!(e.x&&now-e.t>ST_TOMB));
+  let live=stLive(l);
+  while(live.length>ST_MAX){let o=live[0];for(const e of live)if(e.l<o.l||(e.l===o.l&&e.t<o.t))o=e;o.x=1;o.t=now;live=stLive(l)}
+  while(l.length>ST_ALL){const tb=l.filter(e=>e.x);if(!tb.length)break;let o=tb[0];for(const e of tb)if(e.t<o.t)o=e;l.splice(l.indexOf(o),1)}
+  return l;
+}
+async function stPush(list){
+  list=stPrune(list,stNow());ST.list=list;
+  const js=stJson(list);
+  try{localStorage.setItem(ST_LS,js)}catch(e){}
+  const sr=SR();if(sr&&sr.setStreets){try{await sr.setStreets({streets:js})}catch(e){}}
+  try{if(db&&db.settings){db.settings.boltStreets=JSON.parse(js);P.saveNow()}}catch(e){}
+}
+/* junta lo del móvil (lector nativo), lo guardado en la pantalla y lo de la cuenta; lo que falte en alguno se le pone */
+async function stSync(){
+  if(ST.busy)return;ST.busy=true;
+  try{
+    const sr=SR();let nat=[],loc=[],cld=[];
+    if(sr&&sr.getStreets){try{const r=await sr.getStreets();nat=stSan(r&&r.streets)}catch(e){}}
+    try{loc=stSan(localStorage.getItem(ST_LS))}catch(e){}
+    try{cld=stSan(db&&db.settings&&db.settings.boltStreets)}catch(e){}
+    const m=stPrune(stMerge(stMerge(stMerge(ST.list,nat),loc),cld),stNow());
+    const js=stJson(m),first=!ST.ready,changed=js!==stJson(ST.list);
+    ST.list=m;ST.ready=true;
+    if(m.length||nat.length||loc.length||cld.length){
+      if(js!==stJson(loc)){try{localStorage.setItem(ST_LS,js)}catch(e){}}
+      if(sr&&sr.setStreets&&js!==stJson(nat)){try{await sr.setStreets({streets:js})}catch(e){}}
+      if(js!==stJson(cld)){try{if(db&&db.settings){db.settings.boltStreets=JSON.parse(js);P.saveNow()}}catch(e){}}
+    }
+    if(changed||first)stRepaint();
+  }catch(e){}finally{ST.busy=false}
+}
+window.__pdcSt={merge:(a,b)=>JSON.parse(stJson(stPrune(stMerge(stSan(a),stSan(b)),stNow())))};
+P.boltStreets={sync:stSync,get list(){return ST.list},core:stCore,num:stNum};
+setTimeout(()=>{try{stSync()}catch(e){}},4200);
+{let stSeen=null,stTick=0;setInterval(()=>{try{stTick++;if(db!==stSeen){stSeen=db;stSync()}else if(stTick%30===0&&!document.hidden)stSync()}catch(e){}},2000)}
+try{document.addEventListener('visibilitychange',()=>{try{if(!document.hidden)stSync()}catch(e){}})}catch(e){}
+
 /* ---------- textos y piezas de la pantalla ---------- */
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const num=v=>{const s=String(v==null?'':v).trim().replace(',','.');if(s==='')return NaN;const n=Number(s);return Number.isFinite(n)?n:NaN};
@@ -5707,11 +5791,123 @@ function panel(id,icon,title,body){
   return '<details class="bz-pn" id="bz_pn_'+id+'" data-pn="'+id+'"'+(B.panel===id?' open':'')+'><summary><b>'+icon+' '+title+'</b><small id="bz_pn_'+id+'_s"></small></summary>'
    +'<div class="bz-pb" id="bz_pb_'+id+'">'+body+'<div class="bz-btns"><button type="button" class="action" id="bz_save_'+id+'" onclick="boltSave()">✔ Guardar</button></div></div></details>';
 }
+/* v3.57 · apartado «Calles limítrofes» (lo que se cambia aquí se guarda al momento: no lleva «Guardar» general) */
+const ZCOL=['#1f9d6b','#d98a00','#c8443a'];
+const stZn=z=>ZN[z].charAt(0).toUpperCase()+ZN[z].slice(1);
+function stSummary(){const n=stLive(ST.list).length,d=stLive(ST.list).filter(e=>!e.n).length;return n===0?'Vacía · se rellena al elegir zona en un aviso con duda':n+(n===1?' calle guardada':' calles guardadas')+' de '+ST_MAX+(d?' · '+d+' por completar':'')}
+function stSizeTxt(){const b=stJson(stLive(ST.list)).length;return b<1024?'menos de 1 KB':'unos '+(Math.round(b/102.4)/10).toString().replace('.',',')+' KB'}
+function stRows(){
+  const q=stPlain(ST.q);let l=stLive(ST.list);
+  if(q)l=l.filter(e=>(stPlain(e.s)+' '+e.n+' '+e.c).indexOf(q)>=0);
+  return l.sort((a,b)=>((!b.n)-(!a.n))||b.t-a.t);        // primero los tramos dudosos (sin número), luego lo más reciente
+}
+function stRowHtml(e){
+  const dud=!e.n;
+  return '<div class="st-row" data-k="'+encodeURIComponent(stKey(e))+'"><div class="st-t"><b>'+esc(e.s)+(e.n?' '+esc(e.n):'')+'</b>'+(dud?' <span class="st-warn">⚠ tramo dudoso</span>':'')
+   +'<small>'+(e.c?'CP '+e.c+' · ':'')+(dud?'falta el número: no se usa sola · ':'')+(e.o==='m'?'añadida a mano':'tu elección')+(e.t?' · '+stDate(e.t):'')+'</small></div>'
+   +'<span class="st-z" style="background:'+ZCOL[e.z]+'">'+stZn(e.z)+'</span>'
+   +'<button type="button" class="st-ic" aria-label="Corregir esta dirección" onclick="boltStEdit(this)">✏️</button><button type="button" class="st-ic" aria-label="Borrar esta dirección" onclick="boltStDel(this)">🗑️</button></div>';
+}
+function stListHtml(){
+  const all=stLive(ST.list).length,rows=stRows();
+  if(!all)return '<div class="bz-hint">Todavía no hay calles guardadas. Se rellenan solas cuando, en un aviso con duda entre zonas, eliges <b>Baja</b>, <b>Media</b> o <b>Alta</b>. También puedes apuntarlas aquí abajo.</div>';
+  if(!rows.length)return '<div class="bz-hint">Ninguna calle coincide con «'+esc(ST.q)+'».</div>';
+  const shown=ST.more?rows:rows.slice(0,40);
+  return shown.map(stRowHtml).join('')+(rows.length>shown.length?'<button type="button" class="secondary st-more" onclick="boltStMore()">Ver las '+(rows.length-shown.length)+' restantes</button>':'');
+}
+function stFormHtml(){
+  const f=ST.f;
+  return '<b class="bz-sub">'+(ST.edit?'Corregir esta dirección':'Añadir o corregir una dirección')+'</b>'
+   +'<div class="st-fr"><input id="st_s" placeholder="Calle" autocomplete="off" value="'+esc(f.s)+'" oninput="boltStIn(this)" style="flex:3"><input id="st_n" placeholder="Nº" autocomplete="off" value="'+esc(f.n)+'" oninput="boltStIn(this)" style="flex:1"><input id="st_c" placeholder="CP" inputmode="numeric" autocomplete="off" value="'+esc(f.c)+'" oninput="boltStIn(this)" style="flex:1.3"></div>'
+   +'<div class="st-fr"><select id="st_z" onchange="boltStIn(this)" style="flex:1">'+[0,1,2].map(i=>'<option value="'+i+'"'+(String(i)===String(f.z)?' selected':'')+'>Zona '+ZN[i]+'</option>').join('')+'</select><button type="button" class="action" id="st_save" onclick="boltStSave()">'+(ST.edit?'Guardar el cambio':'Guardar')+'</button></div>'
+   +(ST.edit?'<div class="st-fr"><button type="button" class="secondary" id="st_cancel" onclick="boltStCancel()">Cancelar</button></div>':'')
+   +'<div class="bz-err" id="st_err">'+esc(ST.err)+'</div>';
+}
+function stFootHtml(){return stLive(ST.list).length+' de '+ST_MAX+' posibles · ocupa '+stSizeTxt()}
+function stMsgHtml(){return esc(ST.msg)+(ST.undo?'<button type="button" class="st-undo" onclick="boltStUndo()">Deshacer</button>':'')}
+function stBodyHtml(){
+  return '<div class="bz-hint">Direcciones de recogida donde, en un aviso con duda entre dos zonas, <b>tú elegiste la zona</b>. La próxima vez que salga esa misma calle con ese mismo número (y código postal), el aviso usa la zona guardada y lo dice («calle guardada»); sigues pudiendo cambiarla con los botones. '
+   +'Otro número de la misma calle <b>no</b> se da por bueno. Si la oferta no trae número queda como <b>tramo dudoso</b>: se apunta, pero no se usa sola hasta que le pongas el número (✏️). '
+   +'No cambia ninguna tarjeta ni fórmula: solo qué zona se usa en esa recogida. Si se llenan las 300, se olvida la que lleva más tiempo sin usarse. Se guarda en tu cuenta y se une entre tus móviles.</div>'
+   +'<div class="st-qrow"><input id="st_q" type="search" placeholder="Buscar calle…" autocomplete="off" value="'+esc(ST.q)+'" oninput="boltStQ(this)"></div>'
+   +'<div id="st_list">'+stListHtml()+'</div>'
+   +'<div id="st_form" class="st-form">'+stFormHtml()+'</div>'
+   +'<div class="bz-hint" id="st_foot">'+stFootHtml()+'</div>'
+   +'<div class="bz-hint" id="st_msg">'+stMsgHtml()+'</div>'
+   +'<div class="bz-zb"><button type="button" class="secondary" id="st_copy" onclick="boltStCopy()">📋 Copiar mi lista</button></div>';
+}
+function pnStreets(){
+  return '<details class="bz-pn" id="bz_pn_streets" data-pn="streets"'+(B.panel==='streets'?' open':'')+'><summary><b>🛣️ Calles limítrofes</b><small id="bz_pn_streets_s"></small></summary>'
+   +'<div class="bz-pb" id="bz_pb_streets"><div id="st_body">'+stBodyHtml()+'</div></div></details>';
+}
+function stRepaint(force){
+  try{
+    const sm=document.getElementById('bz_pn_streets_s');if(sm)sm.textContent=stSummary();
+    const body=document.getElementById('st_body');if(!body)return;
+    const ae=document.activeElement;
+    if(!force&&ae&&body.contains(ae)&&/^(INPUT|SELECT)$/.test(ae.tagName)&&ae.id!=='st_q'){      // estás escribiendo y llega algo de fuera (otro móvil): solo se repinta la lista
+      stList();return;
+    }
+    body.innerHTML=stBodyHtml();
+  }catch(e){}
+}
+function stList(){
+  const l=document.getElementById('st_list'),f=document.getElementById('st_foot'),m=document.getElementById('st_msg'),sm=document.getElementById('bz_pn_streets_s');
+  if(l)l.innerHTML=stListHtml();if(f)f.textContent=stFootHtml();if(m)m.innerHTML=stMsgHtml();if(sm)sm.textContent=stSummary();
+}
+function stAfter(){stSync()}
+function stErr(t){ST.err=t;const x=document.getElementById('st_err');if(x)x.textContent=t}
+window.boltStIn=function(el){const f=ST.f,id=el.id;if(id==='st_s')f.s=el.value;else if(id==='st_n')f.n=el.value;else if(id==='st_c')f.c=el.value;else if(id==='st_z')f.z=el.value;ST.err='';const x=document.getElementById('st_err');if(x)x.textContent=''};
+window.boltStQ=function(el){ST.q=el.value;ST.more=false;stList()};
+window.boltStMore=function(){ST.more=true;stList()};
+window.boltStSave=function(){
+  const f=ST.f,s=String(f.s||'').trim().replace(/\s+/g,' ').slice(0,60),rawN=String(f.n||'').trim(),rawC=String(f.c||'').trim(),k=stCore(s);
+  if(k.length<2)return stErr('Escribe la calle (por ejemplo «Calle San Joaquín»).');
+  const n=rawN?stNum(rawN):'';if(rawN&&!n)return stErr('El número solo puede llevar cifras y, como mucho, una letra (12 o 12B). Si no lo sabes, déjalo vacío: queda como tramo dudoso.');
+  const c=rawC?stCp(rawC):'';if(rawC&&!c)return stErr('El código postal es de 5 cifras y empieza por 28 (por ejemplo 28231). Si no lo sabes, déjalo vacío.');
+  const z=Number(f.z);if(!(z===0||z===1||z===2))return stErr('Elige la zona.');
+  const now=stNow(),list=ST.list.map(e=>Object.assign({},e)),ed=ST.edit,nk=stKey({k,n,c});
+  if(ed&&ed!==nk){const old=list.find(e=>stKey(e)===ed);if(old){old.x=1;old.t=now}}
+  const e=list.find(x=>stKey(x)===nk),o=n?'m':'d';
+  if(e){e.s=s;e.z=z;e.o=o;e.t=now;e.l=now;e.x=0}else list.push({s,n,c,k,z,o,t:now,l:now,x:0});
+  ST.edit=null;ST.f={s:'',n:'',c:'',z:'0'};ST.err='';ST.undo=null;
+  ST.msg='Guardada: '+s+(n?' '+n:'')+(c?' · CP '+c:'')+' → zona '+ZN[z]+'.'+(n?'':' Sin número queda como tramo dudoso: no se usa sola.');
+  stPush(list);stRepaint(true);
+};
+window.boltStEdit=function(el){
+  const row=el.closest&&el.closest('.st-row');if(!row)return;
+  const key=decodeURIComponent(row.getAttribute('data-k')||''),e=ST.list.find(x=>!x.x&&stKey(x)===key);if(!e)return;
+  ST.edit=key;ST.f={s:e.s,n:e.n,c:e.c,z:String(e.z)};ST.err='';ST.msg='';ST.undo=null;
+  stRepaint(true);
+  const fm=document.getElementById('st_form');if(fm&&fm.scrollIntoView)try{fm.scrollIntoView({block:'center',behavior:'smooth'})}catch(x){}
+  const i=document.getElementById(e.n?'st_z':'st_n');if(i&&i.focus)try{i.focus({preventScroll:true})}catch(x){}
+};
+window.boltStCancel=function(){ST.edit=null;ST.f={s:'',n:'',c:'',z:'0'};ST.err='';ST.msg='';stRepaint(true)};
+window.boltStDel=function(el){
+  const row=el.closest&&el.closest('.st-row');if(!row)return;
+  const key=decodeURIComponent(row.getAttribute('data-k')||''),list=ST.list.map(e=>Object.assign({},e)),e=list.find(x=>!x.x&&stKey(x)===key);if(!e)return;
+  e.x=1;e.t=stNow();ST.undo=key;ST.msg='Borrada: '+e.s+(e.n?' '+e.n:'')+'. ';
+  if(ST.edit===key){ST.edit=null;ST.f={s:'',n:'',c:'',z:'0'}}
+  stPush(list);stRepaint(true);
+};
+window.boltStUndo=function(){
+  const key=ST.undo;if(!key)return;const list=ST.list.map(e=>Object.assign({},e)),e=list.find(x=>x.x&&stKey(x)===key);if(!e)return;
+  e.x=0;e.t=stNow();ST.undo=null;ST.msg='Recuperada: '+e.s+(e.n?' '+e.n:'')+'.';stPush(list);stRepaint(true);
+};
+window.boltStCopy=async function(){
+  const l=stRows().sort((a,b)=>stKey(a)<stKey(b)?-1:1),txt='Calles limítrofes ('+l.length+')\n'+l.map(e=>e.s+(e.n?' '+e.n:'')+(e.c?' · CP '+e.c:'')+' · zona '+ZN[e.z]+(e.n?'':' · tramo dudoso (sin número)')).join('\n');
+  let ok=false;
+  try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(txt);ok=true}}catch(e){}
+  if(!ok){try{const t=document.createElement('textarea');t.value=txt;t.style.cssText='position:fixed;left:-999px;top:0';document.body.appendChild(t);t.select();ok=document.execCommand('copy');t.remove()}catch(e){}}
+  ST.undo=null;ST.msg=ok?'Copiada: '+l.length+(l.length===1?' calle':' calles')+'. Pégala en el chat para pasármela.':'No he podido copiarla. Mantén pulsado un texto y cópialo a mano.';
+  stList();
+};
 function bodyHtml(){
   return '<div class="bz-note">Cuando la oferta de Bolt <b>no muestra el precio</b>, la app lo <b>estima</b> con estas tarjetas (según la zona de la recogida, la hora y la demanda de la oferta) y te dice el bruto, la comisión y el <b>neto estimado</b> (en pantalla y por voz). '
    +'<b>Son estimaciones nuestras con viajes reales, no tarifas oficiales de Bolt</b>: si ves que Bolt paga más o menos, corrígelas aquí. Si la oferta sí trae el precio, se usa ese y no se estima nada. Abre un apartado: los demás se cierran.</div>'
    +panel('gen','⚙️','General',pGen())
    +panel('zones','📍','Zonas y mapa',pZones())
+   +pnStreets()
    +panel('cards','💳','Tarjetas de precios',pCards())
    +panel('peak','🕒','Horas punta y valle',pPeak())
    +panel('air','✈️','Aeropuerto',pAir())
@@ -5729,11 +5925,12 @@ function afterBody(){
   const t=document.getElementById('bz_hol_det');if(t&&!t._z){t._z=1;t.addEventListener('toggle',()=>{B.holOpen=t.open})}
   const all=[...document.querySelectorAll('#bz_body details.bz-pn')];
   all.forEach(d=>{if(d._z)return;d._z=1;d.addEventListener('toggle',()=>{
-    if(d.open){B.panel=d.getAttribute('data-pn');all.forEach(o=>{if(o!==d&&o.open)o.open=false});if(d.id==='bz_pn_voice')refreshDerived()}
+    if(d.open){B.panel=d.getAttribute('data-pn');all.forEach(o=>{if(o!==d&&o.open)o.open=false});if(d.id==='bz_pn_voice')refreshDerived();if(d.id==='bz_pn_streets')stAfter()}
     else if(B.panel===d.getAttribute('data-pn'))B.panel='';
   })});
   refreshDerived();
   window.boltHour();
+  try{stAfter()}catch(e){}
 }
 function reloadBody(){errors.clear();B.slotEdit=null;const b=document.getElementById('bz_body');if(b)b.innerHTML=bodyHtml();afterBody()}
 function refreshDerived(){
@@ -5749,6 +5946,7 @@ function refreshDerived(){
   set('bz_pn_zones_s',(nz===0?'Sin zonas dibujadas':nz+(nz===1?' zona dibujada':' zonas dibujadas'))+' · '+(c.zoneForce==='auto'?'automática':'FORZADA: '+ZN[ZW.indexOf(c.zoneForce)])+' · por defecto: '+ZN[ZW.indexOf(c.zoneDef)]);
   set('bz_pn_dem_s','ajuste fino '+pcs(c.fine).replace(/^\s*/,'')+' · largos: '+(c.longDisc>0?'desde '+es(c.longKm)+' km, −'+es(c.longDisc)+' %':'sin descuento'));
   set('bz_pn_voice_s',B.voice?'Con voz':'Sin voz');
+  set('bz_pn_streets_s',stSummary());
   const t=document.getElementById('bz_today');if(t)t.textContent='Ahora mismo: zona baja → '+(pl?'hora punta':'valle')+' · zona media → '+(pm?'hora punta':'valle')+' · zona alta → '+(ph?'hora punta':'valle')+'.';
   h('bz_pk_now',peakNowHtml());
   const f=document.getElementById('bz_z_force');if(f)f.textContent=forceTxt();
@@ -7480,6 +7678,21 @@ html.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite .header::before{displ
 #boltBox .bz-pb{margin-top:10px}
 #boltBox .bz-pb>small{display:block;margin:2px 0 8px;color:#9fb4c8;font-weight:500;line-height:1.4}
 #boltBox .bz-pb .bz-btns{margin-top:14px}
+/* v3.57 · calles limítrofes */
+#boltBox .st-row{display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid #ffffff22}
+#boltBox .st-t{flex:1;min-width:0;line-height:1.3}
+#boltBox .st-t b{font-size:14.5px;overflow-wrap:anywhere}
+#boltBox .st-t small{display:block;font-size:12px;color:#9fb4c8;font-weight:500}
+#boltBox .st-warn{color:#fbbf24;font-weight:800;font-size:12px}
+#boltBox .st-z{display:inline-block;min-width:54px;text-align:center;font-weight:800;font-size:13px;border-radius:999px;padding:4px 10px;color:#fff!important}
+#boltBox .st-ic{border:0;background:transparent;font-size:20px;padding:6px;min-width:40px;min-height:40px;cursor:pointer;color:inherit}
+#boltBox .st-fr{display:flex;gap:6px;margin-top:6px;align-items:center}
+#boltBox .st-fr input,#boltBox .st-fr select{min-width:0;box-sizing:border-box;padding:9px 10px;border-radius:12px;font-size:15px}
+#boltBox .st-fr button{flex:1}
+#boltBox .st-qrow input{width:100%;box-sizing:border-box;padding:9px 10px;border-radius:12px;font-size:15px;margin:6px 0}
+#boltBox .st-form{border-top:1px solid #ffffff22;margin-top:6px;padding-top:6px}
+#boltBox .st-more{width:100%;margin:6px 0;padding:10px 14px;border-radius:14px;border:1px solid #ffffff33;background:#ffffff12;color:inherit;font-weight:700}
+#boltBox .st-undo{border:1px solid #ffffff44;background:#ffffff14;color:inherit;border-radius:10px;padding:4px 10px;margin-left:8px;font-weight:700}
 #boltBox .bz-test{margin:16px 0 4px;padding:10px;border:1px dashed #22c55e66;border-radius:14px;background:#22c55e0d}
 #boltBox .bz-test>small{display:block;margin:2px 0 8px;color:#9fb4c8;font-weight:500}
 #boltBox .bz-sub{display:block;margin:14px 0 4px;color:#cfe3f5}
@@ -7990,7 +8203,7 @@ function detailCalc(t){
   h+=kv('Precio estimado',(net==null?'—':eur(net))+(fin(o.lo)&&o.lo>=0&&fin(o.hi)&&o.hi>o.lo?' <small>(entre '+eur(o.lo)+' y '+eur(o.hi)+')</small>':''));
   h+=kv('Categoría',esc(tripCatLabel(t))+(typeof t.catx==='string'?' <small>(elegida a mano)</small>':''));
   h+=kv('Tiempo de recogida',mn(o.pickupMin))+kv('Km de recogida',k1(o.pickupKm))+kv('Tiempo con cliente',mn(o.tripMin))+kv('Km con cliente',k1(o.tripKm));
-  h+=kv('Zona',esc(o.zoneName||'—')+(o.area?' ('+esc(o.area)+')':'')+(o.zoneSrc==='manual'?' · elegida a mano':'')+(o.cpUnlisted?' · CP '+esc(o.cpUnlisted)+' sin zona en tus listas':''))+kv('Hora del viaje',hhmm(t.ts))+kv('Tarifa',o.peak?'Punta':'Valle')+kv('Demanda',fin(o.offerMult)&&o.offerMult>0?'×'+new Intl.NumberFormat('es-ES',{maximumFractionDigits:2}).format(o.offerMult):'sin demanda');
+  h+=kv('Zona',esc(o.zoneName||'—')+(o.area?' ('+esc(o.area)+')':'')+(o.zoneSrc==='manual'?' · elegida a mano':o.zoneSrc==='street'?' · calle guardada':'')+(o.cpUnlisted?' · CP '+esc(o.cpUnlisted)+' sin zona en tus listas':''))+kv('Hora del viaje',hhmm(t.ts))+kv('Tarifa',o.peak?'Punta':'Valle')+kv('Demanda',fin(o.offerMult)&&o.offerMult>0?'×'+new Intl.NumberFormat('es-ES',{maximumFractionDigits:2}).format(o.offerMult):'sin demanda');
   h+='</div>';
   let x='';
   if(fin(o.gross)&&o.gross>=0)x+=kv('Bruto estimado',eur(o.gross));

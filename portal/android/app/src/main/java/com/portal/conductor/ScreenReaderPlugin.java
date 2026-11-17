@@ -197,6 +197,27 @@ public class ScreenReaderPlugin extends Plugin {
         call.resolve(r);
     }
 
+    /** v3.57: calles limitrofes: la lista guardada en el movil (texto JSON compacto) */
+    @PluginMethod
+    public void getStreets(PluginCall call) {
+        android.content.SharedPreferences sp = getContext().getSharedPreferences("portal", Context.MODE_PRIVATE);
+        JSObject r = new JSObject();
+        r.put("streets", StreetMemory.toJson(StreetMemory.parseJson(sp.getString("bolt_streets", ""))));
+        call.resolve(r);
+    }
+
+    /** v3.57: guarda la lista de calles (la pantalla ya ha unido la del movil con la de la cuenta) */
+    @PluginMethod
+    public void setStreets(PluginCall call) {
+        java.util.List<StreetMemory.Entry> l = StreetMemory.parseJson(call.getString("streets", "[]"));
+        StreetMemory.prune(l, System.currentTimeMillis());
+        String norm = StreetMemory.toJson(l);
+        getContext().getSharedPreferences("portal", Context.MODE_PRIVATE).edit().putString("bolt_streets", norm).apply();
+        JSObject r = new JSObject();
+        r.put("streets", norm);
+        call.resolve(r);
+    }
+
     @PluginMethod
     public void testBolt(PluginCall call) {
         if (ScreenReaderService.instance == null) { call.reject("El lector de pantalla no est\u00e1 activado"); return; }
