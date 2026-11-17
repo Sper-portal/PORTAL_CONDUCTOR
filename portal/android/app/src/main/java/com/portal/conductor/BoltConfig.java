@@ -84,6 +84,64 @@ public class BoltConfig {
         }
     }
 
+    // ------------------------------------------------------------------ tabla "Ajuste por distancia" (v3.58)
+    /** Lo que falta o no vale vuelve a 0 (o a la tabla de fabrica si los tramos no valen). Sin tabla guardada (ajustes de antes): la de fabrica y, si habia un "ajuste fino de la demanda", pasa a la columna "con demanda" de las tres zonas (igual que normDist de la pagina). */
+    private static void parseDist(Map<String, Object> m, OfferAnalyzer.BoltCfg c) {
+        c.distOn = true; c.distCuts = OfferAnalyzer.distDefCuts(); c.distN = OfferAnalyzer.distDefVals(); c.distD = OfferAnalyzer.distDefVals();
+        Map<String, Object> d = map(m.get("dist"));
+        if (d == null) {
+            double f = dbl(m.get("fine"), 0, -50, 100);
+            if (f != 0) for (int z = 0; z < 3; z++) for (int i = 0; i < c.distD[z].length; i++)
+                c.distD[z][i] = Math.max(-50, Math.min(50, Math.round(((1 + c.distD[z][i] / 100.0) * (1 + f / 100.0) - 1) * 1000) / 10.0));
+            c.fine = 0;
+            return;
+        }
+        c.distOn = bool(d.get("on"), true);
+        Object cu = d.get("cuts");
+        if (!(cu instanceof List)) return;
+        List<?> l = (List<?>) cu;
+        int n = l.size();
+        if (n < 1 || n > 8) return;
+        double[] cuts = new double[n];
+        for (int i = 0; i < n; i++) {
+            Object o = l.get(i);
+            if (!(o instanceof Double)) return;
+            double v = ((Double) o).doubleValue();
+            if (Double.isNaN(v) || Double.isInfinite(v) || v < 0 || v > 200) return;
+            if (i == 0 ? v != 0 : v <= cuts[i - 1]) return;
+            cuts[i] = v;
+        }
+        c.distCuts = cuts;
+        final String[] zk = {"l", "m", "h"};   // posicion = zona (0 baja, 1 media, 2 alta)
+        c.distN = new double[3][]; c.distD = new double[3][];
+        for (int z = 0; z < 3; z++) {
+            Map<String, Object> zo = map(d.get(zk[z]));
+            c.distN[z] = distCol(zo == null ? null : zo.get("n"), n);
+            c.distD[z] = distCol(zo == null ? null : zo.get("d"), n);
+        }
+    }
+
+    private static double[] distCol(Object o, int n) {
+        double[] a = new double[n];
+        List<?> l = o instanceof List ? (List<?>) o : null;
+        for (int i = 0; i < n; i++) a[i] = l != null && i < l.size() ? dbl(l.get(i), 0, -50, 50) : 0;
+        return a;
+    }
+
+    private static String distArr(double[] a) {
+        StringBuilder b = new StringBuilder("[");
+        for (int i = 0; a != null && i < a.length; i++) { if (i > 0) b.append(','); b.append(n(a[i])); }
+        return b.append(']').toString();
+    }
+
+    private static void appendDist(StringBuilder b, OfferAnalyzer.BoltCfg c) {
+        final String[] zk = {"l", "m", "h"};
+        b.append(",\"dist\":{\"on\":").append(c.distOn).append(",\"cuts\":").append(distArr(c.distCuts));
+        for (int z = 0; z < 3; z++)
+            b.append(",\"").append(zk[z]).append("\":{\"n\":").append(distArr(c.distN == null ? null : c.distN[z])).append(",\"d\":").append(distArr(c.distD == null ? null : c.distD[z])).append('}');
+        b.append('}');
+    }
+
     // ------------------------------------------------------------------ validacion
     private static double dbl(Object o, double def, double lo, double hi) {
         if (o instanceof Double) {
@@ -249,6 +307,7 @@ public class BoltConfig {
             c.longKm = dbl(m.get("longKm"), c.longKm, 0, 100);
             c.longDisc = dbl(m.get("longDisc"), c.longDisc, 0, 50);
             c.eventOn = bool(m.get("eventOn"), c.eventOn);
+            parseDist(m, c);   // v3.58
             Object zf = m.get("zoneForce");
             if (zf instanceof String && ("auto".equals(zf) || "low".equals(zf) || "mid".equals(zf) || "high".equals(zf))) c.zoneForce = (String) zf;
             c.zoneDef = kindWord(m.get("zoneDef"), c.zoneDef);
@@ -417,6 +476,7 @@ public class BoltConfig {
         b.append("\"on\":").append(c.on).append(",\"mode\":\"").append(c.mode).append("\",\"comm\":").append(n(c.comm));
         b.append(",\"peakApplies\":").append(c.peakApplies).append(",\"round5\":").append(c.round5).append(",\"fine\":").append(n(c.fine));
         b.append(",\"peakKm\":").append(n(c.peakKm)).append(",\"longKm\":").append(n(c.longKm)).append(",\"longDisc\":").append(n(c.longDisc)).append(",\"eventOn\":").append(c.eventOn).append(",\"v\":").append(CFG_VER).append(",\"cpv\":351");
+        appendDist(b, c);   // v3.58
         b.append(",\"zoneForce\":\"").append(c.zoneForce).append("\",\"zoneDef\":\"").append(kindWordKey(c.zoneDef)).append('"');
         b.append(",\"short\":{\"km\":").append(n(c.shortKm)).append(",\"from\":").append(n(c.shortFrom)).append(",\"lo\":").append(n(c.bumpLo)).append(",\"hi\":").append(n(c.bumpHi)).append('}');
         b.append(",\"airOn\":").append(c.airOn).append(",\"airFee\":").append(n(c.airFee)).append(",\"airFlatKm\":").append(n(c.airFlatKm));

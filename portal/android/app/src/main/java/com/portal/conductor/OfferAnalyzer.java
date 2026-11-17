@@ -43,6 +43,7 @@ public class OfferAnalyzer {
         public double estDisc = 0;                                      // v3.34: descuento de viaje largo con demanda aplicado (%)
         public String estEvent = "";                                    // v3.34: lugar de evento de la oferta (sin descuento)
         public boolean estPeakShort;                                    // v3.34: es hora punta pero el viaje es largo (tarifa de valle)
+        public double estAdj = 0;                                       // v3.58: ajuste por distancia aplicado (%, con signo: + sube y - baja la tarjeta)
         public double estFine = 0;                                      // ajuste fino de demanda aplicado (%)
         public double estCommPct = -1;
         public String estAirport = "";              // "" | "pickup" (recogida en el aeropuerto) | "dest" (viaje hacia el aeropuerto)
@@ -260,6 +261,9 @@ public class OfferAnalyzer {
         public double fine = 0;              // ajuste fino (%) que se suma al calculo cuando hay demanda
         public double peakKm = 6.5;          // v3.34: la tarjeta de punta solo se usa en viajes de menos de estos km (0 = en todos)
         public double longKm = 10, longDisc = 13;   // v3.34: viajes largos (desde longKm km; desde la v3.56 con o sin demanda y tambien al aeropuerto): la tarjeta baja longDisc % (0 = sin descuento)
+        public boolean distOn = true;        // v3.58: tabla "Ajuste por distancia" (solo Bolt normal, sin aeropuerto); apagada: el descuento fijo de viajes largos de siempre
+        public double[] distCuts = distDefCuts();                          // "desde" (km) de cada tramo; el primero es 0
+        public double[][] distN = distDefVals(), distD = distDefVals();    // % por zona (0 baja, 1 media, 2 alta) y tramo: sin demanda / con demanda
         public boolean eventOn = true;       // v3.34: en lugares de eventos (IFEMA, Bernabeu...) no se aplica ese descuento
         public boolean atEvent = false;      // lo pone el servicio en cada lectura segun la ubicacion (no se guarda)
         public boolean fixOk = false;        // v3.37: hay ubicacion reciente (la pone ZoneLocator; no se guarda)
@@ -414,6 +418,7 @@ public class OfferAnalyzer {
         public boolean minApplied, weekend, peakUsed;    // weekend = franja de hora punta ahora
         public int zone = Z_MID;
         public double fine = 0;
+        public double adj = 0;               // v3.58: ajuste por distancia aplicado (%, con signo)
         public double disc = 0;              // v3.34: descuento de viaje largo aplicado (%)
         public String event = "";            // v3.34: lugar de evento (se habria aplicado descuento y no se aplica)
         public boolean peakShort;            // v3.34: hora punta, pero el viaje es largo
@@ -510,6 +515,24 @@ public class OfferAnalyzer {
         return e;
     }
 
+    /** v3.58: tabla "Ajuste por distancia" de fabrica (PROVISIONAL: viajes del 5 al 16-11-2026; se afina con el mes entero). Igual que DIST_V0 y DISTD de la pagina. */
+    static double[] distDefCuts() { return new double[]{0, 3, 6, 10, 15, 25}; }
+
+    static double[][] distDefVals() {
+        return new double[][]{{2, 2, -2, -7, -16, -18}, {2, 6, -2, -7, -16, -18}, {2, 2, -2, -7, -16, -18}};   // baja, media, alta
+    }
+
+    /** v3.58: % de la tabla "Ajuste por distancia" para esos km, esa zona de la recogida y con / sin demanda (igual que distPct de la pagina). */
+    static double distPct(BoltCfg c, int zone, double km, boolean dem) {
+        if (c.distCuts == null) return 0;
+        int z = zone == Z_HIGH ? 2 : (zone == Z_LOW ? 0 : 1);
+        double[][] t = dem ? c.distD : c.distN;
+        if (t == null || t[z] == null) return 0;
+        int idx = 0;
+        for (int j = 0; j < c.distCuts.length; j++) if (km >= c.distCuts[j]) idx = j;
+        return idx < t[z].length ? t[z][idx] : 0;
+    }
+
     private static Est calc(BoltCfg c, boolean up, double km, double min, double offerMult, String ak, String ev) {
         boolean pickup = "pickup".equals(ak);
         boolean air = ak.length() > 0;
@@ -520,9 +543,13 @@ public class OfferAnalyzer {
         else if (card.minFare > 0 && raw < card.minFare) { raw = card.minFare; ma = true; }
         double m = offerMult > 1.0 ? Math.min(10.0, offerMult) : 1.0;
         double fm = m > 1.0 + 1e-9 ? 1 + c.fine / 100.0 : 1.0;
-        double disc = 0;
+        double disc = 0, adj = 0;
         String evShown = "";
-        if (c.longDisc > 0 && !ma && km >= c.longKm) {   // v3.56: con o sin demanda, y tambien al aeropuerto
+        if (c.distOn && !air && catIndex(c.cat) < 0) {   // v3.58: tabla "Ajuste por distancia" (Bolt normal, sin aeropuerto): sustituye al descuento fijo de abajo; la minima tambien cuenta
+            double t = distPct(c, c.zoneKind, km, m > 1.0 + 1e-9);
+            if (t < 0 && c.eventOn && ev.length() > 0) evShown = ev;
+            else if (t != 0) { adj = t; if (t < 0) disc = -t; raw = raw * (1 + t / 100.0); }
+        } else if (c.longDisc > 0 && !ma && km >= c.longKm) {   // v3.56: con o sin demanda, y tambien al aeropuerto
             if (c.eventOn && ev.length() > 0) evShown = ev;
             else { disc = c.longDisc; raw = raw * (1 - disc / 100.0); }
         }
@@ -535,7 +562,7 @@ public class OfferAnalyzer {
         e.gross = gross; e.fee = fee;
         double after = fee > 0 ? Math.max(0, gross - fee) : gross;
         e.comm = after * pct / 100.0; e.net = after - e.comm;
-        e.mult = m; e.fine = m > 1.0 + 1e-9 ? c.fine : 0; e.airport = ak; e.minApplied = ma; e.range = range; e.disc = disc; e.event = evShown;
+        e.mult = m; e.fine = m > 1.0 + 1e-9 ? c.fine : 0; e.airport = ak; e.minApplied = ma; e.range = range; e.disc = disc; e.adj = adj; e.event = evShown;
         e.grossLo = e.gross; e.grossHi = e.gross; e.netLo = e.net; e.netHi = e.net;
         if (range) {
             e.grossLo = r5(c, (raw + c.bumpLo) * m * fm);
@@ -1023,7 +1050,7 @@ public class OfferAnalyzer {
                 r.estZone = e.zone; r.estArea = p.bolt.zoneName; r.estZoneSrc = p.bolt.zoneSrc;
                 p.bolt.zoneKind = zk0; p.bolt.zoneName = zn0; p.bolt.zoneSrc = zs0;
                 r.estRange = e.range; r.estNetLo = e.range ? e.netLo : -1; r.estNetHi = e.range ? e.netHi : -1;
-                r.estAlt = e.alt; r.estPeakUsed = e.peakUsed; r.estFine = e.fine; r.estDisc = e.disc; r.estEvent = e.event; r.estPeakShort = e.peakShort;
+                r.estAlt = e.alt; r.estPeakUsed = e.peakUsed; r.estFine = e.fine; r.estDisc = e.disc; r.estAdj = e.adj; r.estEvent = e.event; r.estPeakShort = e.peakShort;
                 r.estMinApplied = e.minApplied; r.estWeekend = e.weekend; r.estCommPct = Math.max(0, Math.min(90, p.bolt.comm));
                 r.price = e.net;          // el semaforo se juzga sobre el NETO estimado; no se vuelve a descontar comision
                 useEstimate = true;

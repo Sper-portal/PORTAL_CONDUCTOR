@@ -915,7 +915,7 @@ public class ScreenReaderService extends AccessibilityService {
         b.append(",\"lo\":").append(jn(r.estRange ? r.estNetLo : -1)).append(",\"hi\":").append(jn(r.estRange ? r.estNetHi : -1)).append(",\"alt\":").append(jn(r.estAlt));
         b.append(",\"zone\":").append(r.estZone).append(",\"zoneName\":").append(jq(OfferAnalyzer.zoneName(r.estZone))).append(",\"zoneSrc\":").append(jq(r.estZoneSrc)).append(",\"area\":").append(jq(r.estArea));
         b.append(",\"peak\":").append(r.estPeakUsed ? "true" : "false").append(",\"weekend\":").append(r.estWeekend ? "true" : "false").append(",\"peakShort\":").append(r.estPeakShort ? "true" : "false");
-        b.append(",\"disc\":").append(jn(r.estDisc)).append(",\"event\":").append(jq(r.estEvent)).append(",\"fine\":").append(jn(r.estFine)).append(",\"airport\":").append(jq(r.estAirport));
+        b.append(",\"adj\":").append(jn(r.estAdj)).append(",\"disc\":").append(jn(r.estDisc)).append(",\"event\":").append(jq(r.estEvent)).append(",\"fine\":").append(jn(r.estFine)).append(",\"airport\":").append(jq(r.estAirport));
         b.append(",\"tripKm\":").append(jn(r.tripKm)).append(",\"tripMin\":").append(jn(r.tripMin)).append(",\"pickupKm\":").append(jn(r.pickupKm)).append(",\"pickupMin\":").append(jn(r.pickupMin));
         b.append(",\"rev\":").append(rev).append(",\"cpUnlisted\":").append(jq(r.estCpUnlisted));
         b.append(",\"cat\":").append(jq(r.estCat == null ? "" : r.estCat));
@@ -1279,6 +1279,7 @@ public class ScreenReaderService extends AccessibilityService {
 
     /** viaje largo (con o sin demanda desde la v3.56): el descuento medio de la tarjeta; en un lugar de evento, sin descuento (v3.34) */
     static String longLine(OfferAnalyzer.Result r) {
+        if (Math.abs(r.estAdj) > 1e-9) return "Ajuste por distancia: " + pct(r.estAdj);   // v3.58
         if (r.estDisc > 1e-9) return "Viaje largo: precio base \u2212" + num1(r.estDisc) + " %";
         if (r.estEvent != null && r.estEvent.length() > 0) return "Lugar de evento (" + r.estEvent + "): sin descuento";
         return "";

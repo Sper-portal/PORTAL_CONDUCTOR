@@ -308,6 +308,7 @@ async function cloudLogin(identifier,password){
     db=cloud;
     normalizeDbSettings();
     saveLocalOnly();
+    try{PDC314.resetKnown()}catch(e){}   // v3.58
   }
   localStorage.setItem(AUTH_KEY,JSON.stringify({identifier:email,email,loggedIn:true,cloud:true,userId:user.id}));
   return user;
@@ -326,7 +327,7 @@ async function cloudRegister(email,phone,password){
   }
   await cloudProfileSave(r.data.user,email,phone);
   const existing=await cloudGetData();
-  if(!existing) await cloudPushData(); else {db=existing;saveLocalOnly()}
+  if(!existing) await cloudPushData(); else {db=existing;saveLocalOnly();try{PDC314.resetKnown()}catch(e){}}
   localStorage.setItem(AUTH_KEY,JSON.stringify({identifier:email,email,phone,loggedIn:true,cloud:true,userId:r.data.user.id}));
   return {needsConfirmation:false};
 }
@@ -1169,17 +1170,20 @@ function otherBdHtml(id,keys){
 function fitCtlCircles(){try{
   document.querySelectorAll('#content .control-circles .control-metric').forEach(function(el){
     var parts=el.querySelectorAll('small,b');
-    el.classList.remove('wrapL');parts.forEach(function(t){t.style.removeProperty('font-size')});
+    el.classList.remove('wrapL');parts.forEach(function(t){t.style.removeProperty('font-size');var f=t.getAttribute('data-full');if(f!==null){t.textContent=f;t.removeAttribute('data-full')}});
     var r=el.getBoundingClientRect();if(r.width<20)return;
     var cx=r.left+r.width/2,cy=r.top+r.height/2,R=r.width/2-6;
     var bad=function(){var w=0;for(var i=0;i<parts.length;i++){var rg=document.createRange();rg.selectNodeContents(parts[i]);var qs=rg.getClientRects();for(var j=0;j<qs.length;j++){var q=qs[j];if(q.width<1)continue;[[q.left,q.top],[q.right,q.top],[q.left,q.bottom],[q.right,q.bottom]].forEach(function(p){var d=Math.hypot(p[0]-cx,p[1]-cy);if(d>w)w=d})}}return w>R};
     if(!bad())return;
     el.classList.add('wrapL');            /* 1.º: la etiqueta pasa a dos lineas (misma letra) */
-    var g=0;
-    while(bad()&&g++<40){parts.forEach(function(t){var fs=parseFloat(getComputedStyle(t).fontSize);if(fs>6)t.style.setProperty('font-size',(fs-0.5)+'px','important')})}   /* 2.º: si aun no cabe, letra un poco mas pequena */
+    var g=0,shrink=function(min){g=0;while(bad()&&g++<40){parts.forEach(function(t){var fs=parseFloat(getComputedStyle(t).fontSize);if(fs>min)t.style.setProperty('font-size',(fs-0.5)+'px','important')})}};
+    shrink(8);   /* 2.º: si aun no cabe, letra un poco mas pequena (hasta 8 px) */
+    if(bad()){var cm=false;parts.forEach(function(t){var m=/^(\d+) h (\d\d) min$/.exec(t.textContent);if(m){t.setAttribute('data-full',t.textContent);t.textContent=m[1]+':'+m[2]+' h';cm=true}});if(cm){parts.forEach(function(t){t.style.removeProperty('font-size')});shrink(8)}}   /* 3.º (v3.58): las horas en formato corto, 11:52 h */
+    shrink(6);   /* 4.º: lo ultimo, hasta 6 px */
   })}catch(e){}}
-(function(){var rc=renderControl;renderControl=function(){var r=rc.apply(this,arguments);fitCtlCircles();setTimeout(fitCtlCircles,250);return r};
-window.addEventListener('resize',function(){if(document.querySelector('#content .control-circles'))fitCtlCircles()})})();
+(function(){var rc=renderControl;renderControl=function(){var r=rc.apply(this,arguments);fitCtlCircles();setTimeout(fitCtlCircles,250);setTimeout(fitCtlCircles,900);return r};
+window.addEventListener('resize',function(){if(document.querySelector('#content .control-circles')){fitCtlCircles();setTimeout(fitCtlCircles,300);setTimeout(fitCtlCircles,900)}});   /* v3.58: ventana pequena / pantalla dividida: otra vez cuando ya se ha asentado el tamano */
+try{if(window.visualViewport)window.visualViewport.addEventListener('resize',function(){if(document.querySelector('#content .control-circles'))setTimeout(fitCtlCircles,300)})}catch(e){}})();
 /*v324-lt*/
 // v3.24 · restyling: marca de pantalla clara (solo para Calculadora, Control, Facturacion e Informe) y color de la app prioritaria en Control.
 /*v327-theme*/
@@ -2097,7 +2101,7 @@ async function authPrimaryAction(){
  const rec=getAccount(loginId);
  if(!rec){setAuthStatus('No encuentro esa cuenta. No se creará otra automáticamente. Comprueba el correo/teléfono o recupera la cuenta.',true);return}
  if(rec.passwordHash!==authHash(pw)){setAuthStatus('Contraseña incorrecta.',true);return}
- db=rec.data||db;db.settings=db.settings||{};
+ db=rec.data||db;db.settings=db.settings||{};try{PDC314.resetKnown()}catch(e){}
  db.settings.commission=Number(db.settings.commission??45);db.settings.goal=Number(db.settings.goal??55);db.settings.boltCommission=Number(db.settings.boltCommission??25);db.settings.airportFee=Number(db.settings.airportFee??2.57);db.settings.cashPayroll=Number(db.settings.cashPayroll??2000);db.settings.commissionMode=db.settings.commissionMode==='minimum'?'minimum':'firstEuro';db.settings.commissionMinimum=Number(db.settings.commissionMinimum??4200);
  save();localStorage.setItem(AUTH_KEY,JSON.stringify({identifier:rec.email,email:rec.email,phone:rec.phone||'',loggedIn:true}));finishAuth()
 }
@@ -2139,7 +2143,7 @@ async function checkUpdateNotice(){
  },700);
 }
 
-async function bootV33(){const profile=(()=>{try{return JSON.parse(localStorage.getItem(AUTH_KEY)||'null')}catch(e){return null}})();if(profile&&profile.loggedIn&&profile.cloud&&hasRealCloud()){try{const {data:{session}}=await pdcSupabase.auth.getSession();if(session){const cloud=await cloudGetData();if(cloud){db=cloud;normalizeDbSettings();/* Normalizar DESPUÉS de cargar la nube: la carga remota reemplaza el db local inicial. */normalizeHourRecordsByDay();saveLocalOnly();scheduleCloudPush()}document.querySelector('#authScreen').classList.add('auth-hide');document.querySelector('.app').classList.remove('auth-hidden');show('calc');runStartupReminders();checkUpdateNotice();return}}catch(e){console.warn(e)}}if(profile&&profile.loggedIn&&!profile.cloud){/* También repara los registros históricos locales antes de mostrar la aplicación. */normalizeHourRecordsByDay();document.querySelector('#authScreen').classList.add('auth-hide');document.querySelector('.app').classList.remove('auth-hidden');show('calc');runStartupReminders();checkUpdateNotice();return}normalizeHourRecordsByDay();setAuthMode('login')}
+async function bootV33(){const profile=(()=>{try{return JSON.parse(localStorage.getItem(AUTH_KEY)||'null')}catch(e){return null}})();if(profile&&profile.loggedIn&&profile.cloud&&hasRealCloud()){try{const {data:{session}}=await pdcSupabase.auth.getSession();if(session){const cloud=await cloudGetData();if(cloud){db=cloud;normalizeDbSettings();/* Normalizar DESPUÉS de cargar la nube: la carga remota reemplaza el db local inicial. */normalizeHourRecordsByDay();try{PDC314.resetKnown()}catch(e){}saveLocalOnly();scheduleCloudPush()}document.querySelector('#authScreen').classList.add('auth-hide');document.querySelector('.app').classList.remove('auth-hidden');show('calc');runStartupReminders();checkUpdateNotice();return}}catch(e){console.warn(e)}}if(profile&&profile.loggedIn&&!profile.cloud){/* También repara los registros históricos locales antes de mostrar la aplicación. */normalizeHourRecordsByDay();document.querySelector('#authScreen').classList.add('auth-hide');document.querySelector('.app').classList.remove('auth-hidden');show('calc');runStartupReminders();checkUpdateNotice();return}normalizeHourRecordsByDay();setAuthMode('login')}
 
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible'){
@@ -2677,7 +2681,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.57';
+const APP_VERSION='v3.58';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -4618,10 +4622,34 @@ function needsPush(uid){return P.syncDirty()||!own(jget(BASE),uid)}
 
 /* ---------- viajes borrados (para que al unir copias no «resuciten») ---------- */
 let known=new Set((db.trips||[]).map(t=>String(t.id))),knownDb=db;
+/* v3.58 · horas: cada tramo lleva un sello `u` (ms) de su ultima creacion/cambio; los borrados y las jornadas cerradas dejan marca para que la otra copia no los reviva */
+function hourId(h){return h&&h.id!=null?String(h.id):'k|'+(h&&h.start)+'|'+(h&&h.end)}
+function hourSig(h){try{const o=Object.assign({},h);delete o.u;return JSON.stringify(o)}catch(e){return ''}}
+function hourSigs(){const m=new Map();try{for(const h of (db.hours||[]))if(h&&typeof h==='object')m.set(hourId(h),hourSig(h))}catch(e){}return m}
+function actStart(){try{const a=db.activeSession;return a&&a.start?String(a.start):''}catch(e){return ''}}
+let hSig=hourSigs(),knownAct=actStart();
+function trackHours(now){
+  const st=db.settings.deletedHours=db.settings.deletedHours||{};
+  const nx=new Map();
+  for(const h of (db.hours||[])){
+    if(!h||typeof h!=='object')continue;
+    const id=hourId(h),sg=hourSig(h);nx.set(id,sg);
+    if(hSig.get(id)!==sg){h.u=now;if(st[id])delete st[id]}      // tramo nuevo o cambiado: sello (y si estaba «borrado», vuelve a existir)
+  }
+  for(const id of hSig.keys())if(!nx.has(id))st[id]=now;        // tramo que ya no esta: borrado a proposito
+  hSig=nx;
+  for(const id of Object.keys(st))if(now-st[id]>90*864e5)delete st[id];
+  if(!Object.keys(st).length)delete db.settings.deletedHours;
+  const a=actStart();
+  if(knownAct&&knownAct!==a){const es=db.settings.endedSessions=db.settings.endedSessions||{};es[knownAct]=now}   // la jornada en curso termino (o se descarto)
+  knownAct=a;
+  const es=db.settings.endedSessions;
+  if(es){for(const k of Object.keys(es))if(now-es[k]>60*864e5)delete es[k];if(!Object.keys(es).length)delete db.settings.endedSessions}
+}
 function trackDeletes(){
   try{
     const cur=new Set((db.trips||[]).map(t=>String(t.id)));
-    if(db!==knownDb){knownDb=db;known=cur;return}            // se cargó otra copia completa: no es un borrado del usuario
+    if(db!==knownDb){knownDb=db;known=cur;hSig=hourSigs();knownAct=actStart();return}            // se cargó otra copia completa: no es un borrado del usuario
     const st=db.settings.deletedTrips=db.settings.deletedTrips||{};
     const now=Date.now();
     for(const id of known)if(!cur.has(id))st[id]=now;
@@ -4629,9 +4657,10 @@ function trackDeletes(){
     for(const id of Object.keys(st))if(now-st[id]>90*864e5)delete st[id];
     if(!Object.keys(st).length)delete db.settings.deletedTrips;
     known=cur;
+    try{trackHours(now)}catch(e){console.warn('v3.58 horas',e)}
   }catch(e){}
 }
-P.resetKnown=()=>{known=new Set((db.trips||[]).map(t=>String(t.id)));knownDb=db};
+P.resetKnown=()=>{known=new Set((db.trips||[]).map(t=>String(t.id)));knownDb=db;hSig=hourSigs();knownAct=actStart()};
 
 /* ---------- unir dos copias sin perder nada (lo local manda si hay conflicto) ---------- */
 function unionById(a,b,keyFn){          // b (local) pisa a (nube) cuando es el mismo elemento
@@ -4648,11 +4677,32 @@ P.mergeDb=function(L,C){
   const dead=Object.assign({},Cs.deletedTrips||{},Ls.deletedTrips||{});
   // viajes: unión por identificador (los borrados a propósito no vuelven)
   out.trips=unionById(C.trips,L.trips,t=>String(t.id)).filter(t=>!dead[String(t.id)]);
-  // jornadas y gasolina: por día manda lo del teléfono si tiene algo ese día
-  const cm=byDate(C.hours),lm=byDate(L.hours),hrs=[];
-  for(const [k,v] of cm)if(!lm.has(k))hrs.push(...clone(v));
-  for(const v of lm.values())hrs.push(...clone(v));
-  out.hours=hrs;
+  /* v3.58 · horas: se unen TRAMO A TRAMO (por identificador). Antes, si el teléfono tenía algo en un día, pisaba todo ese día de la nube y se perdían los tramos que solo estaban en la otra copia.
+     Mismo tramo en las dos copias: manda el cambiado más tarde (sello u; si empatan o no hay sello, el del teléfono). Los borrados a propósito no vuelven (salvo que se hayan vuelto a crear después).
+     Dos tramos distintos que empiezan exactamente a la vez y son de la misma app son el mismo trabajo apuntado dos veces: se queda uno. */
+  const hDead={},hEnded={};
+  for(const m of [Cs.deletedHours,Ls.deletedHours])for(const [k,v] of Object.entries(m||{}))hDead[k]=Math.max(nm(hDead[k]),nm(v));
+  for(const m of [Cs.endedSessions,Ls.endedSessions])for(const [k,v] of Object.entries(m||{}))hEnded[k]=Math.max(nm(hEnded[k]),nm(v));
+  const hmap=new Map();
+  const addH=(h,loc)=>{
+    if(!h||typeof h!=='object')return;
+    const k=hourId(h),p=hmap.get(k);
+    if(!p)hmap.set(k,h);else if(loc&&!(nm(p.u)>nm(h.u)))hmap.set(k,h);
+  };
+  for(const h of (C.hours||[]))addH(h,false);
+  for(const h of (L.hours||[]))addH(h,true);
+  const hrs=[],seenS=new Map();
+  for(const [k,h] of hmap){
+    if(hDead[k]){if(nm(h.u)>nm(hDead[k]))delete hDead[k];else continue}
+    const sk=h.start?String(h.start)+'|'+(h.app==='other'?'o|'+(h.sub||''):'b'):'';
+    if(sk&&seenS.has(sk)){const i=seenS.get(sk);if(nm(h.u)>nm(hrs[i].u))hrs[i]=h;continue}
+    if(sk)seenS.set(sk,hrs.length);
+    hrs.push(h);
+  }
+  out.hours=clone(hrs);
+  { const t0=Date.now();
+    for(const k of Object.keys(hDead))if(t0-hDead[k]>90*864e5)delete hDead[k];
+    for(const k of Object.keys(hEnded))if(t0-hEnded[k]>60*864e5)delete hEnded[k]; }
   out.manual=Object.assign({},C.manual||{},L.manual||{});
   out.fuel=Object.assign({},C.fuel||{},L.fuel||{});
   if(C.fuelEntries||L.fuelEntries){out.fuelEntries=Object.assign({},C.fuelEntries||{},L.fuelEntries||{})}
@@ -4681,6 +4731,8 @@ P.mergeDb=function(L,C){
   }
   if(Object.keys(bc).length||Cs.billingCompensations||Ls.billingCompensations)s.billingCompensations=bc;
   if(Object.keys(dead).length)s.deletedTrips=dead;else delete s.deletedTrips;
+  if(Object.keys(hDead).length)s.deletedHours=hDead;else delete s.deletedHours;           // v3.58
+  if(Object.keys(hEnded).length)s.endedSessions=hEnded;else delete s.endedSessions;
   if('tripBackups' in s)s.tripBackups=[];
   /* v3.53: la configuracion de Bolt que se queda es la MAS NUEVA (sello boltCfgAt; sin sello = copia antigua = 1; la de fabrica sembrada = 0) y se queda entera, con su voz, su volumen y su sello */
   {
@@ -4697,7 +4749,14 @@ P.mergeDb=function(L,C){
     try{const St=window.__pdcSt;s.boltStreets=St&&St.merge?St.merge(Cs.boltStreets,Ls.boltStreets):(Ls.boltStreets||Cs.boltStreets)}catch(e){s.boltStreets=Ls.boltStreets||Cs.boltStreets}
   }
   out.settings=s;
-  if('activeSession' in L)out.activeSession=L.activeSession;
+  /* v3.58 · jornada en curso: antes la del teléfono mandaba siempre (aunque fuera «ninguna»), y borraba la que llevaba el otro aparato. Ahora: se queda la del teléfono si sigue abierta;
+     si no tiene ninguna, la de la nube; una jornada ya cerrada (marca endedSessions, o un tramo guardado que empieza justo cuando ella) no se vuelve a abrir. */
+  if('activeSession' in L||'activeSession' in C){
+    const closed=new Set(hrs.map(h=>String(h.start)));
+    const open=a=>!!(a&&a.start&&!hEnded[a.start]&&!closed.has(String(a.start)));
+    const act=open(L.activeSession)?L.activeSession:(open(C.activeSession)?C.activeSession:null);
+    out.activeSession=act?clone(act):null;
+  }
   // el resto (mensajes de soporte, etc.)
   for(const k of Object.keys(L)){
     if(['trips','hours','fuel','manual','fuelEntries','odometer','settings','activeSession'].includes(k))continue;
@@ -5017,7 +5076,12 @@ const sameSlots=(a,b)=>Array.isArray(a)&&Array.isArray(b)&&a.length===b.length&&
 const HOLS=()=>['01-01','01-06','05-01','05-02','08-15','10-12','11-01','12-06','12-08','12-25'];
 /* v3.49: zonas de fábrica (las que midió Juan): se ponen una sola vez a quien no tiene ninguna zona dibujada */
 const DEF_ZONES=[{"n":"Zona 1","k":"h","pts":[[40.417079,-3.722302],[40.416161,-3.742153],[40.409065,-3.754317],[40.401372,-3.769423],[40.399601,-3.768703],[40.393027,-3.775373],[40.381073,-3.785182],[40.369565,-3.80382],[40.35641,-3.825008],[40.347888,-3.85267],[40.334131,-3.88661],[40.30227,-3.902697],[40.301821,-3.953901],[40.342484,-4.007434],[40.377337,-4.071219],[40.421112,-4.085541],[40.454314,-4.050202],[40.486924,-4.057853],[40.593822,-4.199302],[40.700995,-4.113177],[40.760907,-4.069036],[40.839023,-3.779468],[40.784084,-3.572886],[40.706795,-3.516581],[40.587118,-3.441638],[40.50781,-3.496672],[40.472449,-3.497849],[40.470957,-3.53944],[40.487969,-3.557881],[40.540171,-3.554546],[40.52869,-3.587113],[40.505162,-3.59876],[40.480619,-3.601702],[40.478604,-3.581593],[40.472038,-3.573942],[40.46465,-3.574629],[40.45129,-3.587087],[40.451066,-3.601997],[40.460322,-3.617397],[40.469277,-3.626912],[40.469212,-3.642606],[40.47257,-3.649374],[40.471078,-3.656977],[40.471431,-3.658372],[40.471694,-3.667288],[40.478912,-3.666748],[40.484826,-3.663511],[40.484306,-3.676144],[40.48384,-3.682409],[40.48281,-3.687113],[40.485645,-3.693882],[40.486913,-3.69707],[40.489435,-3.697785],[40.482665,-3.715141],[40.476882,-3.732381],[40.476957,-3.737666],[40.476957,-3.739616],[40.476929,-3.741026],[40.477022,-3.74181],[40.476882,-3.742779],[40.476525,-3.743739],[40.475381,-3.747573],[40.474597,-3.750491],[40.473767,-3.753483],[40.47358,-3.753066],[40.470017,-3.750271],[40.467583,-3.749793],[40.464318,-3.749063],[40.462191,-3.746911],[40.456938,-3.744422],[40.45385,-3.743368],[40.45246,-3.74262],[40.450892,-3.742583],[40.442242,-3.739346],[40.4371,-3.738022],[40.430773,-3.737396],[40.42829,-3.735949],[40.427385,-3.734564],[40.423856,-3.730383],[40.422036,-3.724473],[40.421327,-3.722817],[40.419926,-3.722229],[40.419338,-3.72115]]},{"n":"Zona 2","k":"m","pts":[[40.472328,-3.667091],[40.471563,-3.666895],[40.465626,-3.667559],[40.462383,-3.665947],[40.459301,-3.663831],[40.455703,-3.663347],[40.449657,-3.661974],[40.444597,-3.660079],[40.442693,-3.659049],[40.440345,-3.658639],[40.43407,-3.659663],[40.431391,-3.660349],[40.429226,-3.660227],[40.428031,-3.659785],[40.426725,-3.659932],[40.425823,-3.659914],[40.422132,-3.658534],[40.419873,-3.658436],[40.416027,-3.658951],[40.412903,-3.661484],[40.404724,-3.66526],[40.397889,-3.669527],[40.394562,-3.672439],[40.391016,-3.677571],[40.387922,-3.680164],[40.383719,-3.68166],[40.381178,-3.686172],[40.380967,-3.688042],[40.381571,-3.690414],[40.384516,-3.693584],[40.39012,-3.699617],[40.394565,-3.704031],[40.396429,-3.710499],[40.399309,-3.715312],[40.399869,-3.720903],[40.401266,-3.722417],[40.403806,-3.722834],[40.405748,-3.722981],[40.409094,-3.722031],[40.41303,-3.72406],[40.41908,-3.721313],[40.421417,-3.723159],[40.422798,-3.726494],[40.424139,-3.730387],[40.428937,-3.736322],[40.431998,-3.737768],[40.436067,-3.737818],[40.44195,-3.739246],[40.448646,-3.741864],[40.452923,-3.742876],[40.462402,-3.746897],[40.464264,-3.749049],[40.469753,-3.750134],[40.473798,-3.75312],[40.476916,-3.742238],[40.476805,-3.7326],[40.481956,-3.717146],[40.489525,-3.698121],[40.487406,-3.69742],[40.485951,-3.694796],[40.484039,-3.689806],[40.482864,-3.684533],[40.482986,-3.683319],[40.483759,-3.682175],[40.484427,-3.671864],[40.48464,-3.664002],[40.479193,-3.666209],[40.475388,-3.66768]]}];
-const defaults=()=>({on:true,mode:'auto',comm:25,peakApplies:true,round5:true,fine:0,peakKm:6.5,longKm:10,longDisc:13,eventOn:true,v:CFG_VER,cpv:351,zoneForce:'auto',zoneDef:'low',
+/* v3.58 · «Ajuste por distancia»: % que se SUMA (+) o RESTA (−) a la tarjeta según los km con cliente, la zona de la recogida (l baja, m media, h alta) y con (d) o sin (n) demanda en la oferta.
+   cuts = «desde» (km) de cada tramo (el primero siempre 0, hasta 8 tramos, de menor a mayor). Valores de partida PROVISIONALES (tus viajes del 5 al 16-11-2026): se afinan con el mes entero. */
+const DIST_MAXR=8;
+const DIST_V0={l:[2,2,-2,-7,-16,-18],m:[2,6,-2,-7,-16,-18],h:[2,2,-2,-7,-16,-18]};
+const DISTD=()=>({on:true,cuts:[0,3,6,10,15,25],l:{n:DIST_V0.l.slice(),d:DIST_V0.l.slice()},m:{n:DIST_V0.m.slice(),d:DIST_V0.m.slice()},h:{n:DIST_V0.h.slice(),d:DIST_V0.h.slice()}});
+const defaults=()=>({on:true,mode:'auto',comm:25,peakApplies:true,round5:true,fine:0,peakKm:6.5,longKm:10,longDisc:13,eventOn:true,dist:DISTD(),v:CFG_VER,cpv:351,zoneForce:'auto',zoneDef:'low',
   short:{km:6,from:1.2,lo:0,hi:0},airOn:true,airFee:2.57,airFlatKm:11,holidaysWe:true,holidays:HOLS(),slots:slotsM(),slotsL:slotsL(),slotsH:slotsHi(),
   cards:{lv:CARD(2.02,0.79,0.13,6.30),lp:CARD(3.03,0.80,0.16,8.85),mv:CARD(2.10,0.77,0.15,6.75),mp:CARD(2.68,0.84,0.20,7.65),
          hv:CARD(2.39,0.85,0.16,6.70),hp:CARD(3.56,0.91,0.21,8.35),av:CARD(3.04,0.86,0.15,13.70),ap:CARD(3.04,0.86,0.15,13.70),
@@ -5055,10 +5119,22 @@ function normSlots(o,d){if(!Array.isArray(o))return d;const l=[];
     if(dd<0||a<0||b<0||!Number.isInteger(dd)||!Number.isInteger(a)||!Number.isInteger(b)||a===b)continue;
     l.push({on:typeof x.on==='boolean'?x.on:true,d:dd,a,b})}
   return l}
+/* v3.58 · la tabla: lo que falta o no vale vuelve a 0 (o a la de fábrica si los tramos no valen). Sin tabla guardada (ajustes de antes): la de fábrica y, si tenías un «ajuste fino de la demanda»,
+   pasa a la columna «con demanda» de las tres zonas (igual que BoltConfig.parseDist de Java). */
+function normDist(o,fine){
+  const d=DISTD();
+  if(!isObj(o)){const f=rng(fine,0,-50,100);if(f!==0)for(const z of ['l','m','h'])d[z].d=d[z].d.map(v=>Math.max(-50,Math.min(50,Math.round(((1+v/100)*(1+f/100)-1)*1000)/10)));return d}
+  if(typeof o.on==='boolean')d.on=o.on;
+  const cu=o.cuts;
+  if(!Array.isArray(cu)||cu.length<1||cu.length>DIST_MAXR||cu[0]!==0||!cu.every((v,i)=>isN(v)&&v>=0&&v<=200&&(i===0||v>cu[i-1])))return d;
+  d.cuts=cu.slice();
+  for(const z of ['l','m','h']){const zo=isObj(o[z])?o[z]:{};for(const col of ['n','d']){const a=Array.isArray(zo[col])?zo[col]:[];d[z][col]=cu.map((_,i)=>rng(a[i],0,-50,50))}}
+  return d}
 function norm(o){const c=defaults();if(!isObj(o))return c;
   if(typeof o.on==='boolean')c.on=o.on;if(['auto','week','weekend'].includes(o.mode))c.mode=o.mode;c.comm=rng(o.comm,c.comm,0,90);
   if(typeof o.peakApplies==='boolean')c.peakApplies=o.peakApplies;if(typeof o.round5==='boolean')c.round5=o.round5;c.fine=rng(o.fine,c.fine,-50,100);
   c.peakKm=rng(o.peakKm,c.peakKm,0,50);c.longKm=rng(o.longKm,c.longKm,0,100);c.longDisc=rng(o.longDisc,c.longDisc,0,50);if(typeof o.eventOn==='boolean')c.eventOn=o.eventOn;
+  c.dist=normDist(o.dist,o.fine);if(!isObj(o.dist))c.fine=0;   /* v3.58: el «ajuste fino» ya no está en pantalla; si no había tabla, su efecto pasa a «con demanda» */
   if(['auto','low','mid','high'].includes(o.zoneForce))c.zoneForce=o.zoneForce;if(['low','mid','high'].includes(o.zoneDef))c.zoneDef=o.zoneDef;
   if(isObj(o.short)){const s=o.short,sk=rng(s.km,c.short.km,0,50),sf=rng(s.from,c.short.from,1,10),lo=rng(s.lo,c.short.lo,0,20),hi=rng(s.hi,c.short.hi,0,20);
     c.short.km=sk;c.short.from=sf;if(lo<=hi){c.short.lo=lo;c.short.hi=hi}}
@@ -5103,6 +5179,8 @@ const ccard=(c,k,peak,cat)=>{const i=CATS.indexOf(cat);if(i<0)return zcard(c,k,p
 const acard=(c,peak,cat)=>{const i=CATS.indexOf(cat);if(i>=0){const x=c.cards[(peak?'ap':'av')+(i+1)];if(x)return x}return peak?c.cards.ap:c.cards.av};
 /* redondeo del bruto a 5 céntimos (medio hacia arriba), sin ruido de coma flotante */
 const r5=(c,x)=>{if(!c.round5)return x;const v=Math.round(x*1e6)/1e6;return Math.floor(v*20+0.5+1e-7)/20};
+/* v3.58 · % de la tabla «Ajuste por distancia» para esos km, esa zona de la recogida y con / sin demanda (igual que OfferAnalyzer.distPct de Java) */
+function distPct(c,zk,km,dem){const t=c.dist,z=t&&t[zk===Z_HIGH?'h':zk===Z_LOW?'l':'m'];if(!z||!Array.isArray(t.cuts))return 0;let i=0;for(let j=0;j<t.cuts.length;j++)if(km>=t.cuts[j])i=j;const a=dem?z.d:z.n,v=Array.isArray(a)?a[i]:0;return isN(v)?v:0}
 function calc(c,up,km,min,om,ak,zk,ev,cat){
   const pickup=ak==='pickup',air=ak!=='';
   const card=pickup?acard(c,up,cat):ccard(c,zk,up,cat);
@@ -5110,13 +5188,16 @@ function calc(c,up,km,min,om,ak,zk,ev,cat){
   if(pickup&&c.airFlatKm>0&&km<=c.airFlatKm&&card.minFare>0){raw=card.minFare;ma=true;flat=true}   /* v3.47: precio fijo = la mínima y la tasa va APARTE (encima) */
   else if(card.minFare>0&&raw<card.minFare){raw=card.minFare;ma=true}
   const m=om>1?Math.min(10,om):1,fm=m>1+1e-9?1+c.fine/100:1;
-  let disc=0,evShown='';
-  if(c.longDisc>0&&!ma&&km>=c.longKm){if(c.eventOn&&ev)evShown=ev;else{disc=c.longDisc;raw=raw*(1-disc/100)}}   /* v3.56: con o sin demanda, y tambien al aeropuerto */
+  let disc=0,adj=0,evShown='';
+  if(c.dist&&c.dist.on&&!air&&CATS.indexOf(cat)<0){   /* v3.58: tabla «Ajuste por distancia» (Bolt normal, sin aeropuerto): sustituye al descuento fijo de abajo; la mínima también cuenta */
+    const t=distPct(c,zk,km,m>1+1e-9);
+    if(t<0&&c.eventOn&&ev)evShown=ev;else if(t!==0){adj=t;if(t<0)disc=-t;raw=raw*(1+t/100)}
+  }else if(c.longDisc>0&&!ma&&km>=c.longKm){if(c.eventOn&&ev)evShown=ev;else{disc=c.longDisc;raw=raw*(1-disc/100)}}   /* v3.56: con o sin demanda, y tambien al aeropuerto */
   const range=false;   /* v3.44: nunca hay rango: un solo neto. Lo que hubiera guardado en «short» se ignora */
   const mid=range?raw+(c.short.lo+c.short.hi)/2:raw;
   const pct=Math.max(0,Math.min(90,c.comm)),fee=air?c.airFee:0,gross=r5(c,mid*m*fm+(flat?fee:0));   /* v3.47: con la mínima fija el cliente paga la mínima (con la demanda) + la tasa aparte; a la tasa no le afecta la demanda */
   const after=fee>0?Math.max(0,gross-fee):gross,comm=after*pct/100,net=after-comm;
-  const e={gross,comm,net,mult:m,fee,grossLo:gross,grossHi:gross,netLo:net,netHi:net,range,alt:-1,airport:ak,minApplied:ma,weekend:false,peakUsed:false,zone:zk,fine:m>1+1e-9?c.fine:0,disc,event:evShown,peakShort:false};
+  const e={gross,comm,net,mult:m,fee,grossLo:gross,grossHi:gross,netLo:net,netHi:net,range,alt:-1,airport:ak,minApplied:ma,weekend:false,peakUsed:false,zone:zk,fine:m>1+1e-9?c.fine:0,disc,adj,event:evShown,peakShort:false};
   if(range){
     e.grossLo=r5(c,(raw+c.short.lo)*m*fm);e.grossHi=r5(c,(raw+c.short.hi)*m*fm);
     const aLo=fee>0?Math.max(0,e.grossLo-fee):e.grossLo,aHi=fee>0?Math.max(0,e.grossHi-fee):e.grossHi;
@@ -5431,7 +5512,7 @@ const show=v=>String(Math.round(v*1e6)/1e6);
 const es=v=>show(v).replace('.',',');      // para los textos (los campos de número llevan punto)
 const LIMC={base:[0,100],km:[0,20],min:[0,10],minFare:[0,200]};
 const LIMS={comm:[0,90],fine:[-50,100],peakKm:[0,50],longKm:[0,100],longDisc:[0,50],airFee:[0,50],airFlatKm:[0,100],'short.km':[0,50],'short.from':[1,10],'short.lo':[0,20],'short.hi':[0,20]};
-const limOf=p=>{if(LIMS[p])return LIMS[p];const m=/^cards\.\w+\.(base|km|min|minFare)$/.exec(p);return m?LIMC[m[1]]:null};
+const limOf=p=>{if(LIMS[p])return LIMS[p];if(/^dist\.[lmh]\.[nd]\.\d+$/.test(p))return [-50,50];const m=/^cards\.\w+\.(base|km|min|minFare)$/.exec(p);return m?LIMC[m[1]]:null};
 const DAYS=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'],D3=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'],D1=['L','M','X','J','V','S','D'];
 const p2=n=>String(n).padStart(2,'0');
 const hhmm=w=>p2(Math.floor((w%1440)/60))+':'+p2(w%60);
@@ -5468,7 +5549,7 @@ function demandLine(e,om){
 }
 const rangeLine=e=>'Viaje corto con demanda: el neto puede ir de '+money(e.netLo)+' a '+money(e.netHi)+' €';
 const peakLine=e=>e.peakShort?'Hora punta, pero es un viaje largo: tarifa de valle':e.weekend&&!e.peakUsed?'Ahora es hora punta: no sube tu precio'+(e.alt>=0?' (con tarifa de punta: neto '+money(e.alt)+' €)':''):'';
-const longLine=e=>e.disc>1e-9?'Viaje largo: precio base −'+num1(e.disc)+' %':e.event?'Lugar de evento ('+e.event+'): sin descuento':'';
+const longLine=e=>Math.abs(e.adj||0)>1e-9?'Ajuste por distancia: '+pcs(e.adj):e.disc>1e-9?'Viaje largo: precio base −'+num1(e.disc)+' %':e.event?'Lugar de evento ('+e.event+'): sin descuento':'';
 P.boltZoneTxt={card:cardLine,demand:demandLine,range:rangeLine,peak:peakLine,long:longLine};
 
 /* ---------- apartado «Tarjetas de precios» ---------- */
@@ -5712,16 +5793,61 @@ window.boltWhere=async function(){
 function pDem(){
   const c=B.cfg,s=c.short;
   return '<small>La <b>demanda</b> (×1,2, ×1,4…) se lee siempre de la oferta y multiplica todo el precio estimado, mínima incluida, desde la primera décima. No hay interruptor.</small>'
-   +'<div class="bz-g">'+cell('Ajuste fino de la demanda (%)','bz_fine',show(c.fine),'fine',{step:'0.5',min:-50})+'<div></div></div>'
-   +'<div class="bz-hint">Súmale o réstale un porcentaje al precio cuando hay demanda (0 = nada). Útil si ves que Bolt paga siempre un poco más o menos que la cuenta.</div>'
+   +distHtml()   /* v3.58: la tabla «Ajuste por distancia» sustituye al ajuste fino de la demanda */
    /* v3.44: ya no hay ajustes de viajes cortos (nunca hay rango) */
-   +'<b class="bz-sub">Viajes largos</b>'
-   +'<div class="bz-hint">En los viajes largos, con o sin demanda y también al aeropuerto, Bolt suele pagar menos de lo que sale al multiplicar la tarjeta. La app baja la tarjeta este porcentaje antes de multiplicar por la demanda (unos 11 % de media en tus viajes de más de 10 km del 5 al 16 de noviembre, pero cambia mucho de uno a otro). 0 = sin descuento.</div>'
+   +'<b class="bz-sub">Viajes largos (aeropuerto y otras categorías)</b>'
+   +'<div class="bz-hint">Con la tabla de arriba encendida, este descuento fijo solo vale para el aeropuerto y para Comfort, XL, Premium y Child Seat; con la tabla apagada, vale para todos los viajes. En los viajes largos, con o sin demanda y también al aeropuerto, Bolt suele pagar menos de lo que sale al multiplicar la tarjeta. La app baja la tarjeta este porcentaje antes de multiplicar por la demanda (unos 11 % de media en tus viajes de más de 10 km del 5 al 16 de noviembre, pero cambia mucho de uno a otro). 0 = sin descuento.</div>'
    +'<div class="bz-g">'+cell('Largo: desde (km)','bz_lg_km',show(c.longKm),'longKm',{step:'0.5'})+cell('Descuento de la tarjeta (%)','bz_lg_disc',show(c.longDisc),'longDisc',{step:'0.5'})+'</div>'
    +sw('En lugares de eventos, sin descuento','IFEMA, Bernabéu, Metropolitano, Palacio Vistalegre y WiZink Center: ahí se usa la tarifa normal, sin el descuento (es una suposición tuya; solo se ha visto un viaje a IFEMA). Se detecta por tu ubicación al llegar la oferta o por el nombre en la oferta.','bz_eventOn','eventOn',c.eventOn)
    +'<div class="bz-btns"><button type="button" class="secondary" id="bz_dem_def" onclick="boltReset(\'dem\')">↺ Valores iniciales de demanda</button></div>'
-   +testHtml('d','Prueba un viaje con demanda: uno largo (por ejemplo 14 km, 22 min, ×1,5) para ver el descuento, o uno corto (3 km, 11 min, ×1,4).');
+   +testHtml('d','Prueba un viaje (por ejemplo 14 km, 22 min, ×1,5, o uno corto: 3 km, 11 min, ×1,4) para ver el ajuste por distancia.');
 }
+/* ---------- v3.58 · «Ajuste por distancia»: la tabla de % por tramo de km, por zona de la recogida y con / sin demanda ---------- */
+function distTbl(){
+  const t=B.cfg.dist,z=ZK.indexOf(B.distZone)>=0?B.distZone:'m',n=t.cuts.length,v=t[z];
+  let h='<div class="dt-cs">'+ZK.map((k,i)=>'<button type="button" class="'+(k===z?'dt-c on':'secondary dt-c')+'" id="bz_dz_'+k+'" aria-pressed="'+(k===z)+'" onclick="boltDistZone(\''+k+'\')">Zona '+ZN[i]+'</button>').join('')+'</div>'
+   +'<div class="dt-h"><span class="dt-f">Desde (km)</span><span></span><span>Sin demanda %</span><span>Con demanda %</span><span></span></div>';
+  for(let i=0;i<n;i++){
+    h+='<div class="dt-r"><span class="dt-f">'+(i===0?'0':'<input id="bz_dc_'+i+'" type="number" inputmode="decimal" step="0.5" min="0" value="'+esc(show(t.cuts[i]))+'" oninput="boltDistCut(this,'+i+')" aria-label="Desde (km)">')+'</span>'
+     +'<span class="dt-to" id="bz_dto_'+i+'">hasta '+(i+1<n?es(t.cuts[i+1]):'∞')+' km</span>'
+     +'<input id="bz_dn_'+i+'" type="number" inputmode="decimal" step="0.5" min="-50" max="50" value="'+esc(show(v.n[i]))+'" data-p="dist.'+z+'.n.'+i+'" oninput="boltIn(this)" aria-label="Sin demanda (%)">'
+     +'<input id="bz_dd_'+i+'" type="number" inputmode="decimal" step="0.5" min="-50" max="50" value="'+esc(show(v.d[i]))+'" data-p="dist.'+z+'.d.'+i+'" oninput="boltIn(this)" aria-label="Con demanda (%)">'
+     +'<button type="button" class="dt-x" onclick="boltDistDel('+i+')" aria-label="Borrar tramo"'+(i===0||n<=1?' disabled':'')+'>🗑</button></div>';
+  }
+  return h+'<div class="bz-btns"><button type="button" class="secondary" id="bz_dist_add" onclick="boltDistAdd()"'+(n>=DIST_MAXR?' disabled':'')+'>+ Añadir tramo</button>'
+   +'<button type="button" class="secondary" id="bz_dist_copy" onclick="boltDistCopy()">Copiar esta zona a las otras dos</button>'
+   +'<button type="button" class="secondary" id="bz_dist_def" onclick="boltReset(\'dist\')">↺ Valores iniciales de la tabla</button></div>';
+}
+function distHtml(){
+  const c=B.cfg;
+  return '<b class="bz-sub">Ajuste por distancia (Bolt normal)</b>'
+   +sw('Usar esta tabla','En vez del descuento fijo de viajes largos, solo en Bolt normal (no en el aeropuerto ni en Comfort, XL, Premium o Child Seat).','bz_dist_on','dist.on',c.dist.on)
+   +'<div class="bz-hint">Cada tramo cambia el precio estimado de la tarjeta (mínima incluida) antes de multiplicar por la demanda: <b>+</b> lo sube y <b>−</b> lo baja, según los km con cliente y la zona de la recogida. Los tramos son comunes a las tres zonas. Los valores de partida son una <b>propuesta</b> sacada de tus viajes del 5 al 16 de noviembre: se afinarán con el mes entero.</div>'
+   +'<div id="bz_dist">'+distTbl()+'</div>';
+}
+function distRepaint(){const e=document.getElementById('bz_dist');if(e){for(const id of [...errors])if(/^bz_d[cnd]_/.test(id))errors.delete(id);e.innerHTML=distTbl()}refreshDerived()}
+window.boltDistZone=function(z){B.distZone=z;distRepaint()};
+window.boltDistCut=function(el,i){
+  const t=B.cfg.dist,v=num(el.value),lo=t.cuts[i-1],hi=i+1<t.cuts.length?t.cuts[i+1]:Infinity;
+  const ok=Number.isFinite(v)&&v>lo&&v<hi&&v<=200;bad(el,!ok);ok?errors.delete(el.id):errors.add(el.id);
+  if(!ok)return;
+  t.cuts[i]=v;const a=document.getElementById('bz_dto_'+(i-1));if(a)a.textContent='hasta '+es(v)+' km';refreshDerived();
+};
+window.boltDistAdd=function(){
+  const t=B.cfg.dist;if(t.cuts.length>=DIST_MAXR)return;
+  const last=t.cuts[t.cuts.length-1],nv=Math.min(200,last+5);if(!(nv>last))return;
+  t.cuts.push(nv);for(const z of ['l','m','h'])for(const c of ['n','d'])t[z][c].push(t[z][c][t[z][c].length-1]||0);distRepaint();
+};
+window.boltDistDel=function(i){
+  const t=B.cfg.dist;if(i<1||t.cuts.length<=1)return;
+  t.cuts.splice(i,1);for(const z of ['l','m','h'])for(const c of ['n','d'])t[z][c].splice(i,1);distRepaint();
+};
+window.boltDistCopy=function(){
+  const t=B.cfg.dist,z=ZK.indexOf(B.distZone)>=0?B.distZone:'m';
+  if(!confirm('¿Copiar los porcentajes de la zona '+ZN[ZK.indexOf(z)]+' a las otras dos zonas?\n\nNo se guarda hasta que pulses «Guardar».'))return;
+  for(const o of ['l','m','h'])if(o!==z)t[o]={n:t[z].n.slice(),d:t[z].d.slice()};
+  distRepaint();
+};
 function shortCheck(){
   const s=B.cfg.short,ok=s.lo<=s.hi;
   ['bz_sh_lo','bz_sh_hi'].forEach(id=>{const el=document.getElementById(id);if(el)bad(el,!ok||errors.has(id))});
@@ -5944,7 +6070,7 @@ function refreshDerived(){
   const d=new Date(),w=weekMinute(d),hol=isHoliday(c,d),pm=peakWhy(c,Z_MID,w,hol).peak,ph=peakWhy(c,Z_HIGH,w,hol).peak,pl=peakWhy(c,Z_LOW,w,hol).peak;
   set('bz_pn_peak_s','Ahora: baja '+(pl?'PUNTA':'valle')+' · media '+(pm?'PUNTA':'valle')+' · alta '+(ph?'PUNTA':'valle'));
   set('bz_pn_zones_s',(nz===0?'Sin zonas dibujadas':nz+(nz===1?' zona dibujada':' zonas dibujadas'))+' · '+(c.zoneForce==='auto'?'automática':'FORZADA: '+ZN[ZW.indexOf(c.zoneForce)])+' · por defecto: '+ZN[ZW.indexOf(c.zoneDef)]);
-  set('bz_pn_dem_s','ajuste fino '+pcs(c.fine).replace(/^\s*/,'')+' · largos: '+(c.longDisc>0?'desde '+es(c.longKm)+' km, −'+es(c.longDisc)+' %':'sin descuento'));
+  set('bz_pn_dem_s',(c.dist.on?'ajuste por distancia: '+c.dist.cuts.length+(c.dist.cuts.length===1?' tramo':' tramos'):'ajuste por distancia apagado')+' · largos'+(c.dist.on?' (aeropuerto y otras categorías)':'')+': '+(c.longDisc>0?'desde '+es(c.longKm)+' km, −'+es(c.longDisc)+' %':'sin descuento'));
   set('bz_pn_voice_s',B.voice?'Con voz':'Sin voz');
   set('bz_pn_streets_s',stSummary());
   const t=document.getElementById('bz_today');if(t)t.textContent='Ahora mismo: zona baja → '+(pl?'hora punta':'valle')+' · zona media → '+(pm?'hora punta':'valle')+' · zona alta → '+(ph?'hora punta':'valle')+'.';
@@ -6002,7 +6128,8 @@ window.boltReset=function(which){
     :which==='slotsm'?'¿Volver a las franjas iniciales de la zona media (lunes a viernes 07–10 y 17–20, sábado y domingo todo el día)?\n\nNo se guarda hasta que pulses «Guardar».'
     :which==='slotsh'?'¿Volver a las franjas iniciales de la zona alta (lunes a viernes 08–10 y 17–20, viernes de 20 a 24, sábado y domingo todo el día)?\n\nNo se guarda hasta que pulses «Guardar».'
     :which==='air'?'¿Volver a los valores iniciales del aeropuerto (tarjetas, tasa y mínima fija)?\n\nNo se guarda hasta que pulses «Guardar».'
-    :which==='dem'?'¿Volver a los valores iniciales de la demanda y de los viajes largos?\n\nNo se guarda hasta que pulses «Guardar».'
+    :which==='dem'?'¿Volver a los valores iniciales de la tabla por distancia, la demanda y los viajes largos?\n\nNo se guarda hasta que pulses «Guardar».'
+    :which==='dist'?'¿Volver a los valores iniciales de la tabla «Ajuste por distancia»?\n\nNo se guarda hasta que pulses «Guardar».'
     :which==='cats'?'¿Volver a los valores iniciales de las tarjetas de Comfort, XL y Premium?\n\nNo se guarda hasta que pulses «Guardar».'
     :'¿Volver a los valores iniciales de las seis tarjetas de zona?\n\nNo se guarda hasta que pulses «Guardar».';
   if(!confirm(msg))return;
@@ -6012,7 +6139,8 @@ window.boltReset=function(which){
   else if(which==='slotsm'){B.cfg.slots=d.slots}
   else if(which==='slotsh'){B.cfg.slotsH=d.slotsH}
   else if(which==='air'){B.cfg.cards.av=d.cards.av;B.cfg.cards.ap=d.cards.ap;for(const k of AIRKEYS)B.cfg.cards[k]=d.cards[k];B.cfg.airOn=d.airOn;B.cfg.airFee=d.airFee;B.cfg.airFlatKm=d.airFlatKm}
-  else if(which==='dem'){B.cfg.fine=d.fine;B.cfg.short=d.short;B.cfg.longKm=d.longKm;B.cfg.longDisc=d.longDisc;B.cfg.eventOn=d.eventOn}
+  else if(which==='dem'){B.cfg.fine=d.fine;B.cfg.short=d.short;B.cfg.longKm=d.longKm;B.cfg.longDisc=d.longDisc;B.cfg.eventOn=d.eventOn;B.cfg.dist=d.dist}
+  else if(which==='dist'){B.cfg.dist=d.dist}
   else if(which==='cats'){for(const k of CATKEYS)B.cfg.cards[k]=d.cards[k]}
   else{for(const k of ['lv','lp','mv','mp','hv','hp'])B.cfg.cards[k]=d.cards[k]}
   reloadBody();if(P.zmap&&P.zmap.open){P.zmap.panel();P.zmap.redraw()}
@@ -7593,6 +7721,11 @@ html.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite .header::before{displ
 
 /* ---- v3.15f · tarifa por zona y mapa de zonas ---- */
 #boltBox .bz-sub{display:block;margin:12px 0 2px;color:#cfe3f5}
+#boltBox .dt-cs{display:flex;gap:8px;margin:8px 0}#boltBox .dt-c{flex:1;padding:9px 0;border-radius:12px;font-weight:700}#boltBox .dt-c.on,html body #content #boltBox .dt-c.on,html body.lt #content #boltBox .dt-c.on{background:#1a73e8!important;border-color:#5aa0ff!important;color:#fff!important;-webkit-text-fill-color:#fff!important;text-shadow:none!important}
+#boltBox .dt-h,#boltBox .dt-r{display:grid;grid-template-columns:42px minmax(0,1.1fr) minmax(0,1fr) minmax(0,1fr) 28px;gap:4px;align-items:center;margin:6px 0}#boltBox .dt-h{font-size:11px;color:#9fb4c8;margin-bottom:0}#boltBox .dt-h span:nth-child(3),#boltBox .dt-h span:nth-child(4){text-align:right}
+#boltBox .dt-r input{width:100%;box-sizing:border-box;text-align:right;padding:8px 3px;border-radius:10px;font-size:13px;min-width:0}#boltBox .dt-to{font-size:11px;color:#9fb4c8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}#boltBox .dt-f{font-weight:700;text-align:right;padding-right:4px}#boltBox .dt-f input{padding:8px 4px}
+#boltBox .dt-x{background:none;border:0;font-size:15px;padding:0;min-width:0;opacity:.8}#boltBox .dt-x:disabled{opacity:.25}
+@media(max-width:340px){#boltBox .dt-to{font-size:10px;white-space:normal;line-height:1.1}#boltBox .dt-r input{font-size:12px}}
 #boltBox .bz-zone{border-top:2px solid #22c55e66}
 #boltBox .bz-zone.bz-off>.bz-g,#boltBox .bz-zone.bz-off>.bz-hint,#boltBox .bz-zone.bz-off #bz_z_list{opacity:.5}
 #boltBox .bz-ar{margin:8px 0;padding:8px;border:1px solid #ffffff2a;border-radius:14px;background:#ffffff0a}
@@ -8039,6 +8172,12 @@ const TCATS=[['','Bolt'],['comfort','Comfort'],['xl','XL'],['premium','Premium']
 function tripCat(t){if(!t)return null;if(typeof t.catx==='string')return t.catx;const o=t.offer;return o?(typeof o.cat==='string'?o.cat:''):null}
 function tripCatLabel(t){const k=tripCat(t);if(k==null)return '';for(const c of TCATS)if(c[0]===k)return c[1];return k}
 function catSel(t){const k=tripCat(t);return '<select data-c="cat" aria-label="Categoría del viaje">'+(k==null?'<option value="?" selected>— elegir —</option>':'')+TCATS.map(c=>'<option value="'+c[0]+'"'+(k===c[0]?' selected':'')+'>'+c[1]+'</option>').join('')+'</select>'}
+/* v3.58 · «¿Cambió el trayecto o el precio?»: marca que pone Juan en un viaje cuyo destino, ruta o precio cambió después de la oferta (el cálculo estaba bien, pero el cobro ya no es comparable).
+   t.chg = clave del motivo; sin marca = no existe. Sale en la lista (⚠) y en el CSV (última columna); esos viajes no se usan para ajustar la calculadora. */
+const TCHG=[['','No cambió'],['dest','Cambió el destino'],['stop','Parada extra o ruta distinta'],['pick','Recogida en otro sitio'],['price','Cambió el precio'],['otro','Otro motivo']];
+function chgLabel(t){const k=t&&typeof t.chg==='string'?t.chg:'';if(!k)return '';for(const c of TCHG)if(c[0]===k)return c[1];return k}
+function chgSel(t){const k=t&&typeof t.chg==='string'?t.chg:'';return '<select data-c="chg" aria-label="¿Cambió el trayecto o el precio?">'+TCHG.map(c=>'<option value="'+c[0]+'"'+(k===c[0]?' selected':'')+'>'+c[1]+'</option>').join('')+(k&&!TCHG.some(c=>c[0]===k)?'<option value="'+esc(k)+'" selected>'+esc(k)+'</option>':'')+'</select>'}
+function chgBox(t){return '<div class="box" id="tripChg"><h4>¿Cambió el trayecto o el precio?</h4>'+kv('Motivo',chgSel(t))+'<div class="sub">Si el cliente cambió el destino, hizo una parada o el precio se movió, márcalo: ese viaje no se usa para ajustar la calculadora.</div></div>'}
 /** resumen «Por categoría» de una lista de viajes: cuántos, estimado, y (con los que tienen albarán) estimado contra real */
 function catSummary(list){
   if(!list.length)return '';
@@ -8076,7 +8215,7 @@ function ensureSheet(){
    +'#tripSheet input[type=text]{width:120px;text-align:right;background:#0b1a33;color:#fff;border:1px solid #2b4d85;border-radius:10px;padding:8px;font:600 15px system-ui}'
    +'#tripSheet .box{border:1px solid #1e3a66;border-radius:14px;padding:6px 12px;margin-bottom:10px;background:#081426}#tripSheet .box h4{margin:8px 0 2px;font-size:14px;color:#9cc3ff}'
    +'#tripSheet .warn{color:#fbbf24;font-size:13px;margin:6px 2px}'
-   +'#tripSheet .row .ct{font-size:11px;font-weight:800;color:#7aa2ff;border:1px solid #2b4d85;border-radius:8px;padding:1px 6px;white-space:nowrap}#tripSheet select{max-width:170px;background:#0b1a33;color:#fff;border:1px solid #2b4d85;border-radius:10px;padding:8px;font:600 14px system-ui}'
+   +'#tripSheet .row .ct{font-size:11px;font-weight:800;color:#7aa2ff;border:1px solid #2b4d85;border-radius:8px;padding:1px 6px;white-space:nowrap}#tripSheet .row .ct.chg{color:#ffb84d;border-color:#8a5a12}#tripSheet select{max-width:170px;background:#0b1a33;color:#fff;border:1px solid #2b4d85;border-radius:10px;padding:8px;font:600 14px system-ui}'
    +'#tripSheet .dh{display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;cursor:pointer;user-select:none;text-align:left;border:1px solid #2b4d85;background:#0d2342;color:#cfe0ff;border-radius:12px;padding:10px 12px;margin:4px 0 8px;font-weight:700}'
    +'#tripSheet .dh .dl{flex:1}#tripSheet .dh .dc{color:#9cb4d6;font-weight:600;font-size:12px}#tripSheet .dh .dm{font-weight:800;color:#fff}';
   document.head.appendChild(st);
@@ -8090,7 +8229,7 @@ function closeSheet(){if(sheet)sheet.style.display='none';barPlace();refresh()}
 function head(title,sub,back){return '<div class="th"><button class="tx" data-a="'+(back||'close')+'" aria-label="'+(back?'Volver':'Cerrar')+'">'+(back?'←':'×')+'</button><div><b>'+title+'</b>'+(sub?'<small>'+sub+'</small>':'')+'</div></div>'}
 function rowHtml(t,i,tag){
   const net=offerNet(t.offer),done=t.alb&&t.alb.net!=null;
-  return '<button class="row" data-a="trip" data-id="'+esc(t.id)+'"><span class="n">'+(tag||('Viaje '+(i+1)))+'</span><span class="h">'+hhmm(t.ts)+'</span>'+((tripCat(t)||'')?'<span class="ct">'+esc(tripCatLabel(t))+'</span>':'')+'<span class="m">'+eur(net)+'</span><span class="'+(done?'ok':'no')+'" title="'+(done?'con albarán':'sin albarán')+'">'+(done?'✓':'○')+'</span><span class="no">›</span></button>';
+  return '<button class="row" data-a="trip" data-id="'+esc(t.id)+'"><span class="n">'+(tag||('Viaje '+(i+1)))+'</span><span class="h">'+hhmm(t.ts)+'</span>'+((tripCat(t)||'')?'<span class="ct">'+esc(tripCatLabel(t))+'</span>':'')+(chgLabel(t)?'<span class="ct chg" title="'+esc(chgLabel(t))+'" aria-label="'+esc(chgLabel(t))+'">⚠</span>':'')+'<span class="m">'+eur(net)+'</span><span class="'+(done?'ok':'no')+'" title="'+(done?'con albarán':'sin albarán')+'">'+(done?'✓':'○')+'</span><span class="no">›</span></button>';
 }
 /** v3.39: la lista del día sale agrupada por días (cada hora cae en su día natural). Los viajes de cada día van bajo una cabecera con el día, cuántos son y el total;
  *  solo el ÚLTIMO día sale abierto (los anteriores, recogidos; se abren tocando su cabecera). La numeración «Viaje N» no cambia (es la misma del aviso y del detalle). */
@@ -8209,10 +8348,11 @@ function detailCalc(t){
   if(fin(o.gross)&&o.gross>=0)x+=kv('Bruto estimado',eur(o.gross));
   if(fin(o.fee)&&o.fee>0)x+=kv('Tasa de aeropuerto',eur(o.fee));
   if(fin(o.comm)&&o.comm>=0)x+=kv('Comisión Bolt'+(fin(o.commPct)&&o.commPct>=0?' ('+new Intl.NumberFormat('es-ES',{maximumFractionDigits:1}).format(o.commPct)+' %)':''),eur(o.comm));
-  if(fin(o.disc)&&o.disc>0)x+=kv('Viaje largo','−'+o.disc+' % al precio base');
+  if(fin(o.adj)&&o.adj!==0)x+=kv('Ajuste por distancia',(o.adj>0?'+':'−')+Math.abs(o.adj)+' % al precio base');else if(fin(o.disc)&&o.disc>0)x+=kv('Viaje largo','−'+o.disc+' % al precio base');
   if(o.event)x+=kv('Lugar de evento',esc(o.event));
   if(o.airport)x+=kv('Aeropuerto',o.airport==='pickup'?'recogida':'destino');
   if(x)h+='<div class="box"><h4>Cómo salió el cálculo</h4>'+x+'</div>';
+  h+=chgBox(t);
   return h;
 }
 const inp=(f,v,neg)=>'<input type="text" inputmode="decimal" data-f="'+f+'" value="'+(v==null?'':nf2.format(v).replace(/\./g,''))+'" placeholder="—" aria-label="'+f+'">';
@@ -8231,6 +8371,7 @@ function detailAlb(t){
   if(al.paid!=null&&al.comm!=null&&al.net!=null&&Math.abs(al.paid+al.comm-al.net)>0.05&&!(fin(al.airport)&&Math.abs(al.paid-al.airport+al.comm-al.net)<=0.05))h+='<div class="warn">⚠ Bruto + comisión no da el neto: revisa los importes.</div>';
   if(al.hdr||al.min!=null)h+='<div class="sub">Albarán leído: '+esc(al.hdr||'')+(al.min!=null?' · ruta '+pad(Math.floor(al.t0/60))+':'+pad(al.t0%60)+' → '+pad(Math.floor(al.t1/60))+':'+pad(al.t1%60)+' ('+al.min+' min)':'')+'</div>';
   h+='<div class="box"><h4>Datos que a veces faltan / editar</h4>'+kv('Tiempo de espera (min)',inp('m.waitMin',man.waitMin))+kv('Tarifa aeropuerto (€)',inp('m.airport',man.airport))+'</div>';
+  h+=chgBox(t);
   h+='<button class="bt" style="width:100%;margin-bottom:10px" data-a="raw">Ver lo que leyó de Bolt</button>';
   return h;
 }
@@ -8242,6 +8383,7 @@ const parseEs=v=>{
 function onChange(e){
   const el=e.target;
   if(el&&el.dataset&&el.dataset.c==='cat'&&view.name==='detail'){const t0=findTrip(view.id);if(t0){if(el.value==='?')delete t0.catx;else t0.catx=el.value;save()}return}   /* v3.48: categoría elegida a mano */
+  if(el&&el.dataset&&el.dataset.c==='chg'&&view.name==='detail'){const t0=findTrip(view.id);if(t0){if(!el.value)delete t0.chg;else t0.chg=el.value;save()}return}   /* v3.58: ¿cambió el trayecto o el precio? */
   if(!el||!el.dataset||!el.dataset.f||view.name!=='detail')return;
   const t=findTrip(view.id);if(!t)return;
   const f=el.dataset.f,v=parseEs(el.value);
@@ -8304,13 +8446,13 @@ function csvCell(v){
 function csvText(){
   const s=state();
   const cols=['Jornada','Nº','Fecha','Hora','Neto estimado','Bruto estimado','Comisión est.','Comisión est. %','Tasa aeropuerto est.','Demanda','Tarifa','Zona','Zona (nombre)','Min recogida','Km recogida','Min con cliente','Km con cliente','Viaje largo -%','Evento','Aeropuerto',
-    'Albarán: bruto','Albarán: tarifa base','Albarán: alta demanda','Albarán: espera €','Albarán: aeropuerto €','Albarán: peajes','Albarán: propina','Albarán: comisión','Albarán: neto','Real − estimado €','Albarán: hora','Albarán: min de ruta','Espera (min) manual','Aeropuerto € manual','Añadido a mano','Aeropuerto: tasa usada','Aeropuerto: de dónde sale la tasa','Bruto real sin tasa','Bruto real con tasa','Real sin tasa − bruto est.','Real con tasa − bruto est.','Zona: de dónde sale','CP sin zona en tus listas','Categoría'];
+    'Albarán: bruto','Albarán: tarifa base','Albarán: alta demanda','Albarán: espera €','Albarán: aeropuerto €','Albarán: peajes','Albarán: propina','Albarán: comisión','Albarán: neto','Real − estimado €','Albarán: hora','Albarán: min de ruta','Espera (min) manual','Aeropuerto € manual','Añadido a mano','Aeropuerto: tasa usada','Aeropuerto: de dónde sale la tasa','Bruto real sin tasa','Bruto real con tasa','Real sin tasa − bruto est.','Real con tasa − bruto est.','Zona: de dónde sale','CP sin zona en tus listas','Categoría','Cambio de trayecto o precio','Ajuste de la tarjeta %'];
   const rows=[cols.join(';')];
   const add=(label,trips)=>trips.forEach((t,i)=>{
     const o=t.offer||{},al=t.alb||{},m=t.man||{},en=offerNet(t.offer),rg=realGross(t),gg=fin(o.gross)&&o.gross>0?o.gross:null;
     rows.push([label,i+1,dkey(t.ts),hhmm(t.ts),en,fin(o.gross)&&o.gross>=0?o.gross:null,fin(o.comm)&&o.comm>=0?o.comm:null,fin(o.commPct)&&o.commPct>=0?o.commPct:null,fin(o.fee)?o.fee:null,fin(o.offerMult)&&o.offerMult>0?o.offerMult:null,t.offer?(o.peak?'Punta':'Valle'):'',t.offer?o.zone:'',o.zoneName||'',
       fin(o.pickupMin)&&o.pickupMin>=0?o.pickupMin:null,fin(o.pickupKm)&&o.pickupKm>=0?o.pickupKm:null,fin(o.tripMin)&&o.tripMin>=0?o.tripMin:null,fin(o.tripKm)&&o.tripKm>=0?o.tripKm:null,fin(o.disc)&&o.disc>0?o.disc:null,o.event||'',o.airport||'',
-      al.paid,al.base,al.demand,al.wait,al.airport,al.toll,al.tip,al.comm,al.net,(al.net!=null&&en!=null)?al.net-en:null,al.hdr||'',al.min,m.waitMin,m.airport,t.manual?'sí':'',rg?rg.fee:null,rg?({alb:'albarán',man:'escrita a mano',est:'estimación'})[rg.src]:'',rg?rg.noFee:null,rg?rg.withFee:null,rg&&gg!=null?r2(rg.noFee-gg):null,rg&&gg!=null?r2(rg.withFee-gg):null,t.offer?({area:'zona dibujada',default:'por defecto',forced:'forzada en Ajustes',postal:'código postal',manual:'elegida a mano'})[o.zoneSrc]||'':'',o.cpUnlisted||'',tripCatLabel(t)].map(csvCell).join(';'));
+      al.paid,al.base,al.demand,al.wait,al.airport,al.toll,al.tip,al.comm,al.net,(al.net!=null&&en!=null)?al.net-en:null,al.hdr||'',al.min,m.waitMin,m.airport,t.manual?'sí':'',rg?rg.fee:null,rg?({alb:'albarán',man:'escrita a mano',est:'estimación'})[rg.src]:'',rg?rg.noFee:null,rg?rg.withFee:null,rg&&gg!=null?r2(rg.noFee-gg):null,rg&&gg!=null?r2(rg.withFee-gg):null,t.offer?({area:'zona dibujada',default:'por defecto',forced:'forzada en Ajustes',postal:'código postal',manual:'elegida a mano'})[o.zoneSrc]||'':'',o.cpUnlisted||'',tripCatLabel(t),chgLabel(t),(fin(o.adj)&&o.adj!==0)?o.adj:(fin(o.disc)&&o.disc>0?-o.disc:null)].map(csvCell).join(';'));
   });
   add('Sin cerrar',s.open);
   for(const d of s.days)add(dshow(d.date),d.trips);
@@ -10644,6 +10786,10 @@ details.subpage-row summary::-webkit-details-marker{display:none}
 .hour-segments .trip.seg-row>button{box-sizing:border-box!important;width:100%!important;height:40px!important;min-height:40px!important;margin:0!important;padding:0!important;display:flex!important;align-items:center!important;justify-content:center!important;white-space:nowrap!important;font-size:14px!important;line-height:1!important}
 /* letras dentro del circulo: etiqueta en dos lineas cuando no cabe (lo decide fitCtlCircles) */
 .control-circles .control-metric.wrapL>small:first-child{max-width:70%!important;margin-left:auto!important;margin-right:auto!important}
+/* v3.58 · Control · circulos de «Todas las apps» (4 en fila): letras un pelin mas pequenas para que se lean tambien con la ventana pequena */
+html body #content .control-circles.c4 .control-metric small{font-size:clamp(6px,1.75vw,8.6px)!important}
+html body #content .control-circles.c4 .control-metric b{font-size:clamp(8.5px,2.4vw,13px)!important}
+@media(max-width:399px){html body #content .control-circles.c4 .control-metric small{font-size:9px!important}html body #content .control-circles.c4 .control-metric b{font-size:clamp(12px,3.9vw,16px)!important}}
 /* menu: las tres lineas un poco mas grandes (el encabezado no cambia) */
 .hdr-menu-hit::before{content:"";position:absolute;left:3%;top:2%;width:70%;height:60%;border-radius:32%;pointer-events:none;background:linear-gradient(#fff,#fff) 50% 18%/78% 15% no-repeat,linear-gradient(#fff,#fff) 50% 50%/78% 15% no-repeat,linear-gradient(#fff,#fff) 50% 82%/78% 15% no-repeat,linear-gradient(135deg,#5d3db0,#34267c);box-shadow:0 0 0 1px rgba(255,255,255,.2),0 0 8px rgba(130,90,255,.5)}
 </style>
