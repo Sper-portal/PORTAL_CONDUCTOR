@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "746849375403",
+    "project_id": "driver-hub-360",
+    "storage_bucket": "driver-hub-360.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:746849375403:android:0766abd719e35f55c013ee",
+        "android_client_info": {
+          "package_name": "com.portal.conductor"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhoSuUV-cMDXhKEJOXABkvGNybHLxF8WQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

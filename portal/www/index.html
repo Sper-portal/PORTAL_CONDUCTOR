@@ -2677,7 +2677,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.54';
+const APP_VERSION='v3.55';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -8268,6 +8268,7 @@ function note(t){const n=panel&&panel.querySelector('#sosNote');if(!n)return;n.t
 function closePanel(quiet){
   if(panel){try{panel.remove()}catch(e){}}
   panel=null;backOff();
+  try{S.panelClosed&&S.panelClosed()}catch(e){}
 }
 function render(){
   if(!panel)return;
@@ -8279,6 +8280,7 @@ function render(){
   let h='<div class="sos-top"><div class="sos-h">🆘 AYUDA</div><button class="sos-x" data-a="close" aria-label="Cerrar">×</button></div>';
   if(test)h+='<div class="sos-test">PRUEBA: no se envía nada. Los botones solo te enseñan lo que harían.</div>';
   h+='<div class="sos-box">'+loc+'<span id="sosMsg">'+esc(msg)+'</span></div><div id="sosNote"></div>';
+  try{h+=(S.panelTop?S.panelTop(test,st):'')}catch(e){console.warn('v3.55 sos',e)}
   if(n){
     h+='<button class="sos-big sos-red" data-a="sms">📩 SMS a todos ('+n+')<small>'+esc(c.contacts.map(x=>x.n||x.p).join(', '))+' · se abre tu app de mensajes con todo escrito</small></button>';
     h+='<div class="sos-sub">O por WhatsApp, uno a uno:</div>';
@@ -8307,6 +8309,7 @@ async function refresh(){
   if(r&&!r.err){st.pos=r;st.state='ok';st.err=''}
   else if(!st.pos){st.state='error';st.err=(r&&r.err)||'fail'}
   render();
+  try{if(st.pos&&S.panelPos)S.panelPos(st.pos)}catch(e){}
 }
 function openPanel(isTest){
   closePanel();
@@ -8317,6 +8320,7 @@ function openPanel(isTest){
   panel.addEventListener('click',ev=>{
     const b=ev.target.closest&&ev.target.closest('[data-a]');if(!b)return;
     const a=b.getAttribute('data-a'),c=get(),text=build(c,st.pos);
+    if(a&&a.indexOf('app-')===0){try{S.panelClick&&S.panelClick(a,b)}catch(e){console.warn('v3.55 sos',e)}return}
     if(a==='close'){closePanel();return}
     if(a==='retry'){st.state='buscando';render();refresh();return}
     if(a==='cfg'){closePanel();try{show('settings')}catch(e){}try{settingsFrom=1}catch(e){}page();return}
@@ -8327,11 +8331,12 @@ function openPanel(isTest){
   });
   document.body.appendChild(panel);
   render();
+  try{S.panelOpened&&S.panelOpened(test,st)}catch(e){console.warn('v3.55 sos',e)}
   try{if(navigator.vibrate)navigator.vibrate([150,80,150])}catch(e){}
   backOn();
   refresh();
 }
-S.openPanel=openPanel;S.closePanel=closePanel;
+S.openPanel=openPanel;S.closePanel=closePanel;S.render=render;
 
 /* ---------- boton rojo fijo: se mantiene pulsado 2 s ---------- */
 let fab=null,t0=0,raf=0,timer=0,armed=false,fired=false,tipT=0;
@@ -8407,7 +8412,7 @@ function page(){
   let h='<section class="panel futuristic" id="sosPage"><div class="settings-head"><button class="back" onclick="backToGeneralMenu()">←</button><div class="section-title" style="margin:0">🆘 SOS y contactos</div></div>';
   h+='<div class="note" style="margin:12px 0">Mantén pulsado el botón rojo <b>SOS</b> (arriba a la derecha) '+Math.round(S.holdMs/1000)+' segundos y se abre el aviso con tu ubicación. Los mensajes los envías tú desde tu móvil: no se manda nada solo.</div>';
   h+='<div class="sos-lab">Tu nombre (sale en el mensaje)</div><input class="sos-in" id="sosName" maxlength="40" autocomplete="off" value="'+esc(c.name)+'" placeholder="Por ejemplo: Juan">';
-  h+='<div class="sos-lab">Contactos de confianza</div>';
+  h+='<div class="sos-lab" id="sosPhLab">Contactos de confianza (por teléfono: SMS y WhatsApp)</div>';
   if(!n)h+='<div class="note" style="margin:8px 0">Aún no hay ninguno. Añade a quien quieras que reciba tu aviso.</div>';
   c.contacts.forEach((x,i)=>{h+='<div class="sos-con"><div><b>'+esc(x.n||'(sin nombre)')+'</b><span>'+esc(x.p)+'</span></div><button class="sos-del" data-a="del" data-i="'+i+'" aria-label="Quitar a '+esc(x.n||x.p)+'">🗑</button></div>'});
   if(n<MAXC)h+='<button class="secondary" style="width:100%;margin:8px 0" data-a="addopen" id="sosAddBtn">＋ Añadir contacto</button>';
@@ -8445,11 +8450,501 @@ function page(){
       f.contacts=f.contacts.concat([{n:nm,p:ph}]);put(f);page();
     }
   });
+  try{S.pageAfter&&S.pageAfter(root)}catch(e){console.warn('v3.55 sos',e)}
 }
 S.page=page;
 (function(){const _rs=window.renderSettings;if(typeof _rs==='function')window.renderSettings=function(){const r=_rs.apply(this,arguments);try{addOption()}catch(e){console.warn('v3.54 sos',e)}return r}})();
 
 if(document.body)mkFab();else document.addEventListener('DOMContentLoaded',mkFab);
+})();
+</script>
+<style id="pdc-sos2-css">
+#sosAlertScr{position:fixed;inset:0;z-index:100050;background:linear-gradient(160deg,#7a0000,#2a0508 65%);color:#fff;overflow:auto;font-family:Inter,system-ui,sans-serif;padding:18px 16px 30px;-webkit-overflow-scrolling:touch}
+#sosAlertScr.ok{background:linear-gradient(160deg,#0f5a2f,#07200f 65%)}
+#sosAlertScr.tst .t0{background:#f59e0b;color:#1a1000;border-radius:12px;padding:8px 11px;font-weight:800;font-size:13.5px;margin-bottom:10px}
+#sosAlertScr .t1{font-size:30px;line-height:1.1;font-weight:900;margin:6px 0 4px}
+#sosAlertScr .t2{font-size:15px;opacity:.9;margin-bottom:12px}
+#sosAlertScr .box{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);border-radius:14px;padding:12px 14px;margin:10px 0;font-size:14.5px;line-height:1.4;word-break:break-word}
+#sosAlertScr button.b{display:block;width:100%;text-align:left;border:0;border-radius:16px;padding:15px 16px;margin:10px 0;color:#fff;font:800 18px Inter,system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.4);cursor:pointer}
+#sosAlertScr button.b small{display:block;font-weight:500;font-size:12.5px;opacity:.9;margin-top:2px}
+#sosAlertScr .map{background:#1b6ef3}#sosAlertScr .tel{background:#1f8f4a}#sosAlertScr .e112{background:#fff;color:#8e0000}#sosAlertScr .fin{background:rgba(255,255,255,.16)}
+#sosAppBox>b{display:block;margin-bottom:4px}
+#sosAppBox .sa-w{color:#ffd27a;font-weight:800}#sosAppBox .sa-o{color:#7ee2a8;font-weight:800}#sosAppBox .sa-b{color:#ffb4a8;font-weight:700}
+#sosAppBox .sa-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+#sosAppBox button{border:0;border-radius:12px;padding:10px 14px;font:800 14.5px Inter,system-ui,sans-serif;color:#fff;background:rgba(255,255,255,.18);cursor:pointer}
+#sosAppBox button.go{background:#e53935}
+#sosApp .sa-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+#sosApp .sa-st{font-size:13.5px;line-height:1.4;margin:6px 0}
+#sosApp .sa-ok{color:#2ecc71;font-weight:800}#sosApp .sa-no{color:#ffb020;font-weight:800}#sosApp .sa-bad{color:#ff8a80;font-weight:700}
+#sosApp button.sa-b{border:0;border-radius:12px;padding:10px 14px;font:800 14px Inter,system-ui,sans-serif;cursor:pointer;background:rgba(127,127,127,.28);color:inherit}
+#sosApp button.sa-g{background:#1f8f4a;color:#fff}
+#sosApp .sa-card{border:1px solid rgba(127,127,127,.35);border-radius:14px;padding:10px 12px;margin:10px 0;background:rgba(127,127,127,.08)}
+</style>
+<script id="pdc-sos2">
+/* v3.55 · SOS completo: avisos a contactos de confianza QUE TIENEN LA APP (por correo, con aceptacion), con notificacion de alarma (Firebase).
+   Se suma al SOS de la v3.54 (SMS/WhatsApp siguen igual). El servidor (funcion «sos-send») reparte el aviso solo a quien ACEPTO ser tu contacto. */
+(function(){
+'use strict';
+const S=window.PDCSOS;
+if(!S||window.PDCSOS2)return;
+const X=window.PDCSOS2={cdSec:5,tickMs:1000,pollMs:20000,watchMs:60000,gapMs:15000,windowMs:3*3600e3};
+const FN='sos-send',K_DEV='pdc_sos2_dev',K_SEEN='pdc_sos2_seen',K_MINE='pdc_sos2_mine';
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ls={get(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const tmo=(p,ms)=>{let t;return Promise.race([Promise.resolve(p),new Promise((_,r)=>{t=setTimeout(()=>r(new Error('tiempo')),ms||8000)})]).finally(()=>clearTimeout(t))};
+const nowMs=()=>Date.now();
+
+/* ---------- nube ---------- */
+function sb(){try{return (typeof pdcSupabase!=='undefined'&&pdcSupabase&&typeof hasRealCloud==='function'&&hasRealCloud())?pdcSupabase:null}catch(e){return null}}
+async function me(){
+  const c=sb();if(!c)return null;
+  try{const r=await tmo(c.auth.getSession(),6000);const u=r&&r.data&&r.data.session&&r.data.session.user;return u&&u.id?{id:u.id,email:String(u.email||'').toLowerCase()}:null}catch(e){return null}
+}
+const ERR={eres_tu:'Ese es tu propio correo.',maximo_8:'Ya tienes 8 contactos con la app.',correo_no_valido:'Ese correo no parece válido.',sin_sesion:'Entra primero en tu cuenta.',no_encontrado:'Esa invitación ya no existe.'};
+const NOSRV=/PGRST20\d|42P01|does not exist|schema cache|Could not find the table/i;
+function errText(e){
+  const m=String((e&&(e.message||e.details||e.hint))||e||'')+' '+String((e&&e.code)||'');
+  for(const k in ERR)if(m.indexOf(k)>=0)return ERR[k];
+  if(/duplicate|unique|23505/i.test(m))return 'Ya lo habías invitado.';
+  if(NOSRV.test(m))return 'Los avisos por la app aún no están preparados en el servidor.';
+  return 'No se ha podido hacer (¿hay conexión?).';
+}
+async function callFn(body){
+  const c=sb();if(!c)return {ok:false,error:'sin_nube'};
+  try{
+    const r=await tmo(c.functions.invoke(FN,{body:body}),20000);
+    if(r&&r.error){let j=null;try{j=await r.error.context.json()}catch(e){}return {ok:false,error:(j&&j.error)||'red'}}
+    return (r&&r.data&&typeof r.data==='object')?r.data:{ok:false,error:'respuesta'};
+  }catch(e){return {ok:false,error:'red'}}
+}
+async function loadRows(){
+  const c=sb(),u=await me();if(!c||!u)return {u:null,out:[],inc:[],err:c?'sin_sesion':'sin_nube'};
+  try{
+    const r=await tmo(c.from('sos_contacts').select('id,owner_id,owner_email,owner_name,contact_email,contact_id,status,created_at').order('created_at',{ascending:true}),8000);
+    if(r.error)return {u,out:[],inc:[],err:NOSRV.test(String(r.error.message||'')+' '+String(r.error.code||''))?'servidor':'red'};
+    const rows=r.data||[];
+    return {u,out:rows.filter(x=>x.owner_id===u.id),inc:rows.filter(x=>x.owner_id!==u.id&&x.contact_email===u.email),err:''};
+  }catch(e){return {u,out:[],inc:[],err:'red'}}
+}
+async function invite(email){
+  const c=sb(),u=await me();if(!c||!u)return 'Entra primero en tu cuenta.';
+  try{const r=await tmo(c.from('sos_contacts').insert({owner_id:u.id,owner_name:(S.get().name||'').trim().slice(0,60),contact_email:email}),8000);return r.error?errText(r.error):''}catch(e){return errText(e)}
+}
+async function respond(id,yes){
+  const c=sb();if(!c)return 'Entra primero en tu cuenta.';
+  try{const r=await tmo(c.rpc('sos_respond',{p_id:id,p_accept:!!yes}),8000);return r.error?errText(r.error):''}catch(e){return errText(e)}
+}
+async function removeRow(id){
+  const c=sb();if(!c)return 'Entra primero en tu cuenta.';
+  try{const r=await tmo(c.from('sos_contacts').delete().eq('id',id),8000);return r.error?errText(r.error):''}catch(e){return errText(e)}
+}
+const myName=()=>(S.get().name||'').trim();
+const myPhone=()=>{try{return String((db.settings&&db.settings.sosApp&&db.settings.sosApp.phone)||'')}catch(e){return ''}};
+function setPhone(p){
+  db.settings=db.settings||{};db.settings.sosApp={v:1,phone:p};
+  try{if(window.PDC314&&PDC314.saveNow)PDC314.saveNow();else if(typeof save==='function')save()}catch(e){console.warn('v3.55 sos tel',e)}
+}
+
+/* ---------- avisos en este movil (Firebase) ---------- */
+const nat=()=>{try{return window.Capacitor&&Capacitor.Plugins||{}}catch(e){return {}}};
+const PUSH=()=>nat().PushNotifications||null;
+const NOTI=()=>nat().SosNotify||null;
+X.push={state:(ls.get(K_DEV)||{}).on?'on':'off',err:'',token:''};   // off | work | on | denied | noplugin | error
+let bound=false;
+function dev(){return ls.get(K_DEV)||{}}
+async function registerToken(t){
+  const c=sb();if(!c||!t)return;
+  try{const r=await tmo(c.rpc('sos_register_device',{p_token:t,p_platform:'android'}),8000);if(r&&r.error)X.push.err=errText(r.error)}catch(e){X.push.err='red'}
+}
+function bind(){
+  if(bound)return;const P=PUSH();if(!P||!P.addListener)return;bound=true;
+  try{
+    P.addListener('registration',t=>{X.push.token=(t&&t.value)||'';ls.set(K_DEV,Object.assign(dev(),{token:X.push.token}));if(dev().on)registerToken(X.push.token).then(()=>{X.push.state='on';repaint()})});
+    P.addListener('registrationError',e=>{X.push.state='error';X.push.err=String((e&&e.error)||'error');repaint()});
+    P.addListener('pushNotificationReceived',n=>{try{incoming(n&&(n.data||(n.notification&&n.notification.data)),'fg')}catch(e){console.warn('v3.55 push',e)}});
+    P.addListener('pushNotificationActionPerformed',n=>{try{incoming(n&&n.notification&&n.notification.data,'tap')}catch(e){console.warn('v3.55 push',e)}});
+  }catch(e){console.warn('v3.55 bind',e)}
+}
+async function enable(prompt){
+  const P=PUSH();
+  if(!P||!P.register){X.push.state='noplugin';repaint();return}
+  const u=await me();if(!u){X.push.state='off';X.push.err='sin_sesion';repaint();return}
+  X.push.state='work';X.push.err='';repaint();
+  bind();
+  try{
+    let p=await P.checkPermissions();
+    if(p&&p.receive!=='granted'&&prompt)p=await P.requestPermissions();
+    if(!p||p.receive!=='granted'){X.push.state='denied';repaint();return}
+    const N=NOTI();
+    if(N&&N.ensureChannels){try{await N.ensureChannels()}catch(e){}}
+    else if(P.createChannel){try{await P.createChannel({id:'sos_alarma',name:'Avisos SOS',description:'Avisos de ayuda de tus contactos',importance:5,visibility:1,vibration:true,lights:true,lightColor:'#FF0000'})}catch(e){}}
+    ls.set(K_DEV,Object.assign(dev(),{on:true,uid:u.id}));
+    await P.register();
+    setTimeout(()=>{if(X.push.state==='work'){X.push.state='error';X.push.err=X.push.err||'tiempo';repaint()}},20000);
+  }catch(e){X.push.state='error';X.push.err=String(e&&e.message||e);repaint()}
+}
+async function disable(){
+  const t=X.push.token||dev().token,c=sb();
+  ls.set(K_DEV,Object.assign(dev(),{on:false}));
+  X.push.state='off';
+  try{if(c&&t)await tmo(c.rpc('sos_unregister_device',{p_token:t}),6000)}catch(e){}
+  repaint();
+}
+async function silentStart(){
+  const d=dev();if(!d.on)return;
+  const P=PUSH();if(!P)return;
+  const u=await me();if(!u)return;
+  bind();
+  try{const p=await P.checkPermissions();if(p&&p.receive==='granted'){X.push.state='work';const N=NOTI();if(N&&N.ensureChannels){try{await N.ensureChannels()}catch(e){}}await P.register()}else{X.push.state='denied'}}catch(e){}
+}
+X.enable=enable;X.disable=disable;
+
+/* ---------- recibir un aviso: pantalla roja ---------- */
+let scr=null,cur=null,pollT=0,backH=null,closedRemote=false;
+function seenMap(){const m=ls.get(K_SEEN)||{},lim=nowMs()-7*86400e3;for(const k in m)if(m[k]<lim)delete m[k];return m}
+function markSeen(id){const m=seenMap();m[id]=nowMs();ls.set(K_SEEN,m)}
+function ago(ts){const t=Date.parse(ts||'');if(!t)return '';const m=Math.max(0,Math.round((nowMs()-t)/60000));return m<1?'ahora mismo':(m<60?'hace '+m+' min':'hace '+Math.floor(m/60)+' h '+(m%60)+' min')}
+function backOn(){try{const A=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.App;if(A&&A.addListener&&!backH)backH=A.addListener('backButton',()=>{dismiss()})}catch(e){}}
+function backOff(){try{if(backH){const h=backH;backH=null;Promise.resolve(h).then(x=>{try{x&&x.remove&&x.remove()}catch(e){}})}}catch(e){}}
+function dismiss(){
+  if(cur&&cur.id)markSeen(cur.id);
+  clearInterval(pollT);pollT=0;
+  if(scr){try{scr.remove()}catch(e){}}
+  scr=null;cur=null;closedRemote=false;backOff();
+}
+const hasLoc=a=>a&&a.lat!=null&&a.lat!==''&&a.lon!=null&&a.lon!==''&&isFinite(+a.lat)&&isFinite(+a.lon);
+function paintAlert(){
+  if(!scr||!cur)return;
+  const a=cur,who=a.name||'Un contacto';
+  scr.className=closedRemote?'ok':(a.test?'tst':'');
+  let h='';
+  if(a.test)h+='<div class="t0">PRUEBA: no es una emergencia</div>';
+  if(closedRemote){
+    h+='<div class="t1">✅ '+esc(who)+' ya está bien</div><div class="t2">Ha cancelado el aviso.</div>';
+    h+='<button class="b fin" data-a="ok">Entendido</button>';
+  }else{
+    h+='<div class="t1">🆘 '+esc(who).toUpperCase()+' NECESITA AYUDA</div><div class="t2">'+esc(ago(a.ts))+'</div>';
+    if(a.msg)h+='<div class="box">«'+esc(a.msg)+'»</div>';
+    if(hasLoc(a)){
+      const la=(+a.lat).toFixed(5),lo=(+a.lon).toFixed(5);
+      h+='<button class="b map" data-a="map">📍 Ver dónde está<small>'+la+', '+lo+(a.acc?' · precisión '+esc(Math.round(+a.acc))+' m':'')+'</small></button>';
+    }else h+='<div class="box">📍 Todavía no hay ubicación. Se actualizará sola en cuanto la tenga.</div>';
+    if(a.phone)h+='<button class="b tel" data-a="tel">📞 Llamar a '+esc(who)+'<small>'+esc(a.phone)+'</small></button>';
+    h+='<button class="b e112" data-a="112">🚨 Llamar al 112<small>Se abre el marcador: tú pulsas llamar</small></button>';
+    h+='<button class="b fin" data-a="ok">Entendido<small>Cierra este aviso</small></button>';
+  }
+  scr.innerHTML=h;
+}
+async function refreshAlert(){
+  const c=sb();if(!c||!cur||!cur.id)return;
+  const id=cur.id;
+  try{
+    const r=await tmo(c.from('sos_alerts').select('owner_name,owner_phone,lat,lon,acc,msg,created_at,closed_at').eq('id',id).maybeSingle(),8000);
+    const row=r&&r.data;if(!row||!cur||cur.id!==id)return;
+    if(row.closed_at)closedRemote=true;
+    if(row.lat!=null&&row.lon!=null){cur.lat=row.lat;cur.lon=row.lon;cur.acc=row.acc}
+    if(row.owner_phone&&!cur.phone)cur.phone=row.owner_phone;
+    paintAlert();
+  }catch(e){}
+}
+function showAlert(a){
+  dismissQuiet();
+  cur=a;closedRemote=false;
+  scr=document.createElement('div');scr.id='sosAlertScr';
+  scr.addEventListener('click',ev=>{
+    const b=ev.target.closest&&ev.target.closest('[data-a]');if(!b||!cur)return;
+    const k=b.getAttribute('data-a');
+    if(k==='ok'){dismiss();return}
+    if(k==='map'&&hasLoc(cur)){try{S.open('https://maps.google.com/?q='+(+cur.lat).toFixed(5)+','+(+cur.lon).toFixed(5))}catch(e){}return}
+    if(k==='tel'&&cur.phone){try{S.open('tel:'+String(cur.phone).replace(/[^\d+]/g,''))}catch(e){}return}
+    if(k==='112'){try{S.open('tel:112')}catch(e){}}
+  });
+  document.body.appendChild(scr);
+  paintAlert();
+  try{if(navigator.vibrate)navigator.vibrate([400,150,400,150,400])}catch(e){}
+  backOn();
+  clearInterval(pollT);pollT=setInterval(refreshAlert,X.pollMs);
+}
+function dismissQuiet(){clearInterval(pollT);pollT=0;if(scr){try{scr.remove()}catch(e){}}scr=null;backOff()}
+function norm(d){
+  return {id:String(d.alert_id||d.id||''),name:d.name||d.owner_name||'',phone:d.phone||d.owner_phone||'',lat:(d.lat===''?null:d.lat),lon:(d.lon===''?null:d.lon),acc:(d.acc===''?null:d.acc),ts:d.ts||d.created_at||'',test:d.test==='1'||d.test===true||d.is_test===true,msg:d.msg||'',upd:d.upd==='1'||d.upd===true};
+}
+function incoming(d,via){
+  if(!d||typeof d!=='object')return;
+  if(d.type==='sos_close'){
+    const id=String(d.alert_id||'');
+    if(cur&&cur.id===id){closedRemote=true;paintAlert()}
+    return;
+  }
+  if(d.type!=='sos')return;
+  const a=norm(d);if(!a.id)return;
+  if(cur&&cur.id===a.id){   // ya esta abierta: solo se pone al dia
+    if(hasLoc(a)){cur.lat=a.lat;cur.lon=a.lon;cur.acc=a.acc}
+    if(a.phone&&!cur.phone)cur.phone=a.phone;
+    closedRemote=false;paintAlert();return;
+  }
+  const seen=seenMap();
+  if(via!=='tap'&&seen[a.id]&&!a.upd)return;
+  showAlert(a);
+}
+X.incoming=incoming;X.dismiss=dismiss;
+let lastCheck=0,checking=false;
+async function checkAlerts(force){
+  if(checking||(!force&&nowMs()-lastCheck<X.gapMs))return;
+  const c=sb();if(!c)return;
+  checking=true;lastCheck=nowMs();
+  try{
+    const u=await me();if(!u)return;
+    const since=new Date(nowMs()-X.windowMs).toISOString();
+    const r=await tmo(c.from('sos_alerts').select('id,owner_id,owner_name,owner_phone,lat,lon,acc,msg,is_test,created_at,closed_at').is('closed_at',null).gte('created_at',since).neq('owner_id',u.id).order('created_at',{ascending:false}).limit(5),8000);
+    const rows=(r&&r.data)||[];
+    const seen=seenMap();
+    const a=rows.find(x=>x&&x.id&&!seen[x.id]);
+    if(a&&(!cur||cur.id!==a.id))showAlert(norm(a));
+  }catch(e){}finally{checking=false}
+}
+X.check=checkAlerts;
+
+/* ---------- aviso por la app desde la pantalla roja ---------- */
+let PA=null,PST=null,cdT=0;
+function paHtml(){
+  if(!PA)return '';
+  const a=PA;let s='',b='';
+  if(a.test){
+    if(a.state==='tdone'){const r=a.res||{};s=r.devices>0?'<div class="sa-o">✅ Enviada a tu móvil. Debe sonar o vibrar en unos segundos.</div>Si no suena, mira Ajustes → SOS → «Sonido y No molestar».':'<div class="sa-b">Este móvil no está activado para recibir avisos.</div>Actívalo en Ajustes → SOS → Avisos por la app.'}
+    else if(a.state==='tsend')s='<div class="sa-w">📡 Enviando prueba…</div>';
+    else if(a.state==='terr')s='<div class="sa-b">⚠️ No se ha podido enviar la prueba ('+esc(a.error||'error')+').</div>';
+    else s='🧪 PRUEBA: el aviso solo llegará a <b>tu propio móvil</b>, a nadie más.';
+    if(a.state==='tidle'||a.state==='terr'||a.state==='tdone')b='<button class="go" data-a="app-test">🔔 Probar en mi móvil</button>';
+  }else if(a.state==='wait'){
+    s='<div class="sa-w">⏳ Avisando a tus contactos de la app en <span id="sosAppCd">'+a.cd+'</span> s…</div>';
+    b='<button class="go" data-a="app-now">Avisar ya</button><button data-a="app-cancel">Cancelar</button>';
+  }else if(a.state==='sending')s='<div class="sa-w">📡 Avisando a tus contactos de la app…</div>';
+  else if(a.state==='done'){
+    const r=a.res||{};
+    if(r.devices>0&&r.sent>0)s='<div class="sa-o">✅ Aviso enviado a '+r.contacts+(r.contacts===1?' contacto':' contactos')+' ('+r.sent+(r.sent===1?' móvil':' móviles')+').</div>Sigue con SMS o WhatsApp si quieres avisar también por ahí.';
+    else if(r.devices>0)s='<div class="sa-b">⚠️ No ha salido ningún aviso por la app (falla el envío). Usa SMS o WhatsApp.</div>';
+    else s='<div class="sa-b">⚠️ Tus '+r.contacts+(r.contacts===1?' contacto ha aceptado':' contactos han aceptado')+' pero ninguno tiene los avisos activados en su móvil. Usa SMS o WhatsApp.</div>';
+    if(r.sent>0)b='<button data-a="app-fine">✔ Ya estoy bien: avisar</button>';
+  }
+  else if(a.state==='fine')s='<div class="sa-o">✅ Has avisado de que ya estás bien.</div>';
+  else if(a.state==='none'){s='ℹ️ Nadie ha aceptado todavía ser tu contacto en la app. Invítalos en Ajustes → SOS.';b='<button data-a="app-cfg">Ir a Ajustes</button>'}
+  else if(a.state==='cancel'){s='Aviso por la app cancelado.';b='<button class="go" data-a="app-now">Avisar ahora</button>'}
+  else if(a.state==='nologin'){s='ℹ️ Entra en tu cuenta (Ajustes → Cuenta) para avisar también por la app.'}
+  else if(a.state==='err'){s='<div class="sa-b">⚠️ No he podido avisar por la app ('+esc(a.error==='demasiados'?'demasiados avisos seguidos':(a.error==='sin_firebase'?'falta configurar Firebase en el servidor':'sin conexión o error'))+'). Usa SMS o WhatsApp.</div>';b='<button class="go" data-a="app-now">Reintentar</button>'}
+  return '<div class="sos-box" id="sosAppBox"><b>📲 Aviso a mis contactos con la app</b><div id="sosAppSt">'+s+'</div><div class="sa-btns" id="sosAppBt">'+b+'</div></div>';
+}
+function paPaint(){const box=document.getElementById('sosAppBox');if(!box){try{S.render&&S.render()}catch(e){}return}const h=paHtml();const tmp=document.createElement('div');tmp.innerHTML=h;const nb=tmp.firstChild;if(nb)box.replaceWith(nb)}
+function paBody(test){
+  const f=PST&&PST.pos;
+  const b={action:'alert',name:myName(),phone:myPhone(),msg:(S.get().msg||'').trim(),test:!!test};
+  if(f){b.lat=f.lat;b.lon=f.lon;b.acc=f.acc}
+  return b;
+}
+async function paSend(){
+  if(!PA||PA.test)return;
+  clearInterval(cdT);cdT=0;
+  PA.state='sending';paPaint();
+  const mine=PA;
+  const r=await callFn(paBody(false));
+  if(PA!==mine)return;
+  if(!r.ok){PA.state='err';PA.error=r.error;paPaint();return}
+  PA.id=r.id;PA.res=r;PA.sentNoLoc=!(PST&&PST.pos);
+  ls.set(K_MINE,{id:r.id,t:nowMs(),test:false});
+  PA.state=r.contacts===0?'none':'done';
+  paPaint();
+  if(PA.sentNoLoc&&PST&&PST.pos)paUpdate(PST.pos);
+}
+async function paUpdate(pos){
+  if(!PA||!PA.id||PA.test||PA.closed)return;
+  PA.sentNoLoc=false;
+  await callFn({action:'update',id:PA.id,lat:pos.lat,lon:pos.lon,acc:pos.acc});
+}
+async function paTest(){
+  if(!PA||!PA.test)return;
+  PA.state='tsend';paPaint();
+  const mine=PA;
+  const r=await callFn(paBody(true));
+  if(PA!==mine)return;
+  if(!r.ok){PA.state='terr';PA.error=r.error}else{PA.state='tdone';PA.res=r}
+  paPaint();
+}
+function paTick(){
+  if(!PA||PA.state!=='wait')return clearInterval(cdT);
+  PA.cd--;
+  const e=document.getElementById('sosAppCd');if(e)e.textContent=PA.cd;
+  if(PA.cd<=0)paSend();
+}
+S.panelTop=function(test,st){PST=st;return paHtml()};
+S.panelOpened=function(test,st){
+  clearInterval(cdT);cdT=0;PST=st;PA=null;
+  if(!sb()){return}
+  PA={test:!!test,state:'check'};
+  const mine=PA;
+  (async()=>{
+    const u=await me();
+    if(PA!==mine)return;
+    if(!u){PA.state='nologin';paPaint();return}
+    if(test){PA.state='tidle';paPaint();return}
+    PA.state='wait';PA.cd=X.cdSec;paPaint();
+    cdT=setInterval(paTick,X.tickMs);
+    const rows=await loadRows();
+    if(PA!==mine||PA.state!=='wait')return;
+    if(!rows.err&&!rows.out.some(x=>x.status==='accepted')){clearInterval(cdT);PA.state='none';paPaint()}
+  })();
+};
+S.panelClosed=function(){clearInterval(cdT);cdT=0;PA=null;PST=null};
+S.panelPos=function(pos){if(PA&&PA.id&&PA.sentNoLoc)paUpdate(pos)};
+S.panelClick=function(a){
+  if(!PA)return;
+  if(a==='app-now'){PA.cd=0;paSend()}
+  else if(a==='app-cancel'){clearInterval(cdT);cdT=0;PA.state='cancel';paPaint()}
+  else if(a==='app-test')paTest();
+  else if(a==='app-cfg'){S.closePanel();try{show('settings')}catch(e){}try{settingsFrom=1}catch(e){}S.page()}
+  else if(a==='app-fine'){
+    const id=PA.id;if(!id)return;
+    PA.closed=true;PA.state='fine';paPaint();
+    callFn({action:'close',id:id});ls.set(K_MINE,null);
+  }
+};
+
+/* ---------- Ajustes: bloque «Avisos por la app» ---------- */
+let rowsC=null,statC=null,pageBusy=false,msgT=0;
+function repaint(){try{paintBlock()}catch(e){}}
+function stateLine(){
+  const s=X.push.state;
+  if(s==='on')return '<span class="sa-ok">✅ Avisos activados en este móvil</span>';
+  if(s==='work')return '<span class="sa-no">⏳ Activando…</span>';
+  if(s==='denied')return '<span class="sa-bad">⛔ Android tiene bloqueadas las notificaciones de la app. Actívalas en Ajustes de Android → Aplicaciones → Driver Hub 360 → Notificaciones.</span>';
+  if(s==='noplugin')return '<span class="sa-bad">Esta versión de la app no puede recibir avisos. Instala la última APK.</span>';
+  if(s==='error')return '<span class="sa-bad">No he podido activar los avisos en este móvil ('+esc(X.push.err||'error')+'). ¿Tienes internet y Google Play?</span>';
+  if(X.push.err==='sin_sesion')return '<span class="sa-bad">Entra primero en tu cuenta.</span>';
+  return '<span class="sa-no">⚪ Avisos sin activar en este móvil</span>';
+}
+function stLabel(s){return s==='accepted'?'✅ Aceptado':(s==='rejected'?'✖ Dijo que no':'⏳ Pendiente de que acepte')}
+function blockHtml(){
+  if(!sb()||(rowsC&&rowsC.err==='sin_sesion'))return '<div class="note" style="margin:8px 0">Para avisar por la app a tus contactos, entra en tu cuenta (Ajustes → Cuenta). Mientras tanto, SMS y WhatsApp siguen funcionando.</div>';
+  const R=rowsC;
+  let h='<div class="sa-st" id="sosAppSt2">'+stateLine()+'</div><div class="sa-row">';
+  h+=(X.push.state==='on')?'<button class="sa-b" data-a="app-off">Desactivar en este móvil</button>':'<button class="sa-b sa-g" data-a="app-on" id="sosAppOn">🔔 Activar avisos en este móvil</button>';
+  h+='<button class="sa-b" data-a="app-probe" id="sosAppProbe">🧪 Probar en mi móvil</button>';
+  if(NOTI())h+='<button class="sa-b" data-a="app-snd">🔊 Sonido y «No molestar»</button>';
+  h+='</div>';
+  if(statC){h+='<div class="sa-st">'+statC+'</div>'}
+  h+='<div class="sos-lab">Mi teléfono (opcional: para que me llamen desde el aviso)</div><input class="sos-in" id="sosAppPhone" type="tel" inputmode="tel" autocomplete="off" placeholder="600 123 456" value="'+esc(myPhone())+'"><div class="sos-err" id="sosAppPhErr"></div>';
+  h+='<div class="sos-lab">Contactos con la app (por correo)</div>';
+  if(!R)h+='<div class="note" style="margin:6px 0">Cargando…</div>';
+  else{
+    if(R.err==='servidor')h+='<div class="sos-err">Los avisos por la app aún no están preparados en el servidor. Mientras tanto, SMS y WhatsApp siguen funcionando.</div>';
+    else if(R.err)h+='<div class="sos-err">No he podido cargar tus contactos ('+(R.err==='sin_sesion'?'entra en tu cuenta':'sin conexión')+').</div>';
+    if(!R.out.length&&!R.err)h+='<div class="note" style="margin:6px 0">Aún no has invitado a nadie. Escribe su correo (el de su cuenta de Driver Hub 360).</div>';
+    R.out.forEach(x=>{h+='<div class="sos-con"><div><b>'+esc(x.contact_email)+'</b><span>'+stLabel(x.status)+'</span></div><button class="sos-del" data-a="app-del" data-id="'+esc(x.id)+'" aria-label="Quitar a '+esc(x.contact_email)+'">🗑</button></div>'});
+    if(R.out.length<8)h+='<div class="sa-row"><input class="sos-in" id="sosAppMail" type="email" inputmode="email" autocomplete="off" placeholder="correo@ejemplo.com" style="flex:1;min-width:180px"><button class="sa-b sa-g" data-a="app-inv" id="sosAppInv">Invitar</button></div><div class="sos-err" id="sosAppErr"></div>';
+    else h+='<div class="note" style="margin:6px 0">Máximo 8 contactos.</div>';
+    const pend=R.inc.filter(x=>x.status==='pending'),acc=R.inc.filter(x=>x.status==='accepted');
+    if(pend.length){h+='<div class="sos-lab">Invitaciones que me han mandado</div>';pend.forEach(x=>{h+='<div class="sa-card"><b>'+esc(x.owner_name||x.owner_email)+'</b><div class="sa-st">'+esc(x.owner_email)+' quiere que seas su contacto de confianza: si pide ayuda, te saltará un aviso en el móvil con su ubicación.</div><div class="sa-row"><button class="sa-b sa-g" data-a="app-yes" data-id="'+esc(x.id)+'">Aceptar</button><button class="sa-b" data-a="app-no" data-id="'+esc(x.id)+'">No</button></div></div>'})}
+    if(acc.length){h+='<div class="sos-lab">Soy contacto de confianza de</div>';acc.forEach(x=>{h+='<div class="sos-con"><div><b>'+esc(x.owner_name||x.owner_email)+'</b><span>'+esc(x.owner_email)+'</span></div><button class="sos-del" data-a="app-del" data-id="'+esc(x.id)+'" aria-label="Dejar de ser contacto de '+esc(x.owner_email)+'">🗑</button></div>'})}
+  }
+  return h;
+}
+function paintBlock(){
+  const el=document.getElementById('sosApp');if(!el)return;
+  const keep={mail:(document.getElementById('sosAppMail')||{}).value,ph:(document.getElementById('sosAppPhone')||{}).value};
+  const wasMail=document.activeElement&&document.activeElement.id==='sosAppMail';
+  el.querySelector('#sosAppBody').innerHTML=blockHtml();
+  const m=document.getElementById('sosAppMail');if(m&&keep.mail){m.value=keep.mail;if(wasMail)m.focus()}
+}
+function msg(t,cls){const e=document.getElementById('sosAppErr');if(e){e.textContent=t||'';e.className=cls||'sos-err'}}
+async function reload(){
+  rowsC=null;paintBlock();
+  rowsC=await loadRows();
+  paintBlock();
+  try{const N=NOTI();if(N&&N.status){const s=await N.status();statC=statusText(s);paintBlock()}}catch(e){}
+}
+function statusText(s){
+  if(!s)return '';
+  const out=[];
+  out.push(s.notifications===false?'<span class="sa-bad">🔕 Las notificaciones de la app están apagadas en Android.</span>':'🔔 Notificaciones: sí');
+  if(s.channelExists===false)out.push('Canal de alarma: se crea al activar los avisos.');
+  else out.push(s.alarmSound?'🔊 Suena como alarma (también con el móvil en silencio).':'');
+  if(s.bypassDnd)out.push('🌙 Pasa por «No molestar».');
+  else out.push('🌙 «No molestar»: pulsa «Sonido y No molestar» y activa «Anular No molestar» para este canal.');
+  return out.filter(Boolean).join('<br>');
+}
+S.pageAfter=function(root){
+  if(!root)return;
+  const lab=root.querySelector('#sosPhLab');
+  const wrap=document.createElement('div');wrap.id='sosApp';
+  wrap.innerHTML='<div class="sos-lab" style="margin-top:18px;font-size:15px;opacity:1"><b>📲 Avisos por la app (suenan como alarma)</b></div><div class="note" style="margin:6px 0 4px">Tus contactos que tengan Driver Hub 360 reciben un aviso en su móvil con tu ubicación, aunque tengan el WhatsApp en silencio. Cada uno tiene que <b>aceptar</b> tu invitación. Solo ven tus avisos los que aceptan.</div><div id="sosAppBody"></div>';
+  if(lab&&lab.parentNode)lab.parentNode.insertBefore(wrap,lab);else root.appendChild(wrap);
+  wrap.addEventListener('click',async ev=>{
+    const b=ev.target.closest&&ev.target.closest('[data-a]');if(!b)return;
+    const a=b.getAttribute('data-a'),id=b.getAttribute('data-id');
+    if(a==='app-on'){await enable(true);paintBlock();reload();return}
+    if(a==='app-off'){await disable();paintBlock();return}
+    if(a==='app-snd'){try{const N=NOTI();if(N&&N.openSettings)await N.openSettings({what:'channel'})}catch(e){}return}
+    if(a==='app-probe'){
+      b.disabled=true;const old=b.textContent;b.textContent='Enviando…';
+      const r=await callFn({action:'alert',test:true,name:myName(),phone:myPhone()});
+      b.disabled=false;b.textContent=old;
+      msg(r.ok?(r.devices>0?'✅ Prueba enviada: debe sonar o vibrar en tu móvil en unos segundos.':'Este móvil aún no está activado: pulsa «Activar avisos en este móvil».'):'No se ha podido enviar la prueba ('+(r.error==='demasiados'?'demasiadas pruebas seguidas':'sin conexión o error')+').',r.ok&&r.devices>0?'sos-ok2':'sos-err');
+      return;
+    }
+    if(a==='app-inv'){
+      const i=document.getElementById('sosAppMail'),v=String((i&&i.value)||'').trim().toLowerCase();
+      if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)){msg('Escribe un correo válido.');return}
+      b.disabled=true;const er=await invite(v);b.disabled=false;
+      if(er){msg(er);return}
+      rowsC=await loadRows();paintBlock();msg('Invitación enviada: tiene que aceptarla en su app.','sos-ok2');return;
+    }
+    if(a==='app-del'){
+      let ok=true;try{ok=confirm('¿Quitar este contacto de los avisos por la app?')}catch(e){}
+      if(!ok)return;
+      const er=await removeRow(id);if(er){msg(er);return}
+      rowsC=await loadRows();paintBlock();return;
+    }
+    if(a==='app-yes'||a==='app-no'){
+      const er=await respond(id,a==='app-yes');if(er){msg(er);return}
+      rowsC=await loadRows();paintBlock();
+      if(a==='app-yes'&&X.push.state!=='on')msg('Ahora activa los avisos en este móvil para recibirlos.','sos-ok2');
+      return;
+    }
+  });
+  wrap.addEventListener('change',ev=>{
+    const t=ev.target;if(!t||t.id!=='sosAppPhone')return;
+    const raw=String(t.value||'').trim(),er=document.getElementById('sosAppPhErr');
+    if(!raw){setPhone('');if(er)er.textContent='';return}
+    const p=S.cleanPhone(raw);
+    if(!p){if(er)er.textContent='Escribe un teléfono válido (9 cifras, o con +34).';return}
+    setPhone(p);t.value=p;if(er)er.textContent='';
+  });
+  paintBlock();reload();
+};
+
+/* ---------- arranque ---------- */
+async function afterLogin(){
+  try{await silentStart()}catch(e){}
+  checkAlerts(true);
+}
+(function wrapAuth(){
+  try{
+    const c=sb();
+    if(c&&c.auth&&c.auth.signOut&&!c.auth.signOut.__sos){
+      const so=c.auth.signOut.bind(c.auth);
+      const w=async function(){try{await disable()}catch(e){}return so.apply(null,arguments)};w.__sos=1;
+      c.auth.signOut=w;
+    }
+  }catch(e){}
+  try{
+    const cl=window.cloudLogin;
+    if(typeof cl==='function'&&!cl.__sos){const w=async function(){const r=await cl.apply(this,arguments);setTimeout(afterLogin,400);return r};w.__sos=1;window.cloudLogin=w}
+  }catch(e){}
+})();
+bind();setTimeout(bind,1500);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkAlerts(false)});
+/* con la app abierta y los avisos activos en este movil: mira cada minuto si hay un aviso nuevo (con la app en primer plano el sistema no muestra la notificacion) */
+setInterval(()=>{try{if(document.visibilityState==='visible'&&dev().on&&nowMs()-lastCheck>=X.watchMs)checkAlerts(false)}catch(e){}},5000);
+setTimeout(()=>{silentStart().then(()=>checkAlerts(true))},3500);
 })();
 </script>
 <script id="pdc-rate">

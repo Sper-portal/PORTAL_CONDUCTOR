@@ -47,6 +47,9 @@
         <service android:name="com.portal.conductor.GpsService" android:exported="false" android:foregroundServiceType="location" />
         <provider android:name="com.portal.conductor.PortalFileProvider" android:authorities="${applicationId}.shareprovider" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/portal_share_paths"/></provider>
     <service android:name="com.portal.conductor.TripRecorderService" android:exported="false" android:foregroundServiceType="camera|microphone" />
+        <!-- v3.55: avisos SOS por Firebase. Si llega un aviso sin canal propio, va al canal normal y con el icono del SOS. -->
+        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="sos_aviso" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_sos" />
     </application>
 
     <!-- Permissions -->

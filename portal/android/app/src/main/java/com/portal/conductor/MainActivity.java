@@ -10,6 +10,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(GpsOdometerPlugin.class);
         registerPlugin(ShareFilePlugin.class);
         registerPlugin(TripRecorderPlugin.class);
+        registerPlugin(SosNotifyPlugin.class);
         super.onCreate(savedInstanceState);
+        try { SosNotifyPlugin.ensure(this); } catch (Throwable t) { /* los canales del SOS se crean tambien al activar los avisos */ }
     }
 }
