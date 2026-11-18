@@ -123,11 +123,28 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:8px 4px;b
 .daily-motivation{display:flex;align-items:stretch;gap:0;margin:0 0 12px;border:1px solid #f4c66b;border-radius:17px;overflow:hidden;background:linear-gradient(105deg,#071827 0%,#102a3c 45%,#1c2632 100%);box-shadow:0 0 18px #f3b84b20,inset 0 0 18px #ffffff08;color:#fff;min-height:76px}
 .daily-motivation .motivation-icon{display:flex;align-items:center;justify-content:center;flex:0 0 64px;font-size:29px;color:#ffc94d;border-right:1px solid #f4c66b45;background:linear-gradient(180deg,#142b3c,#081622)}
 .daily-motivation .motivation-copy{display:flex;flex:1;min-width:0;flex-direction:column;justify-content:center;padding:10px 12px;gap:5px}
+.daily-motivation .motivation-voice{display:flex;flex-direction:column;flex:0 0 72px;border-right:1px solid #f4c66b45;background:linear-gradient(180deg,#142b3c,#081622)}
+.daily-motivation .mv-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;margin:0;padding:2px 3px;min-height:38px;border:0;border-radius:0;background:transparent;color:#ffc94d;font:inherit;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+.daily-motivation .mv-btn+.mv-btn{border-top:1px solid #f4c66b45}
+.daily-motivation .mv-btn .mv-i{font-size:16px;line-height:1}
+.daily-motivation .mv-btn .mv-n{font-size:9px;font-weight:900;letter-spacing:.4px;text-transform:uppercase;line-height:1.1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.daily-motivation .mv-btn:active,.daily-motivation .mv-btn.say{background:#ffc94d33}
+.mv-ov{position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,.62);display:flex;align-items:center;justify-content:center;padding:16px}
+.mv-box{width:100%;max-width:420px;max-height:92vh;overflow:auto;background:#0f2233;color:#fff;border:1px solid #f4c66b;border-radius:16px;padding:14px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.mv-box .mv-h{font-size:16px;font-weight:900;margin-bottom:8px;color:#ffc94d!important}
+.mv-box label{display:block;font-size:12px;font-weight:800;margin:8px 0 3px;color:#d6e4f1!important}
+.mv-box input,.mv-box textarea,.mv-box select{width:100%;box-sizing:border-box;padding:9px 10px;border-radius:10px;border:1px solid #4a6a85;background:#081622;color:#fff;font:inherit;font-size:15px}
+.mv-box .mv-row{display:flex;gap:8px;margin-top:10px}
+.mv-box .mv-row button{flex:1;padding:11px 8px;border-radius:10px;border:1px solid #4a6a85;background:#16324a;color:#fff;font:inherit;font-weight:800;font-size:14px}
+.mv-box .mv-row button.pri{background:#ffc94d;color:#1a1200;border-color:#ffc94d}
+.mv-box .mv-msg{min-height:18px;margin-top:8px;font-size:12px;color:#ffd98a}
+.mv-toast{position:fixed;left:50%;bottom:86px;transform:translate(-50%,20px);max-width:88vw;z-index:99991;padding:10px 14px;border-radius:14px;background:#10283b;color:#fff;border:1px solid #f4c66b;font-size:13px;font-weight:700;text-align:center;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+.mv-toast.show{opacity:1;transform:translate(-50%,0)}
 .daily-motivation .motivation-label{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:#f6c96d;font-weight:900}
 .daily-motivation .motivation-quote{font-size:clamp(14px,3.6vw,18px);font-weight:900;line-height:1.2;text-shadow:0 0 12px #ffc65b22}
 .daily-motivation .motivation-count{display:flex;align-items:center;justify-content:center;gap:5px;padding:0 10px;color:#d6e4f1;font-size:11px;font-weight:900;white-space:nowrap}
 .daily-motivation .motivation-count .dot{width:6px;height:6px;background:#f7c65d;box-shadow:0 0 7px #f7c65d}
-@media(max-width:360px){.daily-motivation .motivation-icon{flex-basis:48px;font-size:24px}.daily-motivation .motivation-copy{padding:8px}.daily-motivation .motivation-count{padding:0 7px;font-size:10px}}
+@media(max-width:360px){.daily-motivation .motivation-icon{flex-basis:48px;font-size:24px}.daily-motivation .motivation-voice{flex-basis:62px}.daily-motivation .motivation-copy{padding:8px}.daily-motivation .motivation-count{padding:0 7px;font-size:10px}}
 </style>
 
 </head>
@@ -310,7 +327,7 @@ async function cloudLogin(identifier,password){
     saveLocalOnly();
     try{PDC314.resetKnown()}catch(e){}   // v3.58
   }
-  localStorage.setItem(AUTH_KEY,JSON.stringify({identifier:email,email,loggedIn:true,cloud:true,userId:user.id}));
+  if(!cloud){try{if(window.PDC314&&PDC314.freshIfOtherAccount)PDC314.freshIfOtherAccount(user.id,'🆕 Esta cuenta aún no tiene datos: empieza vacía (los de tu otra cuenta siguen en ella)')}catch(e){console.warn(e)}} localStorage.setItem(AUTH_KEY,JSON.stringify({identifier:email,email,loggedIn:true,cloud:true,userId:user.id}));
   return user;
 }
 async function cloudRegister(email,phone,password){
@@ -327,7 +344,7 @@ async function cloudRegister(email,phone,password){
   }
   await cloudProfileSave(r.data.user,email,phone);
   const existing=await cloudGetData();
-  if(!existing) await cloudPushData(); else {db=existing;saveLocalOnly();try{PDC314.resetKnown()}catch(e){}}
+  if(!existing){try{if(window.PDC314&&PDC314.freshIfOtherAccount)PDC314.freshIfOtherAccount(r.data.user.id,'🆕 Cuenta nueva: empieza vacía (los datos de tu otra cuenta siguen en ella)')}catch(e){console.warn(e)} await cloudPushData();} else {db=existing;saveLocalOnly();try{PDC314.resetKnown()}catch(e){}}
   localStorage.setItem(AUTH_KEY,JSON.stringify({identifier:email,email,phone,loggedIn:true,cloud:true,userId:r.data.user.id}));
   return {needsConfirmation:false};
 }
@@ -343,7 +360,7 @@ async function resendCloudConfirmation(){
 function saveLocalOnly(){backupTripsEighteenMonths();localStorage.setItem(KEY,JSON.stringify(db));}
 const KEY='pdc_v13';
 const DEFAULT_PRIORITY={1:['07:00-10:00','17:00-20:00'],2:['07:00-10:00','17:00-20:00'],3:['07:00-10:00','17:00-20:00'],4:['07:00-10:00','17:00-02:00'],5:['07:00-10:00','13:00-07:00'],6:['13:00-07:00'],0:['12:00-24:00']};
-let db=JSON.parse(localStorage.getItem(KEY)||'null')||{trips:[],hours:[],fuel:{},manual:{},odometer:{},settings:{commission:45,commissionMode:'firstEuro',commissionMinimum:4200,goal:55,priority:DEFAULT_PRIORITY,cashPayroll:2000,irpf:14.5,payrollProfile:'variableFixedCash',salaryBase:1425,payrollByMonth:{},weeklyPayrolls:{},tripBackups:[]}};
+let db=JSON.parse(localStorage.getItem(KEY)||'null')||freshDb();function freshDb(){return {trips:[],hours:[],fuel:{},manual:{},odometer:{},settings:{commission:45,commissionMode:'firstEuro',commissionMinimum:4200,goal:55,priority:DEFAULT_PRIORITY,cashPayroll:2000,irpf:14.5,payrollProfile:'variableFixedCash',salaryBase:1425,payrollByMonth:{},weeklyPayrolls:{},tripBackups:[]}}}
 db.settings=db.settings||{commission:45,goal:55,boltCommission:25,airportFee:2.57,priority:DEFAULT_PRIORITY};
 db.settings.boltCommission = Number(db.settings.boltCommission ?? 25);
 db.settings.airportFee = Number(db.settings.airportFee ?? 2.57);
@@ -943,11 +960,102 @@ const dailyMotivationPhrases=[
 'Cada día que cierras bien es una pequeña meta.',
 'Trabajar con orden te da tiempo para vivir.'
 ]
+/*v361-voz*/
+/* v3.61 · «Botones con voz» para el pasajero (sustituyen al sol de la frase del día): 1) cinturón, 2) gracias por viajar.
+   Tocar = el móvil lo dice en voz alta (voz de texto a voz del móvil, volumen de MULTIMEDIA). Mantener pulsado = cambiar el nombre, lo que dice y el idioma de la voz.
+   Se guarda en db.settings.voiceBtns (viaja con la cuenta). Primero usa el plugin nativo «Speak»; si no está o falla, la voz del navegador; si tampoco, avisa. */
+var MV_DEF={a:{i:'🔔',n:'Cinturón',t:'Por favor, póngase el cinturón de seguridad.',l:'es-ES'},b:{i:'🙏',n:'Gracias',t:'Gracias por viajar con nosotros.',l:'es-ES'}};
+var MV_LANGS=[['es-ES','Español'],['en-GB','English (UK)'],['en-US','English (US)'],['fr-FR','Français'],['de-DE','Deutsch'],['it-IT','Italiano'],['pt-PT','Português']];
+function mvEsc(x){return String(x==null?'':x).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function mvCfg(k){
+  var d=MV_DEF[k],s=null;
+  try{s=db&&db.settings&&db.settings.voiceBtns&&db.settings.voiceBtns[k]}catch(e){}
+  var n=s&&typeof s.n==='string'?s.n.trim().slice(0,12):'',t=s&&typeof s.t==='string'?s.t.trim().slice(0,200):'',l=s&&typeof s.l==='string'?s.l:'';
+  return {k:k,i:d.i,n:n||d.n,t:t||d.t,l:MV_LANGS.some(function(x){return x[0]===l})?l:d.l};
+}
+function voiceBtnsHtml(){
+  var h='<div class="motivation-voice" role="group" aria-label="Frases con voz para el pasajero">';
+  ['a','b'].forEach(function(k){var c=mvCfg(k);h+='<button type="button" class="mv-btn" data-mv="'+k+'" aria-label="Decir en voz alta: '+mvEsc(c.t)+'. Mantén pulsado para cambiarlo"><span class="mv-i" aria-hidden="true">'+c.i+'</span><span class="mv-n">'+mvEsc(c.n)+'</span></button>'});
+  return h+'</div>';
+}
+function mvNative(){try{var C=window.Capacitor;if(!C||!(C.isNativePlatform&&C.isNativePlatform()))return null;return (C.Plugins&&C.Plugins.Speak)||(C.registerPlugin?C.registerPlugin('Speak'):null)}catch(e){return null}}
+function mvTmo(p,ms){return new Promise(function(res,rej){var t=setTimeout(function(){rej(new Error('tiempo'))},ms);Promise.resolve(p).then(function(v){clearTimeout(t);res(v)},function(e){clearTimeout(t);rej(e)})})}
+function mvSpeak(text,lang){
+  text=String(text==null?'':text).trim();lang=lang||'es-ES';
+  if(!text)return Promise.resolve({ok:false,why:'vacio'});
+  var web=function(){
+    try{if(window.speechSynthesis&&window.SpeechSynthesisUtterance){var u=new SpeechSynthesisUtterance(text);u.lang=lang;u.volume=1;try{speechSynthesis.cancel()}catch(e){}speechSynthesis.speak(u);return {ok:true,via:'navegador'}}}catch(e){}
+    return {ok:false,why:'sin_voz'};
+  };
+  var N=mvNative();
+  if(N&&N.speak)return mvTmo(N.speak({text:text,lang:lang,volume:1}),7000).then(function(){return {ok:true,via:'movil'}},function(e){var w=web();w.nativo=String(e&&e.message||e);return w});
+  return Promise.resolve(web());
+}
+function mvToast(msg){
+  var t=document.getElementById('mvToast');
+  if(!t){t=document.createElement('div');t.id='mvToast';t.className='mv-toast';t.setAttribute('role','status');document.body.appendChild(t)}
+  t.textContent=msg;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(function(){t.classList.remove('show')},3600);
+}
+function mvSay(k){
+  var c=mvCfg(k),b=document.querySelector('.mv-btn[data-mv="'+k+'"]');
+  if(b){b.classList.add('say');setTimeout(function(){b.classList.remove('say')},1600)}
+  return mvSpeak(c.t,c.l).then(function(r){
+    if(!r.ok)mvToast('No he podido hablar: el móvil no tiene voz instalada. Mira en Ajustes de Android → Texto a voz.');
+    return r;
+  });
+}
+function mvClose(){var o=document.getElementById('mvEdit');if(o)o.remove()}
+function mvRepaint(){try{var l=document.querySelectorAll('.motivation-voice');for(var i=0;i<l.length;i++)l[i].outerHTML=voiceBtnsHtml()}catch(e){}}
+function mvEdit(k){
+  mvClose();
+  var c=mvCfg(k),o=document.createElement('div');
+  o.id='mvEdit';o.className='mv-ov';o.setAttribute('role','dialog');o.setAttribute('aria-modal','true');o.setAttribute('aria-label','Cambiar botón con voz');
+  var opts=MV_LANGS.map(function(x){return '<option value="'+x[0]+'">'+mvEsc(x[1])+'</option>'}).join('');
+  o.innerHTML='<div class="mv-box"><div class="mv-h">'+c.i+' Botón con voz</div>'
+   +'<label>Nombre del botón (corto)<input id="mvN" type="text" maxlength="12" autocomplete="off"></label>'
+   +'<label>Lo que dice en voz alta<textarea id="mvT" rows="3" maxlength="200"></textarea></label>'
+   +'<label>Idioma de la voz<select id="mvL">'+opts+'</select></label>'
+   +'<div class="mv-row"><button type="button" id="mvTest">▶ Probar</button><button type="button" id="mvRest">Restaurar</button></div>'
+   +'<div class="mv-row"><button type="button" id="mvCancel">Cancelar</button><button type="button" id="mvSave" class="pri">Guardar</button></div>'
+   +'<div class="mv-msg" id="mvMsg"></div></div>';
+  document.body.appendChild(o);
+  var N=o.querySelector('#mvN'),T=o.querySelector('#mvT'),L=o.querySelector('#mvL'),M=o.querySelector('#mvMsg');
+  N.value=c.n;T.value=c.t;L.value=c.l;
+  var msg=function(x){M.textContent=x||''};
+  o.addEventListener('click',function(e){if(e.target===o)mvClose()});
+  o.querySelector('#mvCancel').onclick=mvClose;
+  o.querySelector('#mvTest').onclick=function(){
+    if(!T.value.trim()){msg('Escribe lo que debe decir.');return}
+    msg('');mvSpeak(T.value,L.value).then(function(r){if(!r.ok)msg('No he podido hablar: el móvil no tiene voz instalada (Ajustes de Android → Texto a voz).')});
+  };
+  o.querySelector('#mvRest').onclick=function(){var d=MV_DEF[k];N.value=d.n;T.value=d.t;L.value=d.l;msg('Texto de fábrica puesto. Pulsa Guardar para quedarte con él.')};
+  o.querySelector('#mvSave').onclick=function(){
+    var t=T.value.trim();
+    if(!t){msg('Escribe lo que debe decir.');return}
+    var vb={a:mvCfg('a'),b:mvCfg('b')};
+    vb[k]={n:N.value.trim().slice(0,12)||MV_DEF[k].n,t:t.slice(0,200),l:L.value};
+    db.settings=db.settings||{};
+    db.settings.voiceBtns={a:{n:vb.a.n,t:vb.a.t,l:vb.a.l},b:{n:vb.b.n,t:vb.b.t,l:vb.b.l}};
+    try{if(window.PDC314&&PDC314.saveNow)PDC314.saveNow();else if(typeof save==='function')save()}catch(e){console.warn('v3.61 voz',e)}
+    mvClose();mvRepaint();mvToast('Guardado.');
+  };
+  setTimeout(function(){try{T.focus()}catch(e){}},50);
+}
+(function(){
+  var timer=null,long=false,key=null;
+  var btn=function(e){return e&&e.target&&e.target.closest?e.target.closest('.mv-btn'):null};
+  var stop=function(){clearTimeout(timer);timer=null};
+  document.addEventListener('pointerdown',function(e){var b=btn(e);if(!b)return;long=false;key=b.getAttribute('data-mv');stop();timer=setTimeout(function(){timer=null;long=true;mvEdit(key)},650)},true);
+  ['pointerup','pointercancel'].forEach(function(n){document.addEventListener(n,stop,true)});
+  document.addEventListener('click',function(e){var b=btn(e);if(!b)return;if(long){long=false;e.preventDefault();e.stopPropagation();return}mvSay(b.getAttribute('data-mv'))},true);
+  document.addEventListener('contextmenu',function(e){if(btn(e))e.preventDefault()},true);
+})();
+window.PDCVOICE={cfg:mvCfg,say:mvSay,speak:mvSpeak,edit:mvEdit,close:mvClose,def:MV_DEF,langs:MV_LANGS};
 function dailyMotivationHtml(){
  const now=new Date();
  const dayNumber=Math.floor((Date.UTC(now.getFullYear(),now.getMonth(),now.getDate())-Date.UTC(now.getFullYear(),0,0))/86400000)-1;
  const index=((dayNumber%dailyMotivationPhrases.length)+dailyMotivationPhrases.length)%dailyMotivationPhrases.length;
- return `<div class="daily-motivation" role="status" aria-label="Frase motivacional del día"><div class="motivation-icon" aria-hidden="true">☀</div><div class="motivation-copy"><div class="motivation-label">Tu impulso de hoy</div><div class="motivation-quote">“${dailyMotivationPhrases[index]}”</div></div><div class="motivation-count"><i class="dot"></i>${index+1}/${dailyMotivationPhrases.length}</div></div>`;
+ return `<div class="daily-motivation" role="status" aria-label="Frase motivacional del día">${voiceBtnsHtml()}<div class="motivation-copy"><div class="motivation-label">Tu impulso de hoy</div><div class="motivation-quote">“${dailyMotivationPhrases[index]}”</div></div><div class="motivation-count"><i class="dot"></i>${index+1}/${dailyMotivationPhrases.length}</div></div>`;
 }
 
 function dayOdometer(k){db.odometer=db.odometer||{};return db.odometer[k]||{start:'',end:''}}
@@ -2632,13 +2740,14 @@ const J_KB=[
 ['nocuadra','🤔','Los totales no me cuadran','cuadr^4,no coincide^4,diferencia,distinto,falta dinero,sobra','Repasa por orden: 1) que los viajes estén en el día correcto, 2) que el pago (tarjeta o efectivo) sea el real y 3) las compensaciones y propinas. Con las flechas de fecha revisa el día en Facturación.'],
 ['tablet','🖥️','Tablet y pantalla dividida','tablet,pantalla dividida,multiventana,ventana,dos apps','Con pantalla dividida puedes tener Bolt a un lado y el Portal al otro. El lector lee el precio de la otra ventana y lo mete en el Portal.'],
 ['frase','💬','Frase del día','frase,impulso,motivac,cita','Arriba, en Calculadora, tienes cada día una frase distinta. Hay 365, una para cada día del año.'],
+['voz','🔔','Botones con voz para el pasajero','voz^4,audio^3,cinturon^4,gracias^3,pasajero^3,hablar^3,decir^2,altavoz^2,idioma^2,ingles^2,editar^2,boton,frase','A la izquierda de la frase del día hay 2 botones con voz: «Cinturón» dice «Por favor, póngase el cinturón de seguridad» y «Gracias» dice «Gracias por viajar con nosotros». Tócalos y el móvil lo dice en voz alta, con el volumen de multimedia del móvil. Para cambiar el nombre del botón, lo que dice o el idioma de la voz (por ejemplo inglés), mantén pulsado el botón: sale una ventana con «Probar», «Guardar» y «Restaurar». Se guarda en tu cuenta. Si no suena, mira en Ajustes de Android → Texto a voz que haya una voz instalada.'],
 ['tasa','📊','Mi tasa de finalización','tasa,finalizacion,aceptacion,cancelacion,cancelar,bolt,calidad,servicio,limite,ajustes,semana,mes','En Ajustes → Tasa de finalización ves tu cuenta propia, de lunes a domingo y por meses: viajes hechos ÷ ofertas que cuentan. Toda oferta que lee la app suma a Recibidas; si trae el cartel «Fuera del radio / no te afectará» suma también a Con aviso y no cuenta (si la aceptas con ✓, pasa a contar). Las reservas (etiqueta «Reservado») con la recogida a más de 2 km se tratan igual aunque no traigan el cartel; a 2 km o menos cuentan como una oferta normal. Sin cartel y sin ✓ baja tu tasa. ✓ y la haces: sube. ✓ y luego la borras de la lista: es una cancelación y baja; si el cliente cancela en pocos minutos (los eliges en la página) no penaliza. Cada día se puede corregir con − + ✎ y puedes cargar días pasados. Avisos: naranja al bajar de 90 % y rojo por debajo de 85 % (se cambian). Es una estimación tuya: Bolt no enseña su tasa interna. Los datos se quedan en el móvil. La barra ✗ / ✓ va abajo, encima del menú.'],
 ['grabar','🎥','Grabar vídeo del viaje','grabar,grabacion,video,camara,dashcam,interior,audio,microfono','Arriba, en la frase del día de Calculadora, hay un botón pequeño con una cámara. Púlsalo, elige 15 o 30 minutos y con o sin audio. Graba el interior del coche en Full HD y el vídeo se queda solo en tu móvil: no se sube a internet ni gasta datos. Al acabar eliges Guardar (queda en la Galería, en Películas, carpeta Portal del Conductor) o Eliminar. Unos 30 minutos ocupan alrededor de 1,4 GB, así que mira que tengas sitio. Mientras graba, Android enseña un aviso y un punto verde: es normal y no se puede quitar. Si llevas pasajeros y grabas con audio, avísalos con un cartel visible en el coche.'],
 ['freenow','💗','Free Now y Pide Taxi','free now^4,freenow^4,pide taxi^4,pidetaxi^4','En Calculadora tienes los botones Free Now (rosa) y Pide Taxi (amarillo) en la segunda fila, junto a Aeropuerto y Cancelaciones. Escribe el importe y púlsalo: se guarda el importe entero, sin comisión de la app, y suma a tu facturación, al informe y a la nómina. También puedes elegirlos como aplicación prioritaria en Control, cargar sus importes a mano en Facturación y apuntar sus cancelaciones.'],
 ['tema','🎨','Tema claro, oscuro o automático','tema claro^4,tema oscuro^4,tema automatico^4,cambiar el tema^4,el tema^3,modo oscuro^4,modo claro^4,modo noche^4,modo dia^3,fondo oscuro^3,fondo claro^3,pantalla oscura^3,pantalla clara^3,oscuro^3,oscura^3','En Ajustes → Tema eliges cómo se ve la app: Automático (claro de día y oscuro de noche, según el sol en Madrid; cambia solo), Claro u Oscuro fijo. Afecta a Calculadora, Control, Facturación e Informe; Ajustes, el menú y Madrid hoy son siempre oscuros. Se guarda en este aparato.'],
 ['appprio','🎯','Aplicación prioritaria','app prioritaria^4,aplicacion prioritaria^4,ahora trabajo con^4,horas prioritarias^4,otras apps^3,prioritaria^3','En Control, «Aplicación prioritaria» elige tu app principal: Bolt, Uber, Cabify, Free Now o Pide Taxi. Sus horas y kilómetros salen en el bloque «Solo …» y las del resto en «Otras apps». Con «Ahora trabajo con» marcas con cuál empiezas la jornada. Todo lo prioritario toma el color de esa app (verde, negro, morado, rosa o amarillo). Al pulsar «Otras apps» te sale una lista para elegir cuál (Uber, Cabify…): esas apps solo cuentan horas y km por separado, no tienen horas prioritarias. Toca el círculo «Otras apps» para ver el desglose por app y «Todas juntas».'],
 ['sos','🆘','Botón SOS y contactos de confianza','sos^6,socorro^6,emergencia^5,ayuda urgente^4,112^5,contactos de confianza^6,contacto de confianza^5,alarma^4,boton rojo^5,aviso de emergencia^4,peligro^3,me han atacado^3,whatsapp^2','Pulsa el botón rojo SOS (arriba a la izquierda). Se abre la pantalla roja de ayuda y empieza una cuenta atrás de 3 segundos: si no pulsas Cancelar, se avisa a tus contactos de confianza que tienen la app (y han aceptado), con tu ubicación. Ahí mismo tienes «Llamar al 112» (se abre el marcador y tú pulsas llamar) y «Otras formas de avisar» (SMS, WhatsApp o Compartir), donde el envío lo haces tú. Contactos y mensaje: Ajustes → SOS y contactos de confianza (hasta 8). El botón «Probar» enseña la pantalla sin enviar nada.'],
-['madridhoy','🌤️','Madrid hoy: tiempo, eventos, deportes y vuelos','madrid hoy^4,ifema^4,ticketmaster^4,eventos^3,evento^3,feria^3,ferias^3,concierto^3,lluvia^3,pestanas^3,tiempo^2','En el menú de las tres rayitas, Madrid hoy tiene cinco pestañas: Hoy, Mañana y Semana (el tiempo y los eventos de Ticketmaster y las ferias y espectáculos de IFEMA, para saber dónde puede haber más movimiento), Deportes (partidos y clasificaciones) y Vuelos (llegadas a Barajas por hora y terminal). Las ferias de IFEMA no traen horario: se supone que abren a las 10:00 (la hora sale con ~) y en el detalle puedes elegir 8, 9 o 10 horas de duración.'],
+['madridhoy','🌤️','Madrid hoy: tiempo, eventos, deportes y vuelos','madrid hoy^4,ifema^4,ticketmaster^4,eventos^3,evento^3,feria^3,ferias^3,concierto^3,lluvia^3,pestanas^3,tiempo^2,movistar arena^5,wizink^5,arena^3,palacio de deportes^3,fabrik^5,discoteca^3,humanes^4','En el menú de las tres rayitas, Madrid hoy tiene cinco pestañas: Hoy, Mañana y Semana (el tiempo y los eventos de Ticketmaster, las ferias y espectáculos de IFEMA, los conciertos y partidos del Movistar Arena —antes WiZink Center— y las fiestas de Fabrik (Humanes de Madrid), para saber dónde puede haber más movimiento), Deportes (partidos y clasificaciones) y Vuelos (llegadas a Barajas por hora y terminal). Los del Movistar Arena y Fabrik salen de sus webs oficiales: lo cancelado o aplazado del Arena no aparece, y si un día no sale hora, es que aún no está confirmada (la de Fabrik no la publica: solo sale la fecha, y no sé si se cancela). Las ferias de IFEMA no traen horario: se supone que abren a las 10:00 (la hora sale con ~) y en el detalle puedes elegir 8, 9 o 10 horas de duración.'],
 ['contacto','🧑','Hablar con una persona','telegram,persona,humano,soporte,contactar,hablar con alguien,tecnico','Claro. Pulsa el botón de Telegram y se abre el chat con soporte (@'+PORTAL_TG+').']
 ];
 const J_OPEN=['¡Claro! 😊','Te lo explico fácil 👇','Buena pregunta 👍','Vale, mira:','Sin problema 😉','Eso es sencillo:'];
@@ -2669,7 +2778,7 @@ function renderSendSupport(){jPanel('Pregúntale a Jenny','helpBack()','<div cla
 function renderWriteQuestion(){jPanel('Escribir mi pregunta','renderSendSupport()','<div class="help-hero"><h2>¿Qué necesitas?</h2><p>Escríbelo como lo dirías hablando. Por ejemplo: «se me olvidó iniciar la jornada» o «cómo apunto una propina».</p></div><textarea id="autoQuery" rows="6" placeholder="Escribe aquí tu pregunta…" style="width:100%;margin-top:6px;border-radius:14px;padding:12px;box-sizing:border-box"></textarea><button class="action" style="width:100%;margin-top:10px" onclick="answerUserQuery()">😊 Preguntar a Jenny</button>')}
 function renderAutoHelp(){jPanel('Preguntas rápidas','renderSendSupport()','<div class="subpage-list">'+['viajes','freenow','aeropuerto','compensaciones','pago','corregir','jornada','gasolina','km','lector','pdf','tema','nocuadra'].map(id=>{const e=jEntry(id);return jRow(e[1],e[2],'','showAutoAnswer(\''+id+'\')')}).join('')+'</div>')}
 function renderFaq(){jPanel('Preguntas frecuentes','helpBack()','<div class="subpage-list">'+J_KB.filter(e=>e[0]!=='contacto').map(e=>'<details class="subpage-row" style="display:block"><summary style="cursor:pointer;list-style:none"><span class="sicon" style="display:inline-grid;margin-right:8px">'+e[1]+'</span><b>'+e[2]+'</b></summary><small style="display:block;color:#64748b;margin:8px 0 2px;line-height:1.45">'+e[4]+'</small></details>').join('')+'</div>')}
-function renderHelpCarga(){const S=[['🧮','Calculadora','Escribe el importe y pulsa la plataforma (Bolt, Uber, Cabify, Privados, Free Now o Pide Taxi). Para aeropuerto, usa el botón verde de Aeropuerto. Si te cancelan un viaje, pulsa Cancelaciones, escribe el importe y toca la app: se guarda al instante. Con «Importe automático» la app lee el precio de la otra ventana. Elige tarjeta o efectivo cuando te lo pregunte. En Últimos viajes puedes añadir propina (🎁), editar (✏️) o borrar (🗑) cada viaje.'],['🧾','Facturación','Diario, Semanal y Mensual, con totales por plataforma y facturación manual. Las cancelaciones se suman al día y a la app que elijas; en Semanal, las compensaciones sueltas y la nómina. En Mensual, cada mes cerrado tiene un botón para cambiar su nómina con los ajustes de ahora (porcentaje, mínimo, propinas).'],['◉','Control','Iniciar y finalizar jornada, corregir horas de días anteriores, apuntar gasolina y kilómetros (con GPS automático o a mano). Aquí eliges tu aplicación prioritaria (Bolt, Uber, Cabify, Free Now o Pide Taxi). Abajo, «Tramos del día»: añade un tramo a mano, edítalo o elige su app (📲).'],['📍','GPS y lector de pantalla','El odómetro GPS cuenta los kilómetros con la jornada iniciada. El lector y la burbuja necesitan activar Driver Hub 360 en Accesibilidad de Android.'],['📊','Informe','Elige el periodo, genera el informe y compártelo en PDF o imagen.'],['⚙️','Ajustes','Tema (claro, oscuro o automático), comisión, tasa de aeropuerto, objetivos, horarios prioritarios, burbuja, GPS, copia de seguridad y Rentabilidad de viajes (aviso de si compensa cada oferta).'],['🌤️','Madrid hoy','En el menú de las tres rayitas, con cinco pestañas: Hoy, Mañana y Semana (el tiempo y los eventos de Ticketmaster e IFEMA, para saber dónde puede haber más movimiento), Deportes (partidos y clasificaciones) y Vuelos (cuántos vuelos llegan a Barajas en cada hora y a qué terminal).'],['🆘','Botón SOS','El botón rojo de arriba a la izquierda: cuenta atrás de 3 segundos y avisa a tus contactos de confianza con tu ubicación (puedes cancelar). También sale «Llamar al 112» y SMS, WhatsApp o Compartir. Se configura en Ajustes → SOS y contactos de confianza.'],['👤','Cuenta','Inicia sesión para guardar tus datos en la nube y recuperarlos si cambias de móvil.']];jPanel('Ayuda con cargar datos','helpBack()','<div class="help-hero"><h2>Dónde se carga cada cosa</h2><p>Un repaso rápido por pantallas. Si te queda alguna duda, pregúntale a Jenny.</p></div><div class="subpage-list">'+S.map(s=>'<div class="subpage-row"><span class="sicon">'+s[0]+'</span><div><b>'+s[1]+'</b><small style="display:block;color:#64748b;margin-top:3px;line-height:1.45">'+s[2]+'</small></div></div>').join('')+'</div>')}
+function renderHelpCarga(){const S=[['🧮','Calculadora','Escribe el importe y pulsa la plataforma (Bolt, Uber, Cabify, Privados, Free Now o Pide Taxi). Para aeropuerto, usa el botón verde de Aeropuerto. Si te cancelan un viaje, pulsa Cancelaciones, escribe el importe y toca la app: se guarda al instante. Con «Importe automático» la app lee el precio de la otra ventana. Elige tarjeta o efectivo cuando te lo pregunte. En Últimos viajes puedes añadir propina (🎁), editar (✏️) o borrar (🗑) cada viaje.'],['🧾','Facturación','Diario, Semanal y Mensual, con totales por plataforma y facturación manual. Las cancelaciones se suman al día y a la app que elijas; en Semanal, las compensaciones sueltas y la nómina. En Mensual, cada mes cerrado tiene un botón para cambiar su nómina con los ajustes de ahora (porcentaje, mínimo, propinas).'],['◉','Control','Iniciar y finalizar jornada, corregir horas de días anteriores, apuntar gasolina y kilómetros (con GPS automático o a mano). Aquí eliges tu aplicación prioritaria (Bolt, Uber, Cabify, Free Now o Pide Taxi). Abajo, «Tramos del día»: añade un tramo a mano, edítalo o elige su app (📲).'],['📍','GPS y lector de pantalla','El odómetro GPS cuenta los kilómetros con la jornada iniciada. El lector y la burbuja necesitan activar Driver Hub 360 en Accesibilidad de Android.'],['📊','Informe','Elige el periodo, genera el informe y compártelo en PDF o imagen.'],['⚙️','Ajustes','Tema (claro, oscuro o automático), comisión, tasa de aeropuerto, objetivos, horarios prioritarios, burbuja, GPS, copia de seguridad y Rentabilidad de viajes (aviso de si compensa cada oferta).'],['🌤️','Madrid hoy','En el menú de las tres rayitas, con cinco pestañas: Hoy, Mañana y Semana (el tiempo y los eventos de Ticketmaster, IFEMA, Movistar Arena y Fabrik, para saber dónde puede haber más movimiento), Deportes (partidos y clasificaciones) y Vuelos (cuántos vuelos llegan a Barajas en cada hora y a qué terminal).'],['🆘','Botón SOS','El botón rojo de arriba a la izquierda: cuenta atrás de 3 segundos y avisa a tus contactos de confianza con tu ubicación (puedes cancelar). También sale «Llamar al 112» y SMS, WhatsApp o Compartir. Se configura en Ajustes → SOS y contactos de confianza.'],['👤','Cuenta','Inicia sesión para guardar tus datos en la nube y recuperarlos si cambias de móvil.']];jPanel('Ayuda con cargar datos','helpBack()','<div class="help-hero"><h2>Dónde se carga cada cosa</h2><p>Un repaso rápido por pantallas. Si te queda alguna duda, pregúntale a Jenny.</p></div><div class="subpage-list">'+S.map(s=>'<div class="subpage-row"><span class="sicon">'+s[0]+'</span><div><b>'+s[1]+'</b><small style="display:block;color:#64748b;margin-top:3px;line-height:1.45">'+s[2]+'</small></div></div>').join('')+'</div>')}
 /* PDF e imagen del informe */
 function reportCanvas(light){const out=document.querySelector('#reportOut');if(!out||!out.dataset.ready){alert('Primero genera el informe.');return null}const clean=x=>String(x||'').replace(/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/gu,'').replace(/\s+/g,' ').trim();const period=clean((out.querySelector('.metric b')||{}).innerText),plats=[...out.querySelectorAll('.platform-summary .ps')].map(e=>[clean(e.childNodes[0].textContent),clean((e.querySelector('b')||{}).innerText)]),rows=[...out.querySelectorAll('table tr')].map(tr=>[...tr.children].map(c=>clean(c.innerText))).filter(r=>r.length>=2&&r[0]);const W=1080,P=56,RH=84,H=260+(plats.length?190*Math.ceil(plats.length/3):0)+rows.length*RH+150,cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d'),C=light?{bg:'#ffffff',row:'#f1f5f9',txt:'#0f172a',mut:'#475569',acc:'#1d4ed8'}:{bg:'#07111f',row:'#0e2038',txt:'#ffffff',mut:'#9fb4c8',acc:'#5fe6ff'};g.fillStyle=C.bg;g.fillRect(0,0,W,H);const hg=g.createLinearGradient(0,0,W,0);hg.addColorStop(0,'#0a3d9c');hg.addColorStop(1,'#0b6fd6');g.fillStyle=hg;g.fillRect(0,0,W,210);g.fillStyle='#fff';g.font='bold 54px sans-serif';g.textBaseline='alphabetic';g.fillText('Super Portal del Conductor',P,92);g.font='36px sans-serif';g.fillStyle='#dff3ff';g.fillText('Informe · '+period,P,152);let y=250;const fit=(t,mx,font)=>{g.font=font;while(g.measureText(t).width>mx&&t.length>3)t=t.slice(0,-2);return t};if(plats.length){const per=3,cw=(W-2*P-(per-1)*16)/per,col={Bolt:'#00b85c',Uber:'#1f2937',Cabify:'#7c3aed',Privados:'#2563eb','Free Now':'#d6046f','Pide Taxi':'#ffbf00'};plats.forEach((p,i)=>{const x=P+(i%per)*(cw+16),yy=y+Math.floor(i/per)*190;g.fillStyle=col[p[0]]||'#2563eb';g.beginPath();g.roundRect?g.roundRect(x,yy,cw,150,22):g.rect(x,yy,cw,150);g.fill();g.fillStyle=p[0]==='Pide Taxi'?'#2b2100':'#fff';g.font='bold 30px sans-serif';g.textAlign='center';g.fillText(p[0],x+cw/2,yy+54);g.font='bold 40px sans-serif';g.fillText(fit(p[1],cw-16,'bold 40px sans-serif'),x+cw/2,yy+114);g.textAlign='left'});y+=190*Math.ceil(plats.length/per)}rows.forEach((r,i)=>{if(i%2===0){g.fillStyle=C.row;g.fillRect(P-16,y,W-2*P+32,RH-6)}g.fillStyle=C.mut;g.textAlign='left';g.fillText(fit(r[0],W-2*P-300,'30px sans-serif'),P,y+52);g.fillStyle=C.txt;g.textAlign='right';g.font='bold 34px sans-serif';g.fillText(r[r.length-1],W-P,y+52);g.textAlign='left';y+=RH});g.fillStyle=C.mut;g.font='26px sans-serif';g.fillText('Generado el '+new Date().toLocaleDateString('es-ES')+' · Portal del Conductor',P,H-56);return cv}
 function jpegToPdf(jb,w,h){const pw=595,ph=Math.round(595*h/w),enc=new TextEncoder(),parts=[],offs=[];let off=0;const push=x=>{const b=typeof x==='string'?enc.encode(x):x;parts.push(b);off+=b.length};push('%PDF-1.4\n');offs[1]=off;push('1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n');offs[2]=off;push('2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n');offs[3]=off;push('3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 '+pw+' '+ph+']/Resources<</XObject<</Im0 4 0 R>>>>/Contents 5 0 R>>endobj\n');offs[4]=off;push('4 0 obj<</Type/XObject/Subtype/Image/Width '+w+'/Height '+h+'/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length '+jb.length+'>>stream\n');push(jb);push('\nendstream endobj\n');const cs='q '+pw+' 0 0 '+ph+' 0 0 cm /Im0 Do Q';offs[5]=off;push('5 0 obj<</Length '+cs.length+'>>stream\n'+cs+'\nendstream endobj\n');const xo=off;let x='xref\n0 6\n0000000000 65535 f \n';for(let i=1;i<=5;i++)x+=String(offs[i]).padStart(10,'0')+' 00000 n \n';push(x+'trailer<</Size 6/Root 1 0 R>>\nstartxref\n'+xo+'\n%%EOF');const all=new Uint8Array(off);let p=0;parts.forEach(b=>{all.set(b,p);p+=b.length});return all}
@@ -2682,7 +2791,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.60';
+const APP_VERSION='v3.61';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -2695,7 +2804,7 @@ function showInfoDetail(type){const T='✈ Abrir Telegram (@'+PORTAL_TG+')',tg='
 if(type==='sincronizacion')return renderSyncInfo();
 if(type==='actualizar')return infoPage('↻ Versión y actualizaciones',['Tienes instalada la versión '+APP_VERSION+'. La ves también arriba del todo, en Información.','Esta app se instala desde un archivo, no desde una tienda. Cuando hay una versión nueva te llega el archivo y lo instalas encima de la actual: no hace falta desinstalar y no pierdes tus datos.','Si te falta la última versión o algo no funciona tras actualizar, escribe a soporte.'],tg);
 if(type==='privacidad')return infoPage('🔐 Privacidad y datos',['Tus datos son tuyos. Se usan solo para que la app funcione: calcular tu facturación, tus horas, tu gasolina y tus kilómetros.','El GPS solo suma los metros recorridos mientras tienes la jornada iniciada. No guarda tus rutas ni tus posiciones.','El lector de pantalla solo busca el importe del viaje y si se paga con tarjeta o efectivo. No guarda ni envía nada más de lo que ves en pantalla. Si activas Rentabilidad de viajes, también lee la distancia y el tiempo de la oferta para avisarte; no se guarda ni se envía (en tu móvil solo se guarda el último texto de oferta leído, para poder revisarlo). Para leer las ofertas de Uber, que esconde esa información al lector normal, la app hace capturas de la zona de Uber y las lee en el momento dentro del móvil; las capturas no se guardan ni se envían.','La cámara y el micrófono solo se usan cuando tú pulsas Grabar vídeo. El vídeo se guarda en tu móvil: no se sube a internet ni a la nube, y puedes borrarlo cuando quieras.','Tus datos no se venden ni se comparten con nadie.']);
-if(type==='funciona')return infoPage('📖 Cómo funciona Portal del Conductor',['Calculadora: apunta tus viajes de Bolt, Uber, Cabify, Privados, Free Now y Pide Taxi (también con Importe automático) y tus cancelaciones; desde Últimos viajes puedes añadir propina, editar o borrar cada viaje.','Facturación: tus ingresos por día, semana y mes, con la facturación manual por plataforma, compensaciones y nómina.','Control: tu jornada, horas, gasolina y kilómetros (con GPS automático) y tu aplicación prioritaria.','Informe: resumen por periodos que puedes guardar o compartir en PDF o imagen.','Ajustes: comisión, tasa de aeropuerto, objetivos, burbuja, GPS, Tema (claro, oscuro o automático) y Rentabilidad de viajes (te avisa si una oferta compensa).','Madrid hoy (menú de las tres rayitas): el tiempo y los eventos del día de Ticketmaster e IFEMA, los partidos (Deportes) y las llegadas de vuelos a Barajas por hora y terminal (Vuelos).','Botón SOS (rojo, arriba a la izquierda): cuenta atrás de 3 segundos y aviso a tus contactos de confianza con tu ubicación; también llamar al 112. Se configura en Ajustes.'],'<button class="action" style="width:100%" onclick="renderHelpCarga()">📥 Ver la guía completa</button>');
+if(type==='funciona')return infoPage('📖 Cómo funciona Portal del Conductor',['Calculadora: apunta tus viajes de Bolt, Uber, Cabify, Privados, Free Now y Pide Taxi (también con Importe automático) y tus cancelaciones; desde Últimos viajes puedes añadir propina, editar o borrar cada viaje.','Facturación: tus ingresos por día, semana y mes, con la facturación manual por plataforma, compensaciones y nómina.','Control: tu jornada, horas, gasolina y kilómetros (con GPS automático) y tu aplicación prioritaria.','Informe: resumen por periodos que puedes guardar o compartir en PDF o imagen.','Ajustes: comisión, tasa de aeropuerto, objetivos, burbuja, GPS, Tema (claro, oscuro o automático) y Rentabilidad de viajes (te avisa si una oferta compensa).','Madrid hoy (menú de las tres rayitas): el tiempo y los eventos del día de Ticketmaster, IFEMA, Movistar Arena y Fabrik, los partidos (Deportes) y las llegadas de vuelos a Barajas por hora y terminal (Vuelos).','Botón SOS (rojo, arriba a la izquierda): cuenta atrás de 3 segundos y aviso a tus contactos de confianza con tu ubicación; también llamar al 112. Se configura en Ajustes.'],'<button class="action" style="width:100%" onclick="renderHelpCarga()">📥 Ver la guía completa</button>');
 if(type==='soporte')return infoPage('🛠️ Ayuda y soporte',['En Ayuda tienes una guía para cargar datos, preguntas frecuentes y a Jenny, que responde al momento a dudas sobre la app.','Si Jenny no sabe algo, te lo dice y puedes escribir a una persona por Telegram.'],'<button class="action" style="width:100%" onclick="renderHelp()">🛟 Ir a Ayuda</button><button class="secondary" style="width:100%;margin-top:10px" onclick="openTelegramSupport(\'\')">'+T+'</button>');
 if(type==='condiciones')return infoPage('📄 Condiciones de uso',['Portal del Conductor es una herramienta de organización personal para conductores. Es gratuita y se ofrece tal cual, sin garantía de disponibilidad.','Las cifras las introduces tú o las lee la app de tu pantalla: revísalas siempre. La app no es asesoría fiscal ni laboral, y no sustituye a tu gestor.','Portal del Conductor no tiene relación con Bolt, Uber, Cabify, Free Now ni Pide Taxi. Sus nombres pertenecen a sus propietarios y se usan solo para identificar las plataformas.','Cuida tu cuenta y tu contraseña: eres responsable de lo que se haga con ellas.']);
 if(type==='privacidadLegal')return infoPage('🔒 Política de privacidad',['Responsable: Portal del Conductor. Contacto: Telegram @'+PORTAL_TG+'.','Datos que se guardan: tu cuenta (correo o teléfono), tus viajes, horas, gasolina, kilómetros, ajustes y la configuración de la app.','Para qué: solo para prestarte el servicio de la app. No se usan para publicidad ni se venden.','Dónde: en tu móvil y, si inicias sesión, en la nube, en los servidores del proveedor Supabase. El administrador de la app puede acceder técnicamente a estos datos para mantener el servicio.','Permisos: la ubicación solo suma kilómetros; el servicio de accesibilidad solo se usa para leer el importe, la forma de pago y, si activas Rentabilidad de viajes, la distancia y el tiempo de las ofertas. Para las ofertas de Uber puede hacer capturas de pantalla que procesa al momento dentro del móvil; no se guardan ni se envían. No se guarda ni se envía nada más.','Cuánto tiempo: mientras tengas cuenta. Puedes pedir una copia o el borrado de tus datos escribiendo por Telegram, y puedes guardar una copia tú mismo desde Datos y sincronización.','Tus derechos: acceso, rectificación, supresión, oposición, limitación y portabilidad. Escríbenos y te respondemos.','Este texto puede actualizarse; la versión vigente es la que ves aquí.'],tg)}
@@ -5057,6 +5166,28 @@ function adoptDb(next,note){
   refreshView();
   if(note&&P.toastOk)P.toastOk(note);
 }
+/* v3.61 · una cuenta nueva (o distinta) en este móvil NO hereda los datos de la anterior.
+   Antes, si la cuenta aún no tenía datos en la nube, se quedaban los del móvil (los de la otra cuenta) y se subían a la nueva: salían los mismos viajes, el mismo nombre y los mismos contactos en las dos.
+   «De quién son los datos del móvil» se sabe por la última revisión subida/bajada (pdc_cloud_base), por los cambios pendientes y por la sesión. Si no hay ninguna pista (datos de antes de tener cuenta) se conservan, como siempre.
+   Antes de vaciar se guarda copia (la de «cambio de cuenta» y la copia local); los datos de la otra cuenta siguen en su cuenta. */
+function foreignLocal(uid){
+  const b=jget(BASE),d=jget(DIRTY),p=profile();
+  const ids=[b&&b.owner,d&&d.owner,p&&p.loggedIn&&p.cloud&&p.userId].filter(Boolean);
+  return !!uid&&ids.length>0&&ids.indexOf(uid)<0;
+}
+P.foreignLocal=foreignLocal;
+P.freshIfOtherAccount=function(uid,note){
+  try{
+    if(!foreignLocal(uid))return false;
+    P.flush();
+    if(localDataHasContent(db)&&!saveBackup(db,null,'cambio de cuenta')&&!localStorage.getItem(BACKUP_KEY))return false;   // sin ninguna copia no se toca nada
+    adoptDb(freshDb(),note);
+    try{localStorage.removeItem(BASE)}catch(e){}
+    P.syncClear();
+    window.__pdcLastSig=null;window.__pdcLastSigUid=null;
+    return true;
+  }catch(e){console.warn('v3.61 cuenta nueva',e);return false}
+};
 P.applyLate=function(res){
   try{
     if(!res||res.error||!res.data||!res.data.data)return;
@@ -5157,7 +5288,7 @@ window.cloudPushData=function(){
       }
       const v0=P.version();
       const snap=currentDbSnapshot();const sig=JSON.stringify(snap);
-      if(sig===window.__pdcLastSig&&!f){if(P.version()===v0&&!P.isDirty())P.syncClear();return}
+      if(sig===window.__pdcLastSig&&window.__pdcLastSigUid===user.id&&!f){if(P.version()===v0&&!P.isDirty())P.syncClear();return}
       const payload={user_id:user.id,data:snap,updated_at:new Date().toISOString()};
       P.lastPayloadBytes=sig.length;lastUpload=Date.now();
       let r;
@@ -5171,7 +5302,7 @@ window.cloudPushData=function(){
         if(r&&r.error)throw r.error;
       }
       P.pushCount++;
-      window.__pdcLastSig=sig;lastPushDone=Date.now();
+      window.__pdcLastSig=sig;window.__pdcLastSigUid=user.id;lastPushDone=Date.now();
       try{localStorage.setItem('pdc_last_sync',new Date().toISOString())}catch(e){}
       const row=r&&Array.isArray(r.data)?r.data[0]:null;
       setBase(row&&row.updated_at||payload.updated_at,user.id);
@@ -7405,6 +7536,170 @@ function ifStatusHtml(){
   var m=s.err?'IFEMA: no he podido leer ifema.es ('+s.err+'). Se enseñan solo los eventos de Ticketmaster.':(s.n>0?'IFEMA: '+s.n+(s.n===1?' evento leído':' eventos leídos')+' en ifema.es para estos días.':'IFEMA: no hay eventos en ifema.es para estos días.');
   return '<br>'+esc(m);
 }
+/*v361-arena*/
+/* v3.61 · Movistar Arena en «Madrid hoy». Ticketmaster casi no trae los conciertos ni los partidos del recinto, asi que se lee su programacion oficial
+   (movistararena.es/programacion: pagina publica que permite robots.txt). Cada ficha trae titulo, fecha o rango («del 19 al 21 de nov.»), hora y, si toca, «Cancelado» o «Aplazado» (esas no salen).
+   Si la pagina falla o cambia, siguen las demas fuentes y el pie de la pantalla lo dice. */
+var AR_URL='https://www.movistararena.es/programacion/',K_AR='pdc_arena_v1';
+var AR_M={ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,oct:10,nov:11,dic:12};
+function arTxt(s){return ifDec(String(s||'').replace(/<[^>]+>/g,' ')).replace(/\s+/g,' ').trim()}
+function arKey(y,m,d){var t=new Date(Date.UTC(y,m-1,d));return (t.getUTCFullYear()===y&&t.getUTCMonth()===m-1&&t.getUTCDate()===d)?y+'-'+z(m)+'-'+z(d):null}
+function arMes(s){s=String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z]/g,'').slice(0,3);return AR_M[s]||0}
+/* «del 19 al 21 de nov.» o «del 31 de ene. al 1 de feb.»: la web no pone el año, se elige el primero cuyo final no ha pasado */
+function arRange(s,today){
+  var m=/^del\s+(\d{1,2})(?:\s+de\s+([^\s.\d]+)\.?)?\s+al\s+(\d{1,2})\s+de\s+([^\s.\d]+)\.?\s*$/i.exec(String(s||'').trim());
+  if(!m)return null;
+  var d1=+m[1],d2=+m[3],m2=arMes(m[4]),m1=m[2]?arMes(m[2]):m2,y0=+today.slice(0,4),k,y,a,b;
+  if(!m1||!m2)return null;
+  for(k=-1;k<=1;k++){
+    y=y0+k;a=arKey(y,m1,d1);b=arKey((m2<m1||(m2===m1&&d2<d1))?y+1:y,m2,d2);
+    if(a&&b&&b>=today)return [a,b];
+  }
+  return null;
+}
+function arKind(n){return /\svs\.?\s/i.test(n)?'sports':(/disney|on ice|circo|cirque|musical|ballet|comedia|humor|mon[oó]logo|el show|magia|infantil/i.test(n)?'other':'music')}
+/* una ficha <article class="event-card ..."> → {n,a,b,t} (a..b = primer y ultimo dia), {skip:1} si esta cancelada/aplazada, o null si no se entiende */
+function arCard(c,today){
+  var st=/event-card__status[^>]*>([\s\S]*?)<\/span>/i.exec(c),tt=/event-card__status[^>]*title=["']([^"']*)["']/i.exec(c);
+  if(/cancel|aplaz|suspend|anulad/i.test((st?arTxt(st[1]):'')+' '+(tt?tt[1]:'')))return {skip:1};
+  var h3=/<h3\b[^>]*>([\s\S]*?)<\/h3>/i.exec(c),n=h3?arTxt(h3[1]).slice(0,90):'';
+  if(!n)return null;
+  var sc=/event-card__schedule[^>]*>([\s\S]*?)<\/p>/i.exec(c),Sc=sc?sc[1]:'',a=null,b=null,t='',m,r;
+  m=/<time\b[^>]*datetime=["'](\d{4})-(\d{2})-(\d{2})/i.exec(Sc);
+  if(m){a=b=arKey(+m[1],+m[2],+m[3])}
+  else{
+    m=/<span>\s*(del\s[^<]*?)\s*<\/span>/i.exec(Sc);
+    if(m){r=arRange(arTxt(m[1]),today);if(r){a=r[0];b=r[1]}}
+  }
+  var hr=/\/programacion\/evento\/[^"'\/\s]+\/(\d{1,2})-(\d{1,2})-(\d{4})(?:\/(\d{1,2}):(\d{2}))?/i.exec(c);
+  if(!a&&hr){a=b=arKey(+hr[3],+hr[2],+hr[1])}
+  m=/<time\b[^>]*datetime=["'](\d{1,2}):(\d{2})["']/i.exec(Sc);
+  if(m)t=z(+m[1])+':'+m[2];else if(hr&&hr[4]!=null)t=z(+hr[4])+':'+hr[5];
+  if(t==='00:00')t='';      /* 00:00 = «hora sin confirmar» en esa web */
+  if(!a||!b||b<a)return null;
+  return {n:n,a:a,b:b,t:t};
+}
+function parseArena(html){
+  if(typeof html!=='string')throw new Error('respuesta no válida');
+  var P=html.split(/<article\b[^>]*\bevent-card\b[^>]*>/i),out=[],i,x,ok=0;
+  for(i=1;i<P.length;i++){
+    x=arCard(P[i].split(/<\/article>/i)[0],dkey(new Date()));
+    if(!x)continue;
+    ok++;if(!x.skip)out.push(x);
+  }
+  if(!ok)throw new Error('no he sabido leer la página');
+  return out;
+}
+/* de las fichas a eventos de los proximos 7 dias (un rango «del 19 al 21» = un evento cada dia) */
+function arExpand(L){
+  var out=[],seen={},from=dkey(new Date()),i,j,d,r,k;
+  for(i=0;i<L.length;i++){
+    r=L[i];
+    for(j=0;j<7;j++){
+      d=addDays(from,j);if(d<r.a||d>r.b)continue;
+      k=r.n.toLowerCase()+'|'+d+'|'+r.t;if(seen[k])continue;seen[k]=1;
+      var kd=arKind(r.n);
+      out.push({id:'ar'+ifSlug(r.n)+d+r.t.replace(':',''),n:r.n,d:d,t:r.t,v:'Movistar Arena',c:'Madrid',k:kd,g:kd==='sports'?'Baloncesto':'',src:'movistararena.es'});
+    }
+  }
+  out.sort(function(x,y){return x.d<y.d?-1:x.d>y.d?1:x.t<y.t?-1:x.t>y.t?1:0});
+  return out;
+}
+/* palabras que distinguen un evento (5 letras o mas, sin las genericas): dos eventos del mismo dia y recinto que comparten una son el mismo */
+var AR_STOP=/^(presenta|presents|presentan|festival|fabrik|arena|movistar|madrid|aniversario|edition|winter|summer|night|party|tour|gira|concierto|conciertos|musica|show|parte|primera|segunda|tercera|especial|nueva|grand|live)$/;
+function arWords(n){return String(n||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9 ]+/g,' ').split(/\s+/).filter(function(w){return w.length>=5&&!AR_STOP.test(w)})}
+function arShare(a,b){var i,j;for(i=0;i<a.length;i++)for(j=0;j<b.length;j++)if(a[i]===b[j])return true;return false}
+/* une con lo que ya hay sin repetir y SIN pisar nada: mismo dia y mismo recinto y (mismo nombre, o dos partidos a la misma hora o sin hora) */
+function mergeAt(list,add,vre){
+  var out=list.slice(),i,j,e,t,a,b,w,dup;
+  for(i=0;i<add.length;i++){
+    e=add[i];dup=false;a=ifSlug(e.n);w=arWords(e.n);
+    for(j=0;j<list.length&&!dup;j++){
+      t=list[j];if(t.d!==e.d||!vre.test(t.v||''))continue;
+      if(e.k==='sports'&&t.k==='sports'&&(!e.t||!t.t||e.t===t.t)){dup=true;continue}
+      b=ifSlug(t.n);
+      if(a&&b&&(a.indexOf(b)>=0||b.indexOf(a)>=0))dup=true;
+      else if(w.length&&arShare(w,arWords(t.n)))dup=true;
+    }
+    if(!dup)out.push(e);
+  }
+  out.sort(function(x,y){return x.d<y.d?-1:x.d>y.d?1:x.t<y.t?-1:x.t>y.t?1:0});
+  return out;
+}
+function mergeArena(list,ar){return mergeAt(list,ar,/movistar arena|wizink/i)}
+function mergeFabrik(list,fb){return mergeAt(list,fb,/fabrik/i)}
+function arSave(o){try{localStorage.setItem(K_AR,JSON.stringify(o))}catch(e){}}
+function arGet(){try{return JSON.parse(localStorage.getItem(K_AR)||'null')}catch(e){return null}}
+function arStatusHtml(){
+  var s=arGet();if(!s)return '';
+  var m=s.err?'Movistar Arena: no he podido leer movistararena.es ('+s.err+').':(s.n>0?'Movistar Arena: '+s.n+(s.n===1?' evento leído':' eventos leídos')+' en movistararena.es para estos días.':'Movistar Arena: no hay eventos en movistararena.es para estos días.');
+  return '<br>'+esc(m);
+}
+/* nunca rechaza: si falla, devuelve [] y deja el motivo para el pie */
+function arenaEv(){
+  return httpText(AR_URL).then(function(x){
+    var L;
+    try{L=arExpand(parseArena(x))}catch(e){arSave({t:Date.now(),n:0,err:/respuesta/.test((e&&e.message)||'')?'respuesta no válida':'no he sabido leer la página'});return []}
+    arSave({t:Date.now(),n:L.length,err:''});
+    return L;
+  },function(e){arSave({t:Date.now(),n:0,err:errTxt(e)});return []});
+}
+/* v3.61 · Fabrik (discoteca de Humanes de Madrid). Su pagina de eventos se carga con JavaScript desde una API que su robots.txt no permite leer, pero publica sitemap.xml
+   (permitido, lo cita el propio robots.txt) con un enlace por evento: /eventos/{nombre}-{AAAA-MM-DD}. De ahi salen la fecha y el nombre; la hora y si se cancela NO se publican. */
+var FB_URL='https://fabrikmadrid.com/sitemap.xml',K_FB='pdc_fabrik_v1';
+var FB_FIX=[[/\bedici n\b/g,'edición'],[/\btrilog a\b/g,'trilogía'],[/\bfiest n\b/g,'fiestón']];   /* la web cambia las letras con tilde por «-» en el enlace */
+function fbName(slug){
+  var s=String(slug||'').toLowerCase().replace(/[-_]+/g,' ').replace(/\s+/g,' ').trim(),i;
+  s=s.replace(/\s+en\s+fabrik\b/,'').trim();
+  for(i=0;i<FB_FIX.length;i++)s=s.replace(FB_FIX[i][0],FB_FIX[i][1]);
+  s=s.split(' ').map(function(w,k){
+    if(/^(xxl|nyd|dj|vip)$/.test(w))return w.toUpperCase();
+    if(k>0&&/^(a|y|o|de|del|la|el|los|las|en|con|by|x|por|para|of|the|and|at|vs)$/.test(w))return w;
+    return cap(w);
+  }).join(' ');
+  return s.slice(0,90);
+}
+function parseFabrik(xml){
+  if(typeof xml!=='string')throw new Error('respuesta no válida');
+  var re=/<loc>\s*([^<\s]+)\s*<\/loc>/gi,m,q,d,n,k,out=[],seen={},tot=0;
+  while((m=re.exec(xml))){
+    if(!/^https?:\/\/(?:www\.)?fabrikmadrid\.com\/eventos\//i.test(m[1]))continue;
+    tot++;
+    q=/\/eventos\/([a-z0-9\-]+?)-(\d{4})-(\d{2})-(\d{2})\/?$/i.exec(m[1]);
+    if(!q)continue;
+    d=arKey(+q[2],+q[3],+q[4]);n=fbName(q[1]);
+    if(!d||!n)continue;
+    k=n.toLowerCase()+'|'+d;if(seen[k])continue;seen[k]=1;
+    out.push({n:n,d:d});
+  }
+  if(!tot||!out.length)throw new Error('no he sabido leer la página');
+  return out;
+}
+function fbExpand(L){
+  var out=[],from=dkey(new Date()),to=addDays(from,6),i,e;
+  for(i=0;i<L.length;i++){
+    e=L[i];if(e.d<from||e.d>to)continue;
+    out.push({id:'fb'+ifSlug(e.n)+e.d,n:e.n,d:e.d,t:'',v:'Fabrik',c:'Humanes de Madrid',k:'music',g:'Discoteca',src:'fabrikmadrid.com'});
+  }
+  out.sort(function(x,y){return x.d<y.d?-1:x.d>y.d?1:x.n<y.n?-1:x.n>y.n?1:0});
+  return out;
+}
+function fbSave(o){try{localStorage.setItem(K_FB,JSON.stringify(o))}catch(e){}}
+function fbGet(){try{return JSON.parse(localStorage.getItem(K_FB)||'null')}catch(e){return null}}
+function fbStatusHtml(){
+  var s=fbGet();if(!s)return '';
+  var m=s.err?'Fabrik: no he podido leer fabrikmadrid.com ('+s.err+').':(s.n>0?'Fabrik: '+s.n+(s.n===1?' evento leído':' eventos leídos')+' en fabrikmadrid.com para estos días (solo la fecha: la web no publica la hora).':'Fabrik: no hay eventos en fabrikmadrid.com para estos días.');
+  return '<br>'+esc(m);
+}
+/* nunca rechaza: si falla, devuelve [] y deja el motivo para el pie */
+function fabrikEv(){
+  return httpText(FB_URL).then(function(x){
+    var L;
+    try{L=fbExpand(parseFabrik(x))}catch(e){fbSave({t:Date.now(),n:0,err:/respuesta/.test((e&&e.message)||'')?'respuesta no válida':'no he sabido leer la página'});return []}
+    fbSave({t:Date.now(),n:L.length,err:''});
+    return L;
+  },function(e){fbSave({t:Date.now(),n:0,err:errTxt(e)});return []});
+}
 function spEv(){try{return window.PDC331?window.PDC331.madridEvents().then(function(l){return l||[]},function(){return []}):Promise.resolve([])}catch(e){return Promise.resolve([])}}
 function spOn(){try{return !!(window.PDC331&&window.PDC331.on())}catch(e){return false}}
 function spStat(){try{return window.PDC331?window.PDC331.statusHtml():''}catch(e){return ''}}
@@ -7423,11 +7718,18 @@ function evAll(){
     ifSave({t:Date.now(),n:Object.keys(names).length,err:ranges.length?'':err});
     return L;
   },function(){return []});
-  return Promise.all([tm,ifp,spp]).then(function(a){var m=mergeIf(a[0],a[1]);try{return a[2].length?window.PDC331.merge(m,a[2]):m}catch(e){return m}});
+  var arp=arenaEv(),fbp=fabrikEv();
+  return Promise.all([tm,ifp,spp,arp,fbp]).then(function(a){
+    var m=mergeIf(a[0],a[1]);
+    try{if(a[2].length)m=window.PDC331.merge(m,a[2])}catch(e){}
+    try{if(a[3].length)m=mergeArena(m,a[3])}catch(e){}
+    try{if(a[4].length)m=mergeFabrik(m,a[4])}catch(e){}
+    return m;
+  });
 }
-var V3=/movistar arena|wizink|metropolitano|c[ií]vitas|bernab[eé]u|vistalegre|las ventas|caja m[aá]gica|ifema|ciudad del f[uú]tbol|iberdrola music|mad cool/i;
+var V3=/movistar arena|wizink|fabrik|metropolitano|c[ií]vitas|bernab[eé]u|vistalegre|las ventas|caja m[aá]gica|ifema|ciudad del f[uú]tbol|iberdrola music|mad cool/i;
 var V2=/riviera|auditorio nacional|teatro real|estadio de vallecas|sala but|mon live|teatro barcel[oó]|la cubierta|dcode|matadero/i;
-var BAR=[[/movistar arena|wizink/i,'Salamanca'],[/metropolitano|c[ií]vitas/i,'San Blas'],[/bernab[eé]u/i,'Chamartín'],[/vistalegre/i,'Carabanchel'],[/las ventas/i,'Salamanca'],[/caja m[aá]gica/i,'Usera'],[/ifema/i,'Barajas'],[/auditorio nacional/i,'Chamartín'],[/estadio de vallecas/i,'Puente de Vallecas']];
+var BAR=[[/movistar arena|wizink/i,'Salamanca'],[/fabrik/i,'Humanes de Madrid'],[/metropolitano|c[ií]vitas/i,'San Blas'],[/bernab[eé]u/i,'Chamartín'],[/vistalegre/i,'Carabanchel'],[/las ventas/i,'Salamanca'],[/caja m[aá]gica/i,'Usera'],[/ifema/i,'Barajas'],[/auditorio nacional/i,'Chamartín'],[/estadio de vallecas/i,'Puente de Vallecas']];
 function tierOf(v){return V3.test(v||'')?3:V2.test(v||'')?2:0}
 function barrio(v){for(var i=0;i<BAR.length;i++)if(BAR[i][0].test(v||''))return BAR[i][1];return ''}
 function placeTxt(ev){var b=barrio(ev.v),s=ev.v||'Lugar por confirmar';if(b)s+=' · '+b;else if(ev.c&&!/^madrid$/i.test(ev.c))s+=' · '+ev.c;return s}
@@ -7464,12 +7766,12 @@ function barsHtml(n){
 /* ---------- descarga con caché ---------- */
 function pageOpen(){return !!document.getElementById('infRoot')}
 function job(name,f,today){
-  return f().then(function(data){var c=cache();c[name]={t:Date.now(),data:data};if(name==='ev'){c.ev.from=today;c.ev.src='if1'}jset(K_CACHE,c);return true},function(e){S.err[name]=errTxt(e);return false});
+  return f().then(function(data){var c=cache();c[name]={t:Date.now(),data:data};if(name==='ev'){c.ev.from=today;c.ev.src='ar1'}jset(K_CACHE,c);return true},function(e){S.err[name]=errTxt(e);return false});
 }
 function refresh(force){
   var c=cache(),now=Date.now(),today=dkey(new Date());
   var needWx=force||!c.wx||now-c.wx.t>TTL_WX;
-  var needEv=force||!c.ev||now-c.ev.t>TTL_EV||c.ev.from!==today||c.ev.src!=='if1';
+  var needEv=force||!c.ev||now-c.ev.t>TTL_EV||c.ev.from!==today||c.ev.src!=='ar1';
   if(!needWx&&!needEv)return Promise.resolve('fresh');
   if(navigator.onLine===false)return Promise.resolve('offline');
   if(inflight)return inflight;
@@ -7575,7 +7877,7 @@ function viewList(){
   }
   if(hidden>0&&!S.small)o+='<button class="inf-btn" onclick="infSmall(true)">Mostrar también '+hidden+(hidden===1?' evento pequeño':' eventos pequeños')+'</button>';
   if(S.small)o+='<button class="inf-btn" onclick="infSmall(false)">Ocultar los eventos pequeños</button>';
-  o+='<div class="inf-foot">Son estimaciones de posibles oportunidades, no garantías de que haya viajes. La hora de salida es la de inicio más una duración que supongo (se puede cambiar en cada evento). Datos de eventos: Ticketmaster e IFEMA (ifema.es). Datos del tiempo: Open-Meteo.com.'+ifStatusHtml()+spStat()+'</div>';
+  o+='<div class="inf-foot">Son estimaciones de posibles oportunidades, no garantías de que haya viajes. La hora de salida es la de inicio más una duración que supongo (se puede cambiar en cada evento). Datos de eventos: Ticketmaster, IFEMA (ifema.es), Movistar Arena (movistararena.es) y Fabrik (fabrikmadrid.com). Datos del tiempo: Open-Meteo.com.'+ifStatusHtml()+arStatusHtml()+fbStatusHtml()+spStat()+'</div>';
   return '<section class="inf" id="infRoot">'+o+'</section>';
 }
 function findEv(id){var L=(cache().ev&&cache().ev.data)||[];for(var i=0;i<L.length;i++)if(L[i].id===id)return L[i];return null}
@@ -7586,7 +7888,7 @@ function viewDetail(){
   var r=calc(ev,map,p),o=back;
   var dt=ev.d.split('-');
   o+='<h1 class="inf-title inf-t2">'+esc(ev.n)+'</h1><div class="inf-sub" style="margin-top:4px">'+esc(placeTxt(ev))+' · '+(+dt[2])+' de '+MES[+dt[1]-1]+'</div>';
-  o+='<div class="inf-card" style="margin-top:12px"><div class="inf-lbl">Dato de la fuente</div><div class="inf-big">'+(ev.k==='fair'&&ev.t?'~':'')+(ev.t||'Por confirmar')+'</div><div class="inf-sub">'+(ev.k==='fair'?(ev.t?'Hora supuesta (feria: apertura típica) · IFEMA no publica horario · según el calendario de ifema.es':'Espectáculo de temporada · sin hora en el calendario de ifema.es'):'Hora de inicio · según '+(ev.src||'Ticketmaster')+(ev.src?' (hora de España)':''))+(cache().ev?' · consultado a las '+z(new Date(cache().ev.t).getHours())+':'+z(new Date(cache().ev.t).getMinutes()):'')+'</div></div>';
+  o+='<div class="inf-card" style="margin-top:12px"><div class="inf-lbl">Dato de la fuente</div><div class="inf-big">'+(ev.k==='fair'&&ev.t?'~':'')+(ev.t||'Por confirmar')+'</div><div class="inf-sub">'+(ev.k==='fair'?(ev.t?'Hora supuesta (feria: apertura típica) · IFEMA no publica horario · según el calendario de ifema.es':'Espectáculo de temporada · sin hora en el calendario de ifema.es'):(ev.src==='fabrikmadrid.com'?'Solo la fecha · según fabrikmadrid.com (la web no publica la hora: confírmala ese día)':'Hora de inicio · según '+(ev.src||'Ticketmaster')+(ev.src?' (hora de España)':'')))+(cache().ev?' · consultado a las '+z(new Date(cache().ev.t).getHours())+':'+z(new Date(cache().ev.t).getMinutes()):'')+'</div></div>';
   o+='<div class="inf-card" style="border-color:#168bff"><div class="inf-lbl" style="color:#8fb8ff">Mi estimación</div>';
   if(r.win){
     o+='<div class="inf-sub" style="margin-top:6px">Salida de la gente</div><div class="inf-big">'+hm(r.a)+' – '+hm(r.b)+'</div>';
@@ -9689,6 +9991,26 @@ function pickDay(x,y){
   const ux=x.u||0,uy=y.u||0;if(ux!==uy)return ux>uy?x:y;
   return sumDay(x)>=sumDay(y)?x:y;
 }
+/* v3.61 · la parte común del libro (lista de los últimos 100 viajes, límites, punto de partida, cifras de Bolt) ya no la pisa ENTERA la copia más reciente: un libro casi vacío no borra la lista ni los límites.
+   La lista de viajes se UNE por id (si un viaje está en las dos, gana el resultado de la copia más reciente) y se queda con los 100 más nuevos; los límites propios no los pisa uno de fábrica;
+   el punto de partida y las cifras de Bolt no se pierden. Los días se unen día a día, como siempre. */
+function winMs(e){var m=/(\d{11,})/.exec(String(e&&e.id));return m?Number(m[1]):0}
+function mergeWin(src,oth){
+  var live=function(x){return Array.isArray(x)?x.filter(function(e){return e&&typeof e==='object'}):[]};
+  var fill=function(x){return Array.isArray(x)?x.filter(function(e){return typeof e==='string'}):[]};
+  var seedSide=src.seed?src:(oth.seed?oth:src);
+  var byId={},order=[],noId=[];
+  live(oth.win).concat(live(src.win)).forEach(function(e){
+    if(e.id==null){noId.push(e);return}
+    var k=String(e.id);if(!Object.prototype.hasOwnProperty.call(byId,k))order.push(k);byId[k]=e;      // la copia más reciente (src) va la última y manda
+  });
+  var all=order.map(function(k){return byId[k]}),ms=all.map(winMs);
+  if(ms.every(function(v){return v>0})){all=all.map(function(e,i){return {e:e,m:ms[i],i:i}}).sort(function(a,b){return a.m-b.m||a.i-b.i}).map(function(x){return x.e})}
+  var out=fill(seedSide.win).concat(all).concat(noId);
+  if(out.length>100)out.splice(0,out.length-100);
+  return out;
+}
+function isDefCfg(c){return !!c&&Number(c.orange)===90&&Number(c.red)===85&&Number(c.grace)===3}
 /* a = copia de la cuenta, b = la de este movil; empate = la de este movil */
 function mergeL(a,b){
   if(!a||typeof a!=='object'||!a.days)return b;
@@ -9697,8 +10019,10 @@ function mergeL(a,b){
   const ks=Object.keys(Object.assign({},da,dbb)).sort();
   const keep=ks.length>400?ks.slice(ks.length-400):ks;
   for(const k of keep){const x=da[k],y=dbb[k];days[k]=!x?y:!y?x:pickDay(x,y)}
-  const src=(Number(b.cu)||0)>=(Number(a.cu)||0)?b:a;
-  return {v:1,cfg:src.cfg,cu:src.cu||0,days,win:Array.isArray(src.win)?src.win:[],seed:src.seed||null,bolt:src.bolt||{}};
+  const src=(Number(b.cu)||0)>=(Number(a.cu)||0)?b:a,oth=src===b?a:b;
+  const cfg=(isDefCfg(src.cfg)&&oth.cfg&&!isDefCfg(oth.cfg))?oth.cfg:src.cfg;
+  const bolt=(src.bolt&&Object.keys(src.bolt).length)?src.bolt:(oth.bolt||{});
+  return {v:1,cfg:cfg,cu:Math.max(Number(a.cu)||0,Number(b.cu)||0),days,win:mergeWin(src,oth),seed:src.seed||oth.seed||null,bolt:bolt};
 }
 /* antes de subir: la copia de la cuenta (la que ya hay en `db`) se UNE con la de este movil, asi nunca se pierde lo de otro movil */
 function mirror(){
@@ -11020,6 +11344,9 @@ html body.lt .header{box-shadow:0 8px 26px rgba(30,100,200,.30)!important}
 html body.lt #content .daily-motivation{background:rgba(255,255,255,.78)!important;border-color:#fff!important;box-shadow:0 6px 20px rgba(30,90,180,.14)!important}
 html body.lt #content .motivation-icon{background:linear-gradient(145deg,#fff3c4,#ffe08a)!important;border-color:#ffd25e!important;box-shadow:none!important}
 html body.lt #content .motivation-icon,html body.lt #content .motivation-label{color:#c97a00!important}
+html body.lt #content .motivation-voice{background:linear-gradient(145deg,#fff3c4,#ffe08a)!important;border-color:#ffd25e!important}
+html body.lt #content .mv-btn{color:#c97a00!important}
+html body.lt #content .mv-btn+.mv-btn{border-color:#ffd25e!important}
 html body.lt #content .motivation-count,html body.lt #content .motivation-count *{color:#5a6b85!important}
 html body.lt #content input,html body.lt #content select{background:rgba(255,255,255,.92)!important;border-color:rgba(10,100,220,.28)!important;box-shadow:inset 0 1px 3px rgba(20,70,160,.10)!important;color:#0b1f3f!important}
 html body.lt #content input::placeholder{color:#8a9ab3!important}
