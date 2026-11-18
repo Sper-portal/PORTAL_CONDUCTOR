@@ -2681,7 +2681,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.58';
+const APP_VERSION='v3.59';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -4211,6 +4211,218 @@ try{
   if(typeof J_KB!=='undefined'&&!J_KB.some(function(e){return e[0]==='deportes'})){
     var ic=J_KB.findIndex(function(e){return e[0]==='contacto'});
     J_KB.splice(ic<0?J_KB.length:ic,0,['deportes','⚽','Deportes: partidos y clasificaciones','deportes^5,futbol^5,partidos^4,partido^3,clasificacion^5,tabla de liga^5,laliga^6,champions^6,baloncesto^4,euroliga^6,marcador^4,resultados^3,football data^6','Madrid hoy → pestaña Deportes: los partidos de LaLiga y Champions de hoy y mañana, las clasificaciones y los equipos, con la hora de España. Si tienes la función de Supabase usa Football-Data (con retraso); si no, lee directamente la web pública de ESPN (casi en directo, pero no es una fuente oficial y puede cambiar). Los partidos que se juegan en estadios de Madrid (Bernabéu, Metropolitano, Vallecas) también salen en «Madrid hoy» con su salida estimada; se pueden apagar con el botón de abajo de la pestaña Deportes. Tablas, Equipos y baloncesto necesitan la función de Supabase (opcional): si Deportes dice que falta algo, mira los pasos del paquete. Copa del Rey, Europa League y Segunda no están en las fuentes gratuitas.']);
+  }
+}catch(e){}
+})();
+/* ---------- v3.59 · «Vuelos» (pestaña de Madrid hoy): llegadas de hoy a Madrid-Barajas, por hora y por terminal ----------
+   Los datos vienen de la función «vuelos» de Supabase (que lee la web de información de vuelos de Aena y guarda una copia compartida que renueva cada pocos minutos). La app solo la consulta y lo dibuja;
+   si la función no responde, enseña lo último guardado y dice por qué. Se cuentan vuelos, no pasajeros. */
+(function(){
+'use strict';
+var K='pdc_vuelos_v1',TMO=30000,COOL=15000,PAGE=30,TICK=60000,RECHECK=300000,TZ='Europe/Madrid';
+var S={fl:'all',sel:null,busy:false,last:0,lastTry:0,err:'',errAt:0,n:PAGE,tm:0,hr:-1,sx:0};
+var CH={T1:'#0a84ff',T2:'#ffb340',T4:'#e5e5ea',x:'#636366'};
+function h(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function z(n){return (n<10?'0':'')+n}
+function jget(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}}
+function jset(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function cache(){var c=jget(K);return c&&typeof c==='object'&&c.data&&typeof c.data==='object'?c:null}
+function madNow(){
+  var p={};
+  try{new Intl.DateTimeFormat('en-GB',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date()).forEach(function(x){p[x.type]=x.value})}catch(e){}
+  var d=new Date(),hh=p.hour==null?d.getHours():(p.hour==='24'?0:+p.hour);
+  return {date:p.year?p.year+'-'+p.month+'-'+p.day:'',h:hh,m:p.minute==null?d.getMinutes():+p.minute};
+}
+function hmM(ms){return new Intl.DateTimeFormat('en-GB',{timeZone:TZ,hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(ms)).replace(/^24:/,'00:')}
+function ago(t){var m=Math.max(0,Math.round((Date.now()-t)/60000));return m<1?'ahora mismo':m<60?'hace '+m+' min':'hace '+Math.round(m/60)+' h'}
+function good(c){var n=madNow();return !!(c&&c.data&&c.data.date===n.date&&Array.isArray(c.data.hours)&&c.data.hours.length===24&&Array.isArray(c.data.flights))}
+function tot(x){return (x.T1||0)+(x.T2||0)+(x.T4||0)+(x.x||0)}
+function pl(n,a,b){return n+' '+(n===1?a:b)}
+
+/* ---------- red: una petición con tiempo máximo (la primera del día puede tardar: la función pide los vuelos a Aena) ---------- */
+function getJson(url){
+  return new Promise(function(res,rej){
+    var fin=false,ctl=window.AbortController?new AbortController():null;
+    var tm=setTimeout(function(){if(fin)return;fin=true;try{if(ctl)ctl.abort()}catch(e){}rej(new Error('tiempo agotado'))},TMO);
+    function ok(v){if(fin)return;fin=true;clearTimeout(tm);res(v)}
+    function ko(e){if(fin)return;fin=true;clearTimeout(tm);rej(e)}
+    function st(s){return s===404?'no_desplegada':(s===401||s===403)?'jwt':'HTTP '+s}
+    fetch(url,ctl?{signal:ctl.signal}:{}).then(function(r){if(!r.ok)throw new Error(st(r.status));return r.json()}).then(ok,function(e){
+      if(fin)return;
+      var H=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.CapacitorHttp;
+      if(e instanceof TypeError&&H&&H.get){
+        H.get({url:url,readTimeout:TMO,connectTimeout:TMO}).then(function(r){
+          if(r.status>=200&&r.status<300){var d=r.data;if(typeof d==='string'){try{d=JSON.parse(d)}catch(x){return ko(new Error('respuesta no válida'))}}ok(d)}
+          else ko(new Error(st(r.status)));
+        },ko);
+      }else ko(e);
+    });
+  });
+}
+function call(force){
+  var base=typeof PDC_SUPABASE_URL!=='undefined'?String(PDC_SUPABASE_URL):'';
+  if(!base)return Promise.reject(new Error('sin_url'));
+  return getJson(base.replace(/\/+$/,'')+'/functions/v1/vuelos'+(force?'?force=1':''));
+}
+function why(code){
+  code=String(code||'');
+  if(code==='bloqueado')return 'Aena no deja consultar sus vuelos ahora (bloqueo temporal)';
+  if(code==='sin_tabla')return 'faltan las tablas de vuelos en Supabase (el SQL del paquete)';
+  if(code==='sin_bd')return 'la función no encuentra la base de datos de Supabase';
+  if(code==='formato')return 'Aena ha cambiado el formato de sus datos';
+  if(code==='red'||code==='tiempo')return 'la función no consigue hablar con Aena';
+  if(code==='sin_datos')return 'Aena no devuelve vuelos ahora';
+  var m=/^aena_(\d+)$/.exec(code);
+  if(m)return 'Aena responde con el error '+m[1];
+  return code||'fallo desconocido';
+}
+function human(m){
+  m=String(m||'');
+  if(m==='no_desplegada')return 'la función «vuelos» todavía no está creada en Supabase';
+  if(m==='jwt')return 'Supabase rechaza la llamada: en la función «vuelos» hay que desactivar «Verify JWT»';
+  if(/^f:/.test(m))return why(m.slice(2));
+  if(m==='tiempo agotado')return 'tiempo agotado (la función tarda en responder)';
+  if(m==='sin_url')return 'sin dirección de Supabase';
+  if(/^HTTP/.test(m)||/no válida/.test(m))return m;
+  return 'sin conexión';
+}
+function load(force){
+  if(S.busy)return Promise.resolve(false);
+  S.busy=true;S.lastTry=Date.now();redraw();
+  return call(force).then(function(j){
+    if(!j||typeof j!=='object')throw new Error('respuesta no válida');
+    if(j.ok===false)throw new Error('f:'+(j.err||'fallo'));
+    if(!Array.isArray(j.hours)||j.hours.length!==24||!Array.isArray(j.flights))throw new Error('respuesta no válida');
+    jset(K,{t:Date.now(),data:j});S.err='';S.errAt=0;return true;
+  }).catch(function(e){S.err=human(e&&e.message);S.errAt=Date.now();return false}).then(function(r){S.busy=false;redraw();return r});
+}
+
+/* ---------- dibujo ---------- */
+function stat(f){
+  var k=f.k,m=f.m;
+  if(k==='land')return ['Aterrizado','#6cb6ff'];
+  if(k==='appr')return ['Llegando','#6cb6ff'];
+  if(k==='late')return [m!=null&&m>0?'+'+m+' min':'Retrasado','#ffb340'];
+  if(k==='early')return ['−'+Math.abs(m||0)+' min','#30d158'];
+  if(k==='ok')return ['A tiempo','#8e8e93'];
+  return ['Previsto','#8e8e93'];
+}
+function flightRow(f){
+  var s=stat(f),late=f.k==='late'||f.k==='early';
+  var t=f.t?(f.i?'~':'')+f.t:'—',col=CH[f.t]||CH.x;
+  return '<div class="vl-fl"><div class="vl-et"><b>'+h(f.e)+'</b><span style="color:'+s[1]+'">'+h(s[0])+'</span></div>'
+    +'<div class="vl-nm"><b>'+h(f.n||'—')+'</b><small>'+h(f.c||'')+(late&&f.s&&f.s!==f.e?' · previsto '+h(f.s):'')+'</small></div>'
+    +'<span class="vl-tp"'+(f.i?' title="Terminal estimada por la aerolínea"':'')+'><i style="background:'+col+'"></i>'+h(t)+'</span></div>';
+}
+function panel(){
+  var c=cache(),ok=good(c),now=madNow(),o='<div id="vlPanel">';
+  o+='<div class="inf-upd" style="margin-top:2px">'+(S.busy?'Actualizando vuelos…':(ok&&c.data.updated?'Vuelos actualizados a las '+hmM(Date.parse(c.data.updated))+' · '+ago(Date.parse(c.data.updated)):'Vuelos: aún sin datos'))+'</div>';
+  if(navigator.onLine===false)o+='<div class="inf-note inf-warn">Sin conexión. Te enseño lo último que guardé.</div>';
+  if(S.err)o+='<div class="inf-note inf-warn">No he podido actualizar los vuelos: '+h(S.err)+'.'+(ok?' Te enseño lo guardado.':'')+'</div>';
+  else if(ok&&c.data.warn)o+='<div class="inf-note inf-warn">'+h(why(c.data.warn).replace(/^./,function(x){return x.toUpperCase()}))+(c.data.stale?'. Son los últimos datos guardados.':'.')+'</div>';
+  if(!ok){
+    if(S.busy)o+='<div class="inf-note">Cargando los vuelos de hoy… la primera vez del día tarda unos segundos.</div>';
+    else if(!S.err)o+='<div class="inf-note">Todavía no hay vuelos. Pulsa ↻ para pedirlos.</div>';
+    o+='<div class="inf-foot">Fuente: web de información de vuelos de Aena. Hace falta la función «vuelos» de Supabase.</div>';
+    return o+'</div>';
+  }
+  var d=c.data,rows=d.hours.filter(function(x){return x.h>=now.h});
+  if(!rows.length)rows=[d.hours[23]];
+  var peak=-1,pmax=0,s1=0,s2=0,s4=0,sx=0;
+  rows.forEach(function(x,i){var t=tot(x);if(t>pmax){pmax=t;peak=i}s1+=x.T1||0;s2+=x.T2||0;s4+=x.T4||0;sx+=x.x||0});
+  var all=s1+s2+s4+sx,topN=Math.max(s1,s2,s4),top=topN===0?'—':(s4>=s1&&s4>=s2?'T4':(s1>=s2?'T1':'T2'));
+  var selI=-1;rows.forEach(function(x,i){if(x.h===S.sel)selI=i});
+  if(selI<0)selI=peak<0?0:peak;
+  var sel=rows[selI];
+  o+='<div class="inf-card vl-top"><div class="vl-h1">Madrid-Barajas · llegadas de hoy</div><div class="vl-sub">Desde las '+z(rows[0].h)+':00 hasta las 24:00</div>'
+    +'<div class="vl-tiles"><div><small>Hora con más llegadas</small><b>'+(peak<0?'—':z(rows[peak].h)+':00')+'</b><small>'+(peak<0?'sin llegadas previstas':pl(pmax,'llegada','llegadas'))+'</small></div>'
+    +'<div><small>Terminal más activa</small><b>'+top+'</b><small>'+(topN?topN+' de '+pl(all,'vuelo','vuelos'):'sin datos de terminal')+'</small></div></div></div>';
+  o+='<div class="inf-card vl-chart"><div class="vl-lg"><b>Llegadas por hora</b><span><i style="background:'+CH.T1+'"></i>T1<i style="background:'+CH.T2+'"></i>T2<i style="background:'+CH.T4+'"></i>T4'+(sx?'<i style="background:'+CH.x+'"></i>Sin terminal':'')+'</span></div>';
+  o+='<div class="vl-scroll" id="vlScroll"><div class="vl-cols">';
+  rows.forEach(function(x,i){
+    var t=tot(x),segs='';
+    [['x',x.x],['T4',x.T4],['T2',x.T2],['T1',x.T1]].forEach(function(p){if(p[1]>0)segs+='<span style="height:'+Math.max(2,Math.round(p[1]/(pmax||1)*120))+'px;background:'+CH[p[0]]+'"></span>'});
+    o+='<button type="button" class="vl-col'+(i===selI?' on':'')+'" onclick="vlSel('+x.h+')" aria-pressed="'+(i===selI?'true':'false')+'" aria-label="'+z(x.h)+':00 a '+z((x.h+1)%24)+':00, '+pl(t,'llegada','llegadas')+(i===peak?', hora con más llegadas':'')+'">'
+      +(i===peak&&t>0?'<em>Punta</em>':'')+'<b>'+t+'</b><div class="vl-bar">'+segs+'</div><small>'+(x.h===now.h?'Ahora':z(x.h)+':00')+'</small></button>';
+  });
+  o+='</div></div>';
+  var st=tot(sel),mx=Math.max(sel.T1||0,sel.T2||0,sel.T4||0);
+  o+='<div class="vl-sel"><div class="vl-selh"><b>'+z(sel.h)+':00 – '+z((sel.h+1)%24)+':00</b><span>'+pl(st,'llegada','llegadas')+'</span></div><div class="vl-terms">';
+  [['T1',sel.T1||0],['T2',sel.T2||0],['T4',sel.T4||0]].forEach(function(p){
+    o+='<div'+(mx>0&&p[1]===mx?' class="top"':'')+'><span><i style="background:'+CH[p[0]]+'"></i>'+p[0]+'</span><b>'+p[1]+'</b><small>'+(mx>0&&p[1]===mx?'Más llegadas':(p[1]===1?'vuelo':'vuelos'))+'</small></div>';
+  });
+  o+='</div>'+((sel.x||0)>0?'<div class="vl-hint">Y '+pl(sel.x,'vuelo','vuelos')+' sin terminal asignada todavía.</div>':'')+'</div>';
+  o+='<div class="vl-hint">Desliza para ver el resto del día. Se cuentan vuelos, no pasajeros.</div></div>';
+  o+='<h2 class="inf-h2" style="margin-top:6px">Próximas llegadas<small>Por hora prevista</small></h2>';
+  o+='<div class="inf-tabs vl-flt sp-sub">';
+  [['all','Todas'],['T1','T1'],['T2','T2'],['T4','T4']].forEach(function(p){o+='<button type="button" class="'+(S.fl===p[0]?'on':'')+'" onclick="vlFlt(\''+p[0]+'\')">'+p[1]+'</button>'});
+  o+='</div>';
+  var L=d.flights.filter(function(f){return S.fl==='all'||f.t===S.fl});
+  if(!L.length)o+='<div class="inf-note">'+(S.fl==='all'?'No hay más llegadas previstas hoy.':'No hay llegadas de '+S.fl+' en la lista de las próximas horas'+(d.info&&d.info.unknown?' (hay vuelos sin terminal asignada todavía).':'.'))+'</div>';
+  else{
+    o+='<div class="vl-list">';
+    L.slice(0,S.n).forEach(function(f){o+=flightRow(f)});
+    o+='</div>';
+    if(L.length>S.n)o+='<button type="button" class="inf-btn" onclick="vlMore()">Ver más llegadas ('+(L.length-S.n)+')</button>';
+    else if(d.info&&d.info.more>0&&S.fl==='all')o+='<div class="vl-hint">La lista enseña las próximas '+d.info.listed+' llegadas.</div>';
+  }
+  var inf=d.info||{},n2=[];
+  n2.push('Horas y terminales son una previsión y pueden cambiar a última hora.');
+  n2.push('Los vuelos de T4S se cuentan en T4.'+(inf.inferred>0?' Los marcados con ~ tienen la terminal estimada por la aerolínea.':'')+(inf.unknown>0?' '+pl(inf.unknown,'vuelo sin terminal asignada todavía no cuenta','vuelos sin terminal asignada todavía no cuentan')+' en T1, T2 ni T4.':''));
+  n2.push('Fuente: información de vuelos de Aena.');
+  o+='<div class="inf-note inf-warn vl-notes">'+n2.map(function(t){return '<span>'+h(t)+'</span>'}).join('')+'</div>';
+  return o+'</div>';
+}
+function redraw(){
+  var el=document.getElementById('vlScroll');
+  if(el)S.sx=el.scrollLeft;
+  if(document.getElementById('vlPanel')&&typeof window.infRedraw==='function'){
+    window.infRedraw();
+    var e2=document.getElementById('vlScroll');
+    if(e2&&S.sx)e2.scrollLeft=S.sx;
+  }
+}
+/* mientras la pestaña Vuelos está abierta se mira cada minuto si lo guardado en el móvil tiene más de 5 minutos (la función decide si hace falta preguntar a Aena: como mucho cada 10 minutos)
+   y se redibuja al cambiar la hora; al salir de la pestaña se para solo */
+function tick(){
+  S.tm=0;
+  if(!document.getElementById('vlPanel'))return;
+  var c=cache(),n=madNow();
+  if(!document.hidden){
+    if(!S.busy&&(!good(c)||Date.now()-c.t>=RECHECK)&&!(S.errAt&&Date.now()-S.errAt<300000))load(false);
+    else if(n.h!==S.hr&&!S.busy)redraw();
+  }
+  S.hr=n.h;
+  S.tm=setTimeout(tick,TICK);
+}
+window.vlSel=function(hr){S.sel=hr;redraw()};
+window.vlFlt=function(f){S.fl=f;S.n=PAGE;redraw()};
+window.vlMore=function(){S.n+=PAGE;redraw()};
+window.PDC359={
+  panel:panel,
+  open:function(){
+    S.n=PAGE;S.hr=madNow().h;
+    var c=cache();
+    if((!good(c)||Date.now()-c.t>RECHECK)&&!S.busy&&Date.now()-S.lastTry>20000)load(false);
+    if(!S.tm)S.tm=setTimeout(tick,TICK);
+  },
+  refresh:function(){
+    if(S.last&&Date.now()-S.last<COOL)return;
+    S.last=Date.now();load(true);
+  },
+  on:function(){return good(cache())},
+  _s:S
+};
+/* atajo (ayuda, avisos): abre «Madrid hoy» en su pestaña Vuelos */
+window.renderVuelos=function(){
+  if(typeof window.renderMadridHoy==='function')window.renderMadridHoy();
+  if(typeof window.infTab==='function')window.infTab('vuelos');
+};
+/* ayuda de Jenny: una entrada nueva, antes de «contacto» (si no hay lista de ayuda, no hace nada) */
+try{
+  if(typeof J_KB!=='undefined'&&!J_KB.some(function(e){return e[0]==='vuelos'})){
+    var ic=J_KB.findIndex(function(e){return e[0]==='contacto'});
+    J_KB.splice(ic<0?J_KB.length:ic,0,['vuelos','✈️','Vuelos: llegadas a Barajas por hora y terminal','vuelos^6,aeropuerto^5,barajas^6,llegadas^5,terminal^5,t1^4,t2^4,t4^4,aviones^4,aena^4,hora punta^5,información de vuelos^4','Madrid hoy → pestaña Vuelos: cuántos vuelos llegan a Madrid-Barajas en cada hora de hoy y a qué terminal (T1, T2 y T4; T4S cuenta como T4), la hora con más llegadas y la lista de las próximas llegadas con su estado (aterrizado, a tiempo o retrasado). Se cuentan vuelos, no pasajeros. Los datos salen de la web de información de vuelos de Aena y se renuevan cada pocos minutos (la hora y la terminal pueden cambiar a última hora): si no se pueden actualizar, te enseña lo último guardado. Si falta algo en Supabase, el aviso de la pestaña dice qué es.']);
   }
 }catch(e){}
 })();
@@ -7329,8 +7541,9 @@ function viewList(){
   if(navigator.onLine===false)o+='<div class="inf-note inf-warn">Sin conexión. Te enseño lo último que guardé; cuando vuelva la cobertura, pulsa ↻.</div>';
   if(S.err.wx||S.err.ev)o+='<div class="inf-note inf-warn">No he podido actualizar'+(S.err.wx?' el tiempo ('+esc(S.err.wx)+')':'')+(S.err.wx&&S.err.ev?' ni':'')+(S.err.ev?' los eventos ('+esc(S.err.ev)+')':'')+'. Te enseño lo guardado.</div>';
   if(S.msg)o+='<div class="inf-note">'+esc(S.msg)+'</div>';
-  o+='<div class="inf-tabs"><button class="'+(S.tab==='hoy'?'on':'')+'" onclick="infTab(\'hoy\')">Hoy</button><button class="'+(S.tab==='manana'?'on':'')+'" onclick="infTab(\'manana\')">Mañana</button><button class="'+(S.tab==='semana'?'on':'')+'" onclick="infTab(\'semana\')">Semana</button><button class="'+(S.tab==='deportes'?'on':'')+'" onclick="infTab(\'deportes\')">Deportes</button></div>';
+  o+='<div class="inf-tabs"><button class="'+(S.tab==='hoy'?'on':'')+'" onclick="infTab(\'hoy\')">Hoy</button><button class="'+(S.tab==='manana'?'on':'')+'" onclick="infTab(\'manana\')">Mañana</button><button class="'+(S.tab==='semana'?'on':'')+'" onclick="infTab(\'semana\')">Semana</button><button class="'+(S.tab==='deportes'?'on':'')+'" onclick="infTab(\'deportes\')">Deportes</button><button class="'+(S.tab==='vuelos'?'on':'')+'" onclick="infTab(\'vuelos\')">Vuelos</button></div>';
   if(S.tab==='deportes'&&window.PDC331){o+=window.PDC331.panel();return '<section class="inf" id="infRoot">'+o+'</section>'}
+  if(S.tab==='vuelos'&&window.PDC359){o+=window.PDC359.panel();return '<section class="inf" id="infRoot">'+o+'</section>'}
   var hidden=0;
   function pick(list){
     var shown=[];
@@ -7399,8 +7612,9 @@ window.renderMadridHoy=function(){
   draw(false);
   refresh(false);
   if(S.tab==='deportes'&&window.PDC331)window.PDC331.open();
+  if(S.tab==='vuelos'&&window.PDC359)window.PDC359.open();
 };
-window.infTab=function(t){S.tab=t;S.det=null;draw(false);if(t==='deportes'&&window.PDC331)window.PDC331.open()};
+window.infTab=function(t){S.tab=t;S.det=null;draw(false);if(t==='deportes'&&window.PDC331)window.PDC331.open();if(t==='vuelos'&&window.PDC359)window.PDC359.open()};
 window.infSmall=function(v){S.small=!!v;draw(true)};
 window.infDetail=function(id){S.det=id;draw(false)};
 window.infBack=function(){S.det=null;draw(false)};
@@ -7408,6 +7622,7 @@ window.infRedraw=function(){if(pageOpen()&&!S.det)draw(true)};
 window.infDur=function(kind,m){var p=prefs();p.dur[kind]=m;savePrefs(p);draw(true)};
 window.infRefresh=function(){
   if(S.tab==='deportes'&&window.PDC331){window.PDC331.refresh();return}
+  if(S.tab==='vuelos'&&window.PDC359){window.PDC359.refresh();return}
   var c=cache();
   if(c.last&&Date.now()-c.last<COOL){S.msg='Ya está al día: la última descarga fue '+ago(c.last)+'.';draw(true);return}
   refresh(true);
@@ -11004,6 +11219,56 @@ html body .theme-seg button.on{background:linear-gradient(145deg,#4db3ff,#0a84ff
 .inf .sp-tab td:nth-child(2){text-align:left;font-weight:600;word-break:break-word}
 .inf .sp-tab tr.mad td{color:#6cb6ff}
 </style>
+<style id="v359-style">/* v3.59 · pestaña «Vuelos» de Madrid hoy (mismo estilo oscuro «iPhone» que el resto de Madrid hoy) */
+.inf .inf-tabs:not(.sp-sub) button{font-size:13px;padding:0 2px;min-width:0}
+@media (max-width:359px){.inf .inf-tabs:not(.sp-sub) button{font-size:12px;letter-spacing:-.02em}}
+.inf .vl-top{display:flex;flex-direction:column;gap:12px}
+.inf .vl-h1{font-size:15px;font-weight:600;color:#ebebf5;line-height:1.3}
+.inf .vl-sub{font-size:13px;color:#8e8e93;margin-top:2px;line-height:1.4}
+.inf .vl-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.inf .vl-tiles>div{background:#2c2c2e;border-radius:12px;padding:12px;min-width:0}
+.inf .vl-tiles small{display:block;font-size:12px;color:#aeaeb2;line-height:1.3}
+.inf .vl-tiles b{display:block;font-size:34px;line-height:1.1;font-weight:700;letter-spacing:-.02em;margin:4px 0 2px;font-feature-settings:'tnum'}
+.inf .vl-lg{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 12px;margin-bottom:10px}
+.inf .vl-lg b{font-size:17px;font-weight:600;line-height:1.25}
+.inf .vl-lg span{display:flex;align-items:center;flex-wrap:wrap;gap:4px 5px;font-size:12px;color:#ebebf5}
+.inf .vl-lg i,.inf .vl-terms i,.inf .vl-tp i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-left:7px}
+.inf .vl-lg i:first-child{margin-left:0}
+.inf .vl-scroll{overflow-x:auto;margin:0 -8px;padding:0 8px 6px;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:#48484a transparent}
+.inf .vl-cols{display:flex;width:max-content}
+.inf .vl-col{flex:none;width:44px;height:206px;border:0;border-radius:10px;background:transparent;padding:0 0 6px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;color:#fff;cursor:pointer}
+.inf .vl-col.on{background:rgba(118,118,128,.28)}
+.inf .vl-col em{font-style:normal;padding:2px 6px;border-radius:999px;background:#ffb340;color:#000;font-size:11px;font-weight:700;line-height:1.2}
+.inf .vl-col b{font-size:12px;font-weight:600;color:#8e8e93;font-feature-settings:'tnum';line-height:1.3}
+.inf .vl-col.on b{color:#fff;font-weight:700}
+.inf .vl-bar{display:flex;flex-direction:column;gap:1px;width:22px;border-radius:6px;overflow:hidden}
+.inf .vl-bar span{display:block}
+.inf .vl-col small{font-size:11px;color:#8e8e93;line-height:1.3}
+.inf .vl-sel{margin-top:10px;padding-top:12px;border-top:.5px solid #38383a}
+.inf .vl-selh{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.inf .vl-selh b{font-size:17px;font-weight:600;font-feature-settings:'tnum'}
+.inf .vl-selh span{font-size:13px;color:#8e8e93}
+.inf .vl-terms{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+.inf .vl-terms>div{background:#2c2c2e;border-radius:10px;padding:8px 10px;border:1px solid transparent;min-width:0}
+.inf .vl-terms>div.top{border-color:#e5e5ea}
+.inf .vl-terms span{display:flex;align-items:center;gap:0;font-size:12px;font-weight:600;color:#ebebf5}
+.inf .vl-terms i{border-radius:50%;width:8px;height:8px;margin:0 6px 0 0}
+.inf .vl-terms b{display:block;font-size:22px;line-height:1.2;font-weight:700;margin-top:2px;font-feature-settings:'tnum'}
+.inf .vl-terms small{font-size:11px;color:#aeaeb2;line-height:1.3}
+.inf .vl-hint{margin-top:10px;font-size:12px;line-height:1.4;color:#8e8e93}
+.inf .vl-flt{margin-bottom:12px}
+.inf .vl-list{display:flex;flex-direction:column;gap:8px}
+.inf .vl-fl{background:#1c1c1e;border-radius:14px;padding:12px 14px;display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:12px;align-items:center}
+.inf .vl-et{display:flex;flex-direction:column;gap:2px}
+.inf .vl-et b{font-size:22px;line-height:1.1;font-weight:700;letter-spacing:-.02em;font-feature-settings:'tnum'}
+.inf .vl-et span{font-size:12px;font-weight:600;line-height:1.3}
+.inf .vl-nm{min-width:0}
+.inf .vl-nm b{display:block;font-size:17px;font-weight:600;line-height:1.25;word-break:break-word}
+.inf .vl-nm small{display:block;font-size:14px;color:#8e8e93;margin-top:2px;line-height:1.35}
+.inf .vl-tp{display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;background:#2c2c2e;color:#fff;font-size:13px;font-weight:600;white-space:nowrap}
+.inf .vl-tp i{border-radius:50%;width:8px;height:8px;margin:0 6px 0 0}
+.inf .vl-notes{display:flex;flex-direction:column;gap:6px;margin:16px 0 0}
+</style>
 <style id="v330-style">/* v3.30 · pantalla «Tema» (dentro de Ajustes): tres opciones como las demás filas, con una marca en la elegida */
 .tm-list{display:grid;gap:10px;grid-template-columns:minmax(0,1fr);grid-auto-rows:1fr}
 .settings-option.tm-opt .tm-ck{margin-left:auto;flex:0 0 auto;font-size:22px;font-weight:900;color:#0a84ff;visibility:hidden}
@@ -11041,16 +11306,17 @@ html body.lt #content .nm-btn,html body.lt #content .nm-note .nm-btn{color:#fff!
 .hdr-menu-hit::after{content:"MENÚ";position:absolute;left:0;right:0;bottom:5px;text-align:center;font:800 10px/1 system-ui,sans-serif;letter-spacing:.9px;color:#c6ecff}
 .hdr-tit{display:none}
 .app .header .hdr-tit img{display:none!important;flex:none!important;height:auto!important;background:none!important;filter:none!important;max-width:94%!important;min-width:0!important;max-height:none!important;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;position:static!important;object-fit:fill!important;aspect-ratio:auto!important;pointer-events:none;user-select:none;-webkit-user-drag:none}
-.app .header .hdr-tit img[data-v=control]{width:240px!important}
-.app .header .hdr-tit img[data-v=billing]{width:191px!important}
-.app .header .hdr-tit img[data-v=report]{width:128px!important}
-.app .header .hdr-tit img[data-v=settings]{width:125px!important}
+/* v3.59 · titulos nuevos (letra con serifa y dorado): imagenes hechas a 3x, el ancho en px es el de la imagen / 3; max-width 100 % de la cabecera (antes 94 %) para que en pantallas estrechas no se encojan de mas */
+.app .header .hdr-tit img[data-v=control]{width:360px!important;max-width:100%!important}
+.app .header .hdr-tit img[data-v=billing]{width:275px!important;max-width:100%!important}
+.app .header .hdr-tit img[data-v=report]{width:292px!important;max-width:100%!important}
+.app .header .hdr-tit img[data-v=settings]{width:301px!important;max-width:100%!important}
 body.vista-sec .hdr-menu-hit{display:none!important}
 body.vista-sec .t-top{display:none!important}
 body.vista-sec .app{position:relative}
 body.vista-sec .app .header.hdr-banner{height:64px!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:transparent!important;overflow:visible!important}
 body.vista-sec .app .header.hdr-banner img.hdr-banner-img{display:none!important}
-body.vista-sec .hdr-tit{display:flex;position:absolute;left:0;right:0;top:0;height:64px;align-items:center;justify-content:center;pointer-events:none;z-index:3}
+body.vista-sec .hdr-tit{display:flex;position:absolute;left:0;right:0;top:0;height:64px;align-items:center;justify-content:center;pointer-events:none;z-index:3;box-sizing:border-box;padding-left:56px}
 body[data-vista=control] .app .header .hdr-tit img[data-v=control],body[data-vista=billing] .app .header .hdr-tit img[data-v=billing],body[data-vista=report] .app .header .hdr-tit img[data-v=report],body[data-vista=settings] .app .header .hdr-tit img[data-v=settings]{display:block!important}
 body.vista-sec .app::before{content:"";position:absolute;left:0;right:0;top:0;height:0;padding-top:43.2%;z-index:0;pointer-events:none;background:url(fondo-vista.webp) 50% 0/100% 100% no-repeat;-webkit-mask-image:linear-gradient(180deg,rgba(0,0,0,.80) 0,rgba(0,0,0,.70) 46%,rgba(0,0,0,.42) 70%,rgba(0,0,0,.12) 88%,rgba(0,0,0,0) 100%);mask-image:linear-gradient(180deg,rgba(0,0,0,.80) 0,rgba(0,0,0,.70) 46%,rgba(0,0,0,.42) 70%,rgba(0,0,0,.12) 88%,rgba(0,0,0,0) 100%)}
 body.vista-sec .app .header.hdr-banner,body.vista-sec #content{position:relative!important;z-index:1}
