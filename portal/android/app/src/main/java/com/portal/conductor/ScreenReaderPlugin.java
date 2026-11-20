@@ -94,6 +94,13 @@ public class ScreenReaderPlugin extends Plugin {
         r.put("seq", sp.getLong("trip_seq", 0L));
         r.put("nofx", sp.getBoolean("trip_nofx", false));
         r.put("nofxN", sp.getLong("trip_nofx_n", 0L));
+        r.put("asgSec", sp.getInt("trip_asg_sec", 30));
+        r.put("asgN", sp.getLong("trip_asg_n", 0L));      // v3.62: ofertas «Asignar» que ya llevan >30 s en pantalla (cuentan)
+        r.put("asgSeq", sp.getLong("trip_asg_seq", 0L));
+        r.put("decSeq", sp.getLong("trip_dec_seq", 0L));    // v3.62: la oferta que se marco en el cartel con ✗ / ✓ y lo que se marco (1 = la acepte, 0 = no la hice)
+        r.put("dec", sp.getInt("trip_dec", -1));
+        r.put("decQ", sp.getString("trip_decq", ""));        // v3.62: todas las marcas del cartel que el Portal aun no ha recogido (una por linea, JSON)
+        r.put("tabFold", sp.getBoolean("tab_fold", true));
         String js = sp.getString("trip_cur", "");
         r.put("json", js == null ? "" : js);
         call.resolve(r);
@@ -108,9 +115,18 @@ public class ScreenReaderPlugin extends Plugin {
 
     @PluginMethod
     public void setTripLog(PluginCall call) {
-        boolean en = call.getBoolean("enabled", true);
-        android.content.SharedPreferences.Editor ed = getContext().getSharedPreferences("portal", Context.MODE_PRIVATE).edit().putInt("trip_on", en ? 1 : 0);
-        if (!en) ed.remove("trip_cur").remove("trip_sig");
+        android.content.SharedPreferences.Editor ed = getContext().getSharedPreferences("portal", Context.MODE_PRIVATE).edit();
+        boolean hasAsg = call.hasOption("asgSec"), hasFold = call.hasOption("tabFold");
+        if (call.hasOption("enabled") || !(hasAsg || hasFold)) {   // v3.62: con solo «asgSec» o «tabFold» no se toca el interruptor de Viajes guardados
+            boolean en = call.getBoolean("enabled", true);
+            ed.putInt("trip_on", en ? 1 : 0);
+            if (!en) ed.remove("trip_cur").remove("trip_sig");
+        }
+        if (hasAsg) {   // v3.62: segundos que una oferta «Asignar» tiene que llevar en pantalla sin aceptarse para contar (5 a 300; por defecto 30)
+            double sec = call.getDouble("asgSec", 30.0);
+            ed.putInt("trip_asg_sec", (int) Math.max(5, Math.min(300, Math.round(sec))));
+        }
+        if (hasFold) ed.putBoolean("tab_fold", call.getBoolean("tabFold", true));   // v3.62: cartel plegado (por defecto) o completo
         ed.apply();
         call.resolve();
     }

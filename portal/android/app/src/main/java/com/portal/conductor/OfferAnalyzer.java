@@ -32,6 +32,8 @@ public class OfferAnalyzer {
         public boolean orderAssumed;
         public String why = "";
         public boolean acceptSeen, unreadable;
+        public boolean booking;                   // v3.62: la oferta lleva la etiqueta «Reservado» (una reserva): el cartel lo dice
+        public boolean assignOffer;               // v3.62: el boton de la oferta es «Asignar» (no cuenta como viaje salvo que la aceptes)
         public int stH = -1, stK = -1, stP = -1;   // 0 verde, 1 naranja, 2 rojo, -1 sin dato
         // ---- estimacion de Bolt (solo si la oferta no trae precio) ----
         public boolean isBolt, estimated, estWeekend, estMinApplied;   // estWeekend = franja de hora punta ahora
@@ -545,7 +547,7 @@ public class OfferAnalyzer {
         double fm = m > 1.0 + 1e-9 ? 1 + c.fine / 100.0 : 1.0;
         double disc = 0, adj = 0;
         String evShown = "";
-        if (c.distOn && !air && catIndex(c.cat) < 0) {   // v3.58: tabla "Ajuste por distancia" (Bolt normal, sin aeropuerto): sustituye al descuento fijo de abajo; la minima tambien cuenta
+        if (c.distOn && (!air || "dest".equals(ak)) && catIndex(c.cat) < 0) {   // v3.58: tabla "Ajuste por distancia" (Bolt normal): sustituye al descuento fijo de abajo; la minima tambien cuenta. v3.62: tambien en los viajes HACIA el aeropuerto (dest); la recogida en el aeropuerto (pickup) sigue con el descuento fijo
             double t = distPct(c, c.zoneKind, km, m > 1.0 + 1e-9);
             if (t < 0 && c.eventOn && ev.length() > 0) evShown = ev;
             else if (t != 0) { adj = t; if (t < 0) disc = -t; raw = raw * (1 + t / 100.0); }
@@ -640,7 +642,7 @@ public class OfferAnalyzer {
     private static final Pattern HOURS = Pattern.compile("(?<![\\d.,])(\\d+)\\s*h(?:ora)?s?\\b(?!\\s*\\d+\\s*min)", Pattern.CASE_INSENSITIVE);
     private static final String[] PICK = {"recog", "recoj", "pasajero", "away", "de distancia", "cliente", "pickup", "hasta el"};
     private static final String[] TRIP = {"viaje", "trayecto", "recorrido", "destino", "trip", "total", "duracion", "drop"};
-    private static final String[] ACCEPT = {"aceptar", "accept", "seleccionar", "rechazar", "reject", "declinar", "decline", "emparejar", "match"};
+    private static final String[] ACCEPT = {"aceptar", "accept", "seleccionar", "rechazar", "reject", "declinar", "decline", "emparejar", "match", "asignar", "assign"};
 
     public static String norm(String s) {
         String n = Normalizer.normalize(s == null ? "" : s, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
@@ -693,7 +695,17 @@ public class OfferAnalyzer {
     private static boolean isAcceptNode(String raw) {
         String n = norm(raw).replaceAll("[^a-z ]", " ").replaceAll("\\s+", " ").trim();
         if (n.length() == 0 || n.length() > 28) return false;
-        return n.startsWith("aceptar") || n.startsWith("emparejar") || n.equals("accept") || n.equals("match");
+        return n.startsWith("aceptar") || n.startsWith("emparejar") || n.equals("accept") || n.equals("match") || isAssignNorm(n);   // v3.62: + «Asignar»
+    }
+
+    /** v3.62: el boton «Asignar» (o «Assign») de las ofertas que no cuentan como viaje salvo que las aceptes; la palabra entera al principio del texto del boton */
+    private static boolean isAssignNorm(String n) {
+        return n.equals("asignar") || n.startsWith("asignar ") || n.equals("assign") || n.startsWith("assign ");
+    }
+    private static boolean isAssignNode(String raw) {
+        String n = norm(raw).replaceAll("[^a-z ]", " ").replaceAll("\\s+", " ").trim();
+        if (n.length() == 0 || n.length() > 28) return false;
+        return isAssignNorm(n);
     }
 
     // ---- peajes: un importe junto a la palabra \u00abpeaje\u00bb NO es el precio del viaje (se ignora al buscar el precio) ----
@@ -913,8 +925,10 @@ public class OfferAnalyzer {
             while (mi.find()) { Item it = new Item(); it.node = i; it.kind = 'm'; it.v = (mi.group(1) != null ? num(mi.group(1)) * 60 : 0) + num(mi.group(2)); items.add(it); }
         }
         boolean accept = false;
-        for (String nd : nodes) if (isAcceptNode(nd)) { accept = true; break; }
+        boolean assign = false;
+        for (String nd : nodes) if (isAcceptNode(nd)) { accept = true; assign = isAssignNode(nd); break; }
         r.acceptSeen = accept;
+        r.assignOffer = assign;   // v3.62
         int kmCount = 0, minCount = 0;
         for (Item it : items) { if (it.kind == 'k') kmCount++; else minCount++; }
         r.offer = accept && kmCount >= 1 && minCount >= 1 && (r.price > 0 || (kmCount >= 2 && minCount >= 2));

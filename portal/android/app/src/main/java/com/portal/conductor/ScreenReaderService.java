@@ -67,8 +67,16 @@ public class ScreenReaderService extends AccessibilityService {
         return v == 1;
     }
 
+    /** v3.62: la primera vez que se activa el lector, la rentabilidad (el aviso del "neto aprox.") se enciende sola. Si ya hay una eleccion guardada ("rent_on" existe: la guardo la pantalla de Rentabilidad o ya se encendio sola) NO se toca nada. true = la encendio ahora. */
+    static boolean autoRent(android.content.SharedPreferences sp) {
+        if (sp == null || sp.contains("rent_on")) return false;
+        sp.edit().putInt("rent_on", 1).apply();
+        return true;
+    }
+
     @Override protected void onServiceConnected() {
         instance = this;
+        try { autoRent(getSharedPreferences("portal", Context.MODE_PRIVATE)); } catch (Throwable t) { }
         wm = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         buildBubble();
         try {
@@ -474,6 +482,17 @@ public class ScreenReaderService extends AccessibilityService {
     private LinearLayout zcView;            // v3.37: botones de zona: ventana aparte (esta SI se toca) justo debajo del aviso
     private WindowManager.LayoutParams zcp;
     private boolean zcShown = false, zcListen = false;
+    // v3.62: lengueta del cartel: «Mas datos» y botones ✗ / ✓ (ventana aparte, esta SI se toca) justo debajo del aviso
+    private LinearLayout tabView, tabBtns;
+    private TextView tabTitle, tabMore, tabNo, tabYes, tabMsg;
+    private WindowManager.LayoutParams tabLp;
+    private boolean tabShown = false, tabListen = false, tabDemo = false, tabLastEst = false;
+    private int tabLevel = 0;                // 0 plegado \u00B7 1 \u00ABMas datos\u00BB (4 lineas: viaje, recogida, bruto y comision, reserva) \u00B7 2 \u00ABCalculo completo\u00BB (todas las lineas de siempre)
+    private TextView aSum, tabCalc;          // aSum: las lineas sencillas (dentro del cartel); tabCalc: boton \u00ABCalculo completo\u00BB
+    private LinearLayout tabMoreRow;
+    private int tabMode = 0;                 // 0 nada · 1 oferta en pantalla · 2 la oferta ya desaparecio (solo los botones)
+    private long tabOpenSeq = -1L;
+    private final Runnable tabHideRun = new Runnable() { @Override public void run() { hideTab(); } };
     private String zcSig = "";
     private boolean forced = false;
     private WindowManager.LayoutParams alp;
@@ -707,6 +726,14 @@ public class ScreenReaderService extends AccessibilityService {
                 al = new Rect(loc[0], loc[1], loc[0] + alertView.getWidth(), loc[1] + alertView.getHeight());
             }
         } catch (Throwable t) { al = null; }
+        try {   // v3.62: la lengueta (ventana aparte) tambien se tapa
+            if (tabShown && tabView != null) {
+                int[] lt = new int[2];
+                tabView.getLocationOnScreen(lt);
+                Rect tr = new Rect(lt[0], lt[1], lt[0] + tabView.getWidth(), lt[1] + tabView.getHeight());
+                al = al == null ? tr : new Rect(Math.min(al.left, tr.left), Math.min(al.top, tr.top), Math.max(al.right, tr.right), Math.max(al.bottom, tr.bottom));
+            }
+        } catch (Throwable t) { }
         final Rect alertRect = al;
         ocrBusy = true;
         ocrNextAt = now + 2000;
@@ -851,7 +878,7 @@ public class ScreenReaderService extends AccessibilityService {
                     String info = r.offer ? ("veredicto=" + r.verdict + (r.estimated ? " netoEstimadoBolt=" : " precio=") + r.price + " viajeKm=" + r.tripKm + " viajeMin=" + r.tripMin + " recogidaKm=" + r.pickupKm + " recogidaMin=" + r.pickupMin + (r.orderAssumed ? " (orden asumido)" : "")) : "no reconocida como oferta";
                     sp.edit().putString("rent_lastText", pkg + "\n" + all).putString("rent_lastInfo", info).apply();
                 }
-                if (r.offer) { found = r; foundNfx = r.isBolt && (RateNotice.noEffect(nodes) || RateNotice.farBooking(nodes, r.pickupKm)); break; }
+                if (r.offer) { found = r; r.booking = r.isBolt && RateNotice.booking(nodes); foundNfx = r.isBolt && (RateNotice.noEffect(nodes) || RateNotice.farBooking(nodes, r.pickupKm)); break; }
                 else if (r.acceptSeen && unreadable == null) { r.unreadable = true; r.verdict = "DATA"; r.reason = "No pude leer los datos de esta oferta."; unreadable = r; }
             }
             if (now - lastSnapTs > 3000) lastSnapTs = now;
@@ -862,12 +889,14 @@ public class ScreenReaderService extends AccessibilityService {
             if (found != null) {
                 lastOfferSeen = now;
                 logTripOffer(found, now, foundNfx);
+                tabDemo = false;
                 showAlert(found);
                 speakOffer(found);
                 rh.removeCallbacks(hideRun);
                 rh.postDelayed(hideRun, 25000);
             } else if (alertShown && now - lastOfferSeen > 1800) {
                 hideAlert();
+                startAfter();   // v3.62: la oferta ha desaparecido (p. ej. la has aceptado en Bolt): ✗ / ✓ siguen unos segundos
             }
         } catch (Exception e) { }
     }
@@ -919,8 +948,23 @@ public class ScreenReaderService extends AccessibilityService {
         b.append(",\"tripKm\":").append(jn(r.tripKm)).append(",\"tripMin\":").append(jn(r.tripMin)).append(",\"pickupKm\":").append(jn(r.pickupKm)).append(",\"pickupMin\":").append(jn(r.pickupMin));
         b.append(",\"rev\":").append(rev).append(",\"cpUnlisted\":").append(jq(r.estCpUnlisted));
         b.append(",\"cat\":").append(jq(r.estCat == null ? "" : r.estCat));
+        b.append(",\"assign\":").append(r.assignOffer ? "true" : "false");   // v3.62: oferta con el boton «Asignar»
+        b.append(",\"booking\":").append(r.booking ? "true" : "false");     // v3.62: oferta con la etiqueta «Reservado»
         return b.append("}").toString();
     }
+
+    /** v3.62: una oferta «Asignar» que lleva tanto tiempo seguido en pantalla sin que nadie la acepte cuenta (si la dejas pasar, como rechazada). Dato de Juan (20-11): unos 30 s; menos de eso no cuenta ni como viaje recibido. */
+    static final int ASSIGN_DEFAULT_SEC = 30;
+    /** los segundos son un ajuste (pantalla de la tasa → trip_asg_sec); entre 5 y 300 */
+    static long assignCountMs(android.content.SharedPreferences sp) {
+        int s = ASSIGN_DEFAULT_SEC;
+        try { s = sp.getInt("trip_asg_sec", ASSIGN_DEFAULT_SEC); } catch (Exception e) { }
+        if (s < 5) s = 5;
+        if (s > 300) s = 300;
+        return s * 1000L;
+    }
+    /** huecos de mas de esto entre dos lecturas (se lee cada 1,5 s) cortan «seguido en pantalla» */
+    static final long ASSIGN_GAP_MS = 6000L;
 
     /** apunta la oferta de Bolt que se esta viendo (una sola vez por oferta) si el interruptor «Viajes guardados» esta encendido */
     private void logTripOffer(OfferAnalyzer.Result r, long now, boolean nfx) {
@@ -929,7 +973,9 @@ public class ScreenReaderService extends AccessibilityService {
             SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);
             if (sp.getInt("trip_on", 1) != 1) return;
             String sig = tripSig(r);
-            boolean isNew = !sig.equals(sp.getString("trip_sig", "")) || now - sp.getLong("trip_ts", 0L) > 90000L;
+            long prevTs = sp.getLong("trip_ts", 0L);
+            boolean isNew = !sig.equals(sp.getString("trip_sig", "")) || now - prevTs > 90000L;
+            boolean asg = r.assignOffer;   // v3.62: boton «Asignar»
             long cents = Math.round(r.estNet * 100);
             SharedPreferences.Editor ed = sp.edit().putLong("trip_ts", now);
             if (isNew) {
@@ -941,10 +987,35 @@ public class ScreenReaderService extends AccessibilityService {
                 ed.putInt("trip_rev", rev).putLong("trip_cents", cents).putString("trip_cur", tripJson(r, sp.getLong("trip_seq", 0L), sp.getLong("trip_first", now), rev));
             }
             // v3.43: aviso «Fuera del radio / no te afectara»: se marca la oferta actual y se cuenta UNA sola vez (el aviso puede leerse un poco despues que el precio)
-            if (nfx && (isNew || !sp.getBoolean("trip_nofx", false))) {
+            // v3.62: la oferta «Asignar» se apunta como las de «Con aviso» (no suma a la tasa salvo que la aceptes) hasta que lleva los segundos del ajuste (30 por defecto) seguidos en pantalla
+            if (nfx) ed.putBoolean("trip_nfx_real", true); else if (isNew) ed.putBoolean("trip_nfx_real", false);
+            if ((nfx || (asg && isNew)) && (isNew || !sp.getBoolean("trip_nofx", false))) {   // la «Asignar» se marca solo al apuntarla (despues, al contar, no se vuelve a marcar)
                 ed.putBoolean("trip_nofx", true).putLong("trip_nofx_n", sp.getLong("trip_nofx_n", 0L) + 1L);
             } else if (isNew) {
                 ed.putBoolean("trip_nofx", false);
+            }
+            if (isNew) ed.putBoolean("trip_asg_done", false).putBoolean("trip_asg_on", asg).putInt("trip_asg_back", 0);
+            else if (asg) ed.putBoolean("trip_asg_on", true).putInt("trip_asg_back", 0);
+            else if (sp.getBoolean("trip_asg_on", false) && !sp.getBoolean("trip_asg_done", false)) {
+                int back = sp.getInt("trip_asg_back", 0) + 1;   // la misma oferta ya pone «Aceptar»: Bolt la ha vuelto una oferta normal
+                ed.putInt("trip_asg_back", back);
+                if (back >= 2) {
+                    ed.putBoolean("trip_asg_done", true);
+                    if (!nfx && !sp.getBoolean("trip_nfx_real", false)) {
+                        ed.putBoolean("trip_nofx", false).putLong("trip_asg_n", sp.getLong("trip_asg_n", 0L) + 1L).putLong("trip_asg_seq", sp.getLong("trip_seq", 0L));
+                    }
+                }
+            }
+            if (asg) {
+                boolean cut = isNew || now - prevTs > ASSIGN_GAP_MS;
+                if (cut) ed.putLong("trip_asg_since", now);
+                long since = cut ? now : sp.getLong("trip_asg_since", now);
+                if (!isNew && !sp.getBoolean("trip_asg_done", false) && now - since >= assignCountMs(sp)) {
+                    ed.putBoolean("trip_asg_done", true);
+                    if (!nfx && !sp.getBoolean("trip_nfx_real", false)) {   // sin aviso de «no te afectara» / fuera de radio: ahora cuenta como una oferta mas
+                        ed.putBoolean("trip_nofx", false).putLong("trip_asg_n", sp.getLong("trip_asg_n", 0L) + 1L).putLong("trip_asg_seq", sp.getLong("trip_seq", 0L));
+                    }
+                }
             }
             ed.apply();
         } catch (Exception e) { }
@@ -1049,7 +1120,7 @@ public class ScreenReaderService extends AccessibilityService {
             paintPill(aP2, r.perKm > 0 ? r.stK : -1, f(r.perKm, 2) + " \u20AC/km");
             paintPill(aP3, r.pickupKm > 0 ? r.stP : -1, "Recog. " + f(r.pickupKm, 1) + " km");
             if (r.unreadable) aMain.setText("No pude leer la oferta");
-            else if (r.price > 0) aMain.setText("Precio " + f(r.price, 2) + " \u20AC");
+            else if (r.price > 0) aMain.setText("Precio " + f(r.price, 2) + " \u20AC" + (r.booking ? "  \u00B7  RESERVA" : ""));
             else aMain.setText("Sin precio en la oferta");
             StringBuilder dt = new StringBuilder();
             if (r.pickupKm > 0 || r.pickupMin > 0) {
@@ -1069,12 +1140,14 @@ public class ScreenReaderService extends AccessibilityService {
             if (r.orderAssumed) dt.append("\n(lectura estimada)");
             aDetail.setText(dt.toString());
             if (!alertShown) { wm.addView(alertView, alp); alertShown = true; }
+            updateTab(r, false);
         } catch (Exception e) { }
     }
 
     private void hideAlert() {
         stopSpeech();
         hideZoneChips();
+        hideTab();
         try { if (alertShown && alertView != null) wm.removeView(alertView); } catch (Exception e) { }
         alertShown = false;
     }
@@ -1086,6 +1159,7 @@ public class ScreenReaderService extends AccessibilityService {
         else if ("NO".equals(verdict)) { r.perHour = 9.8; r.perKm = 0.78; r.pickupKm = 6.1; r.pickupMin = 11; r.tripKm = 9.0; r.tripMin = 16; r.stH = 2; r.stK = 2; r.stP = 2; r.reason = "\u20AC/h 9,8 (m\u00EDn. 15,00) \u00B7 \u20AC/km 0,78 (m\u00EDn. 1,00) \u00B7 recogida 6,1 km (m\u00E1x. 5,0)"; }
         else if ("WARN".equals(verdict)) { r.perHour = 31.0; r.perKm = 0.93; r.pickupKm = 5.8; r.pickupMin = 9; r.tripKm = 9.0; r.tripMin = 16; r.stH = 0; r.stK = 1; r.stP = 1; r.reason = "\u20AC/km 0,93 (m\u00EDn. 1,00) \u00B7 recogida 5,8 km (m\u00E1x. 5,0)"; }
         else { r.reason = "No se pudo leer el tiempo del viaje."; }
+        tabDemo = true;
         showAlert(r);
         rh.removeCallbacks(hideRun);
         rh.postDelayed(hideRun, 6000);
@@ -1216,6 +1290,7 @@ public class ScreenReaderService extends AccessibilityService {
 
     private void resetEstimateViews() {
         if (aNetBox != null) aNetBox.setVisibility(View.GONE);
+        if (aSum != null) aSum.setVisibility(View.GONE);
         if (aMain != null) aMain.setTextSize(18);
     }
 
@@ -1325,6 +1400,13 @@ public class ScreenReaderService extends AccessibilityService {
                 LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
                 nlp.setMargins(0, (int) (8 * d), 0, 0);
                 alertView.addView(aNetBox, 2, nlp);
+                aSum = new TextView(this);
+                aSum.setTextColor(Color.parseColor("#DCEBFF"));
+                aSum.setTextSize(15);
+                aSum.setGravity(Gravity.CENTER);
+                aSum.setPadding(0, (int) (6 * d), 0, 0);
+                aSum.setVisibility(View.GONE);
+                alertView.addView(aSum, 3, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
             }
             GradientDrawable nb = new GradientDrawable();
             nb.setColor(Color.parseColor("#33000000"));
@@ -1332,7 +1414,7 @@ public class ScreenReaderService extends AccessibilityService {
             nb.setStroke((int) (2 * d), col);
             aNetBox.setBackground(nb);
             aNetBox.setPadding((int) (10 * d), (int) (4 * d), (int) (10 * d), (int) (6 * d));
-            aNetLbl.setText(r.estRange && r.estNetHi > r.estNetLo + 1e-9 ? "NETO ESTIMADO \u00B7 entre " + OfferAnalyzer.money(r.estNetLo) + " y " + OfferAnalyzer.money(r.estNetHi) + " \u20AC" : "NETO ESTIMADO");
+            aNetLbl.setText((r.estRange && r.estNetHi > r.estNetLo + 1e-9 ? "NETO ESTIMADO \u00B7 entre " + OfferAnalyzer.money(r.estNetLo) + " y " + OfferAnalyzer.money(r.estNetHi) + " \u20AC" : "NETO ESTIMADO") + (r.booking ? " \u00B7 RESERVA" : ""));
             aNetVal.setText(OfferAnalyzer.money(r.estNet) + " \u20ac");
             aNetBox.setVisibility(View.VISIBLE);
             aMain.setTextSize(15);
@@ -1357,8 +1439,269 @@ public class ScreenReaderService extends AccessibilityService {
             dt.append(r.reason);
             dt.append("\nPrecio ESTIMADO con tarifas aproximadas (no son las oficiales de Bolt)");
             aDetail.setText(dt.toString());
+            StringBuilder sm = new StringBuilder();          // v3.62: las lineas sencillas de \u00ABMas datos\u00BB: viaje, recogida y reserva (el bruto y la comision son aMain)
+            sm.append("Viaje con pasajero: ").append((int) Math.round(r.tripMin)).append(" min (").append(num1(r.tripKm)).append(" km)");
+            if (r.pickupKm > 0 || r.pickupMin > 0) {
+                sm.append("\nRecogida: ");
+                if (r.pickupMin > 0) sm.append((int) r.pickupMin).append(" min");
+                if (r.pickupKm > 0) sm.append(r.pickupMin > 0 ? " (" : "").append(f(r.pickupKm, 1)).append(" km").append(r.pickupMin > 0 ? ")" : "");
+            }
+            if (r.booking) sm.append("\nEs una reserva");
+            aSum.setText(sm.toString());
             if (!alertShown) { wm.addView(alertView, alp); alertShown = true; }
+            updateTab(r, true);
             updateZoneChips(r);
+        } catch (Exception e) { }
+    }
+
+    // ===================== v3.62: lengueta «Mas datos» + botones ✗ «No la hice» / ✓ «La acepte» =====================
+    // El cartel (que no se toca) sale plegado: veredicto, tres datos y neto. Debajo, una ventana aparte (esta SI se toca): «Mas datos» abre el resto
+    // y los botones apuntan la oferta en la tasa (dejan la marca en las preferencias y el Portal la recoge con tripCur, este abierto o no).
+    private void updateTab(OfferAnalyzer.Result r, boolean estimated) {
+        try {
+            SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);
+            long now = System.currentTimeMillis();
+            long seq = TabLogic.seq(sp);
+            if (seq != tabOpenSeq) { tabOpenSeq = seq; tabLevel = 0; }         // cada oferta nueva empieza plegada
+            tabLastEst = estimated;
+            rh.removeCallbacks(tabHideRun);
+            boolean fold = TabLogic.fold(sp);
+            boolean logged = !tabDemo && r != null && r.offer && r.isBolt && !r.unreadable && TabLogic.buttons(sp) && seq > 0 && now - sp.getLong("trip_ts", 0L) <= TabLogic.VALID_MS;
+            applyFold(fold);
+            if (!fold && !logged) { hideTab(); return; }                      // completo y sin botones: nada debajo
+            tabMode = 1;
+            buildTab();
+            String v = r == null ? "" : r.verdict;
+            int col = "OK".equals(v) ? Color.parseColor("#22C55E") : ("NO".equals(v) ? Color.parseColor("#EF4444") : Color.parseColor("#F59E0B"));
+            paintTabBg(col);
+            tabTitle.setVisibility(View.GONE);
+            paintTabMore(fold);
+            paintTabButtons(logged, sp, seq);
+            showTabWindow();
+        } catch (Exception e) { }
+    }
+
+    /**
+     * plegado = veredicto, tres datos y neto (en el aviso sin neto estimado queda el precio).
+     * \u00ABMas datos\u00BB = 4 lineas sencillas (viaje, recogida, bruto y comision, reserva). \u00ABCalculo completo\u00BB = todas las lineas de siempre. Ajuste \u00ABcompleto\u00BB = todo, como antes.
+     */
+    private void applyFold(boolean fold) {
+        int lv = fold ? tabLevel : 2;
+        if (tabLastEst) {
+            if (aSum != null) aSum.setVisibility(lv == 1 ? View.VISIBLE : View.GONE);
+            if (aMain != null) aMain.setVisibility(lv >= 1 ? View.VISIBLE : View.GONE);
+            if (aDetail != null) aDetail.setVisibility(lv == 2 ? View.VISIBLE : View.GONE);
+        } else {
+            if (aSum != null) aSum.setVisibility(View.GONE);
+            if (aMain != null) aMain.setVisibility(View.VISIBLE);
+            if (aDetail != null) aDetail.setVisibility(lv >= 1 ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    private void paintTabMore(boolean fold) {
+        tabMoreRow.setVisibility(fold ? View.VISIBLE : View.GONE);
+        tabMore.setText(tabLevel == 0 ? "\u25BE  M\u00E1s datos" : "\u25B4  Menos datos");
+        tabCalc.setVisibility(fold && tabLevel == 1 && tabLastEst ? View.VISIBLE : View.GONE);
+    }
+
+    private void paintTabBg(int col) {
+        final float d = getResources().getDisplayMetrics().density;
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor("#F00A2E70"));
+        bg.setCornerRadius(20 * d);
+        bg.setStroke((int) (3 * d), col);
+        tabView.setBackground(bg);
+    }
+
+    private void paintTabButtons(boolean logged, SharedPreferences sp, long seq) {
+        int dec = TabLogic.decision(sp, seq);
+        if (dec >= 0) {
+            tabBtns.setVisibility(View.GONE);
+            tabMsg.setVisibility(View.VISIBLE);
+            tabMsg.setTextColor(Color.parseColor(dec == 1 ? "#86EFAC" : "#FCA5A5"));
+            tabMsg.setText(dec == 1 ? "\u2713  Apuntada: la aceptaste" : "\u2715  Apuntada: no la hiciste");
+        } else if (logged) {
+            tabBtns.setVisibility(View.VISIBLE);
+            tabMsg.setVisibility(View.GONE);
+        } else {
+            tabBtns.setVisibility(View.GONE);
+            tabMsg.setVisibility(View.GONE);
+        }
+    }
+
+    private void buildTab() {
+        if (tabView != null) return;
+        final float d = getResources().getDisplayMetrics().density;
+        tabView = new LinearLayout(this);
+        tabView.setOrientation(LinearLayout.VERTICAL);
+        tabView.setGravity(Gravity.CENTER_HORIZONTAL);
+        tabView.setPadding((int) (10 * d), (int) (2 * d), (int) (10 * d), (int) (10 * d));
+        tabTitle = new TextView(this);
+        tabTitle.setTextColor(Color.WHITE);
+        tabTitle.setTextSize(15);
+        tabTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        tabTitle.setGravity(Gravity.CENTER);
+        tabTitle.setPadding(0, (int) (8 * d), 0, (int) (4 * d));
+        tabTitle.setText("\u00BFLa aceptaste?");
+        tabMore = new TextView(this);
+        tabMore.setTextColor(Color.parseColor("#AFCBFF"));
+        tabMore.setTextSize(15);
+        tabMore.setTypeface(Typeface.DEFAULT_BOLD);
+        tabMore.setGravity(Gravity.CENTER);
+        tabMore.setMinHeight((int) (38 * d));
+        tabMore.setPadding(0, (int) (6 * d), 0, (int) (4 * d));
+        tabMore.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { tabToggle(); } });
+        tabCalc = new TextView(this);
+        tabCalc.setTextColor(Color.parseColor("#AFCBFF"));
+        tabCalc.setTextSize(15);
+        tabCalc.setTypeface(Typeface.DEFAULT_BOLD);
+        tabCalc.setGravity(Gravity.CENTER);
+        tabCalc.setMinHeight((int) (38 * d));
+        tabCalc.setPadding(0, (int) (6 * d), 0, (int) (4 * d));
+        tabCalc.setText("\u25BE  C\u00E1lculo completo");
+        tabCalc.setVisibility(View.GONE);
+        tabCalc.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { tabCalcOpen(); } });
+        tabMoreRow = new LinearLayout(this);
+        tabMoreRow.setOrientation(LinearLayout.HORIZONTAL);
+        tabMoreRow.setGravity(Gravity.CENTER);
+        tabMoreRow.addView(tabMore, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        tabMoreRow.addView(tabCalc, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        tabBtns = new LinearLayout(this);
+        tabBtns.setOrientation(LinearLayout.HORIZONTAL);
+        tabBtns.setGravity(Gravity.CENTER);
+        tabNo = tabButton("\u2715  No la hice", "#DC2626", false);
+        tabYes = tabButton("\u2713  La acept\u00E9", "#16A34A", true);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(0, (int) (54 * d), 1f);
+        blp.setMargins((int) (4 * d), 0, (int) (4 * d), 0);
+        tabBtns.addView(tabNo, blp);
+        tabBtns.addView(tabYes, blp);
+        tabMsg = new TextView(this);
+        tabMsg.setTextSize(16);
+        tabMsg.setTypeface(Typeface.DEFAULT_BOLD);
+        tabMsg.setGravity(Gravity.CENTER);
+        tabMsg.setPadding(0, (int) (8 * d), 0, (int) (2 * d));
+        tabView.addView(tabTitle);
+        tabView.addView(tabMoreRow);
+        tabView.addView(tabBtns);
+        tabView.addView(tabMsg);
+        int w = alp != null ? alp.width : (int) Math.min(getResources().getDisplayMetrics().widthPixels * 0.94f, 400 * d);
+        tabLp = new WindowManager.LayoutParams(w, WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                PixelFormat.TRANSLUCENT);
+        tabLp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        tabLp.y = alp != null ? alp.y : (int) (70 * d);
+        tabView.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            @Override public void onLayoutChange(View v, int l, int t, int rr, int bb, int ol, int ot, int orr, int obb) { placeZoneChips(); }
+        });
+    }
+
+    /** \u00ABMas datos\u00BB (plegado -> 4 lineas) / \u00ABMenos datos\u00BB (vuelve a plegar) */
+    private void tabToggle() {
+        try {
+            tabLevel = tabLevel == 0 ? 1 : 0;
+            tabRefresh();
+        } catch (Exception e) { }
+    }
+
+    /** \u00ABCalculo completo\u00BB: todas las lineas de siempre (tarjeta, zona, demanda, ajustes...) */
+    private void tabCalcOpen() {
+        try {
+            tabLevel = 2;
+            tabRefresh();
+        } catch (Exception e) { }
+    }
+
+    private void tabRefresh() {
+        boolean fold = TabLogic.fold(getSharedPreferences("portal", Context.MODE_PRIVATE));
+        applyFold(fold);
+        paintTabMore(fold);
+        placeTab();
+        placeZoneChips();
+    }
+
+    private TextView tabButton(String txt, String color, final boolean yes) {
+        final float d = getResources().getDisplayMetrics().density;
+        TextView b = new TextView(this);
+        b.setText(txt);
+        b.setTextColor(Color.WHITE);
+        b.setTextSize(18);
+        b.setTypeface(Typeface.DEFAULT_BOLD);
+        b.setGravity(Gravity.CENTER);
+        GradientDrawable g = new GradientDrawable();
+        g.setCornerRadius(16 * d);
+        g.setColor(Color.parseColor(color));
+        b.setBackground(g);
+        b.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { tabMark(yes); } });
+        return b;
+    }
+
+    private void showTabWindow() {
+        try {
+            if (!tabListen && alertView != null) {
+                alertView.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+                    @Override public void onLayoutChange(View v, int l, int t, int rr, int bb, int ol, int ot, int orr, int obb) { placeTab(); }
+                });
+                tabListen = true;
+            }
+            if (!tabShown) { wm.addView(tabView, tabLp); tabShown = true; }
+            placeTab();
+            placeZoneChips();
+        } catch (Exception e) { }
+    }
+
+    /** va justo debajo del cartel (o, si el cartel ya no esta, en su sitio) */
+    private void placeTab() {
+        try {
+            if (!tabShown || tabView == null || tabLp == null || alp == null) return;
+            final float d = getResources().getDisplayMetrics().density;
+            int y = (tabMode == 2 || !alertShown || alertView == null) ? alp.y : alp.y + alertView.getHeight() + (int) (4 * d);
+            if (tabLp.y != y) { tabLp.y = y; wm.updateViewLayout(tabView, tabLp); }
+        } catch (Exception e) { }
+    }
+
+    /** lo que ocupa la lengueta para bajar los botones de zona */
+    private int tabExtra() {
+        try {
+            if (tabShown && tabMode == 1 && tabView != null) return tabView.getHeight() + (int) (4 * getResources().getDisplayMetrics().density);
+        } catch (Exception e) { }
+        return 0;
+    }
+
+    private void hideTab() {
+        rh.removeCallbacks(tabHideRun);
+        try { if (tabShown && tabView != null) wm.removeView(tabView); } catch (Exception e) { }
+        tabShown = false;
+        tabMode = 0;
+    }
+
+    /** la oferta ha desaparecido: ✗ / ✓ siguen 15 s mas (solo los botones, donde estaba el cartel) por si quieres marcarla ahora */
+    private void startAfter() {
+        try {
+            SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);
+            if (tabDemo || !TabLogic.canMark(sp, System.currentTimeMillis())) return;
+            tabMode = 2;
+            buildTab();
+            paintTabBg(Color.parseColor("#3B82F6"));
+            tabTitle.setVisibility(View.VISIBLE);
+            tabMoreRow.setVisibility(View.GONE);
+            paintTabButtons(true, sp, TabLogic.seq(sp));
+            showTabWindow();
+            rh.removeCallbacks(tabHideRun);
+            rh.postDelayed(tabHideRun, TabLogic.AFTER_MS);
+        } catch (Exception e) { }
+    }
+
+    /** ✗ / ✓ tocados: se deja la marca para el Portal */
+    private void tabMark(boolean yes) {
+        try {
+            SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);
+            long seq = TabLogic.seq(sp);
+            if (!TabLogic.mark(sp, yes, System.currentTimeMillis())) return;
+            paintTabButtons(true, sp, seq);
+            placeTab();
+            placeZoneChips();
+            if (tabMode == 2) { rh.removeCallbacks(tabHideRun); rh.postDelayed(tabHideRun, 1600L); }
         } catch (Exception e) { }
     }
 
@@ -1375,7 +1718,7 @@ public class ScreenReaderService extends AccessibilityService {
         try {
             if (!zcShown || zcView == null || zcp == null || alertView == null || alp == null) return;
             final float d = getResources().getDisplayMetrics().density;
-            int y = alp.y + alertView.getHeight() + (int) (6 * d);
+            int y = alp.y + alertView.getHeight() + (int) (6 * d) + tabExtra();
             if (zcp.y != y) { zcp.y = y; wm.updateViewLayout(zcView, zcp); }
         } catch (Exception e) { }
     }
@@ -1469,6 +1812,7 @@ public class ScreenReaderService extends AccessibilityService {
             for (String s : new String[]{"x1.4", "6 min", "\u2022", "2.1 km", "Calle de ejemplo", "12 min", "\u2022", "8.3 km", "Destino de ejemplo", "Aceptar"}) n.add(s);
             OfferAnalyzer.Result r = OfferAnalyzer.analyze(n, rentParams(), false, true);
             lastVoice = null;
+            tabDemo = true;
             showAlert(r);
             hideZoneChips();
             speakOffer(r);
