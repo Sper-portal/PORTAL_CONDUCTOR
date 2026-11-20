@@ -484,7 +484,8 @@ public class ScreenReaderService extends AccessibilityService {
     private boolean zcShown = false, zcListen = false;
     // v3.62: lengueta del cartel: «Mas datos» y botones ✗ / ✓ (ventana aparte, esta SI se toca) justo debajo del aviso
     private LinearLayout tabView, tabBtns;
-    private TextView tabTitle, tabMore, tabNo, tabYes, tabMsg;
+    private TextView tabTitle, tabMore, tabNo, tabYes, tabMsg, tabRateA, tabRateB;
+    private LinearLayout tabRate;
     private WindowManager.LayoutParams tabLp;
     private boolean tabShown = false, tabListen = false, tabDemo = false, tabLastEst = false;
     private int tabLevel = 0;                // 0 plegado \u00B7 1 \u00ABMas datos\u00BB (4 lineas: viaje, recogida, bruto y comision, reserva) \u00B7 2 \u00ABCalculo completo\u00BB (todas las lineas de siempre)
@@ -955,6 +956,7 @@ public class ScreenReaderService extends AccessibilityService {
 
     /** v3.62: una oferta «Asignar» que lleva tanto tiempo seguido en pantalla sin que nadie la acepte cuenta (si la dejas pasar, como rechazada). Dato de Juan (20-11): unos 30 s; menos de eso no cuenta ni como viaje recibido. */
     static final int ASSIGN_DEFAULT_SEC = 30;
+    static final float CK = 0.8f;   // v3.63: el cartel y su lengueta, un 20 % mas pequenos (letras, huecos y botones); la posicion no cambia
     /** los segundos son un ajuste (pantalla de la tasa → trip_asg_sec); entre 5 y 300 */
     static long assignCountMs(android.content.SharedPreferences sp) {
         int s = ASSIGN_DEFAULT_SEC;
@@ -1025,10 +1027,10 @@ public class ScreenReaderService extends AccessibilityService {
     private TextView aP1, aP2, aP3;
 
     private TextView pill() {
-        final float d = getResources().getDisplayMetrics().density;
+        final float d = getResources().getDisplayMetrics().density * CK;
         TextView t = new TextView(this);
         t.setTextColor(Color.WHITE);
-        t.setTextSize(14);
+        t.setTextSize(CK * 14);
         t.setGravity(Gravity.CENTER);
         t.setTypeface(Typeface.DEFAULT_BOLD);
         t.setPadding((int) (9 * d), (int) (5 * d), (int) (9 * d), (int) (5 * d));
@@ -1037,7 +1039,7 @@ public class ScreenReaderService extends AccessibilityService {
 
     private void paintPill(TextView t, int st, String text) {
         if (st < 0) { t.setVisibility(View.GONE); return; }
-        final float d = getResources().getDisplayMetrics().density;
+        final float d = getResources().getDisplayMetrics().density * CK;
         GradientDrawable g = new GradientDrawable();
         g.setColor(st == 0 ? Color.parseColor("#16A34A") : (st == 1 ? Color.parseColor("#F59E0B") : Color.parseColor("#DC2626")));
         g.setCornerRadius(12 * d);
@@ -1048,14 +1050,14 @@ public class ScreenReaderService extends AccessibilityService {
     }
 
     private void buildAlert() {
-        final float d = getResources().getDisplayMetrics().density;
+        final float d = getResources().getDisplayMetrics().density * CK;
         alertView = new LinearLayout(this);
         alertView.setOrientation(LinearLayout.VERTICAL);
         alertView.setGravity(Gravity.CENTER_HORIZONTAL);
         alertView.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (12 * d));
         aChip = new TextView(this);
         aChip.setTextColor(Color.WHITE);
-        aChip.setTextSize(20);
+        aChip.setTextSize(CK * 20);
         aChip.setGravity(Gravity.CENTER);
         aChip.setTypeface(Typeface.DEFAULT_BOLD);
         aChip.setPadding((int) (16 * d), (int) (4 * d), (int) (16 * d), (int) (4 * d));
@@ -1071,13 +1073,13 @@ public class ScreenReaderService extends AccessibilityService {
         aRow.addView(aP3, plp);
         aMain = new TextView(this);
         aMain.setTextColor(Color.WHITE);
-        aMain.setTextSize(18);
+        aMain.setTextSize(CK * 18);
         aMain.setGravity(Gravity.CENTER);
         aMain.setTypeface(Typeface.DEFAULT_BOLD);
         aMain.setPadding(0, (int) (8 * d), 0, 0);
         aDetail = new TextView(this);
         aDetail.setTextColor(Color.parseColor("#DCEBFF"));
-        aDetail.setTextSize(14);
+        aDetail.setTextSize(CK * 14);
         aDetail.setGravity(Gravity.CENTER);
         aDetail.setPadding(0, (int) (4 * d), 0, 0);
         alertView.addView(aChip);
@@ -1090,7 +1092,7 @@ public class ScreenReaderService extends AccessibilityService {
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
                 PixelFormat.TRANSLUCENT);
         alp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-        alp.y = (int) (70 * d);
+        alp.y = (int) (70 * getResources().getDisplayMetrics().density);
     }
 
     private static String f(double v, int dec) { return String.format(java.util.Locale.GERMANY, "%." + dec + "f", v); }
@@ -1101,7 +1103,7 @@ public class ScreenReaderService extends AccessibilityService {
         hideZoneChips();
         try {
             if (alertView == null) buildAlert();
-            final float d = getResources().getDisplayMetrics().density;
+            final float d = getResources().getDisplayMetrics().density * CK;
             String v = r.verdict;
             boolean ok = "OK".equals(v), no = "NO".equals(v);
             int col = ok ? Color.parseColor("#22C55E") : (no ? Color.parseColor("#EF4444") : Color.parseColor("#F59E0B"));
@@ -1291,7 +1293,7 @@ public class ScreenReaderService extends AccessibilityService {
     private void resetEstimateViews() {
         if (aNetBox != null) aNetBox.setVisibility(View.GONE);
         if (aSum != null) aSum.setVisibility(View.GONE);
-        if (aMain != null) aMain.setTextSize(18);
+        if (aMain != null) aMain.setTextSize(CK * 18);
     }
 
     private static String num1(double v) {
@@ -1363,7 +1365,7 @@ public class ScreenReaderService extends AccessibilityService {
     private void showEstimateAlert(OfferAnalyzer.Result r) {
         try {
             if (alertView == null) buildAlert();
-            final float d = getResources().getDisplayMetrics().density;
+            final float d = getResources().getDisplayMetrics().density * CK;
             String v = r.verdict;
             boolean ok = "OK".equals(v), no = "NO".equals(v);
             int col = ok ? Color.parseColor("#22C55E") : (no ? Color.parseColor("#EF4444") : Color.parseColor("#F59E0B"));
@@ -1387,12 +1389,12 @@ public class ScreenReaderService extends AccessibilityService {
                 aNetBox.setGravity(Gravity.CENTER_HORIZONTAL);
                 aNetLbl = new TextView(this);
                 aNetLbl.setTextColor(Color.parseColor("#DCEBFF"));
-                aNetLbl.setTextSize(12);
+                aNetLbl.setTextSize(CK * 12);
                 aNetLbl.setTypeface(Typeface.DEFAULT_BOLD);
                 aNetLbl.setGravity(Gravity.CENTER);
                 aNetVal = new TextView(this);
                 aNetVal.setTextColor(Color.WHITE);
-                aNetVal.setTextSize(34);
+                aNetVal.setTextSize(CK * 34);
                 aNetVal.setTypeface(Typeface.DEFAULT_BOLD);
                 aNetVal.setGravity(Gravity.CENTER);
                 aNetBox.addView(aNetLbl);
@@ -1402,7 +1404,7 @@ public class ScreenReaderService extends AccessibilityService {
                 alertView.addView(aNetBox, 2, nlp);
                 aSum = new TextView(this);
                 aSum.setTextColor(Color.parseColor("#DCEBFF"));
-                aSum.setTextSize(15);
+                aSum.setTextSize(CK * 15);
                 aSum.setGravity(Gravity.CENTER);
                 aSum.setPadding(0, (int) (6 * d), 0, 0);
                 aSum.setVisibility(View.GONE);
@@ -1417,7 +1419,7 @@ public class ScreenReaderService extends AccessibilityService {
             aNetLbl.setText((r.estRange && r.estNetHi > r.estNetLo + 1e-9 ? "NETO ESTIMADO \u00B7 entre " + OfferAnalyzer.money(r.estNetLo) + " y " + OfferAnalyzer.money(r.estNetHi) + " \u20AC" : "NETO ESTIMADO") + (r.booking ? " \u00B7 RESERVA" : ""));
             aNetVal.setText(OfferAnalyzer.money(r.estNet) + " \u20ac");
             aNetBox.setVisibility(View.VISIBLE);
-            aMain.setTextSize(15);
+            aMain.setTextSize(CK * 15);
             if (r.estFee > 0) aMain.setText("Bruto est. " + OfferAnalyzer.money(r.estGross) + " \u20ac  \u2212  tasa aeropuerto " + OfferAnalyzer.money(r.estFee) + " \u20ac  =  " + OfferAnalyzer.money(Math.max(0, r.estGross - r.estFee)) + " \u20ac"
                 + "\nComisi\u00f3n est. " + OfferAnalyzer.money(r.estComm) + " \u20ac (" + num1(r.estCommPct) + " %)");
             else aMain.setText("Bruto est. " + OfferAnalyzer.money(r.estGross) + " \u20ac  \u00b7  Comisi\u00f3n est. " + OfferAnalyzer.money(r.estComm) + " \u20ac (" + num1(r.estCommPct) + " %)");
@@ -1505,7 +1507,7 @@ public class ScreenReaderService extends AccessibilityService {
     }
 
     private void paintTabBg(int col) {
-        final float d = getResources().getDisplayMetrics().density;
+        final float d = getResources().getDisplayMetrics().density * CK;
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(Color.parseColor("#F00A2E70"));
         bg.setCornerRadius(20 * d);
@@ -1527,25 +1529,50 @@ public class ScreenReaderService extends AccessibilityService {
             tabBtns.setVisibility(View.GONE);
             tabMsg.setVisibility(View.GONE);
         }
+        paintTabRate(sp, seq, dec < 0 && logged);
+    }
+
+    private static int rateColor(char z) {
+        return Color.parseColor(z == 'g' ? "#86EFAC" : z == 'o' ? "#FCD34D" : z == 'r' ? "#FCA5A5" : "#AFCBFF");
+    }
+
+    /** v3.63: lo que le pasa a tu tasa si dejas pasar la oferta o la aceptas (solo mientras se puede marcar) */
+    private void paintTabRate(SharedPreferences sp, long seq, boolean show) {
+        try {
+            if (tabRate == null) return;
+            TabLogic.Rate rt = null;
+            if (show) {
+                boolean nx = sp.getBoolean("trip_nofx", false);
+                int sec = (int) Math.max(5, Math.min(300, sp.getInt("trip_asg_sec", 30)));
+                rt = TabLogic.rate(sp, System.currentTimeMillis(), seq, nx, nx && sp.getBoolean("trip_asg_on", false), sec);
+            }
+            if (rt == null) { tabRate.setVisibility(View.GONE); return; }
+            tabRateA.setText(rt.a);
+            tabRateA.setTextColor(rateColor(rt.za));
+            tabRateB.setText(rt.b);
+            tabRateB.setTextColor(rateColor(rt.zb));
+            tabRateB.setVisibility(rt.b.length() == 0 ? View.GONE : View.VISIBLE);
+            tabRate.setVisibility(View.VISIBLE);
+        } catch (Exception e) { }
     }
 
     private void buildTab() {
         if (tabView != null) return;
-        final float d = getResources().getDisplayMetrics().density;
+        final float d = getResources().getDisplayMetrics().density * CK;
         tabView = new LinearLayout(this);
         tabView.setOrientation(LinearLayout.VERTICAL);
         tabView.setGravity(Gravity.CENTER_HORIZONTAL);
         tabView.setPadding((int) (10 * d), (int) (2 * d), (int) (10 * d), (int) (10 * d));
         tabTitle = new TextView(this);
         tabTitle.setTextColor(Color.WHITE);
-        tabTitle.setTextSize(15);
+        tabTitle.setTextSize(CK * 15);
         tabTitle.setTypeface(Typeface.DEFAULT_BOLD);
         tabTitle.setGravity(Gravity.CENTER);
         tabTitle.setPadding(0, (int) (8 * d), 0, (int) (4 * d));
         tabTitle.setText("\u00BFLa aceptaste?");
         tabMore = new TextView(this);
         tabMore.setTextColor(Color.parseColor("#AFCBFF"));
-        tabMore.setTextSize(15);
+        tabMore.setTextSize(CK * 15);
         tabMore.setTypeface(Typeface.DEFAULT_BOLD);
         tabMore.setGravity(Gravity.CENTER);
         tabMore.setMinHeight((int) (38 * d));
@@ -1553,7 +1580,7 @@ public class ScreenReaderService extends AccessibilityService {
         tabMore.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { tabToggle(); } });
         tabCalc = new TextView(this);
         tabCalc.setTextColor(Color.parseColor("#AFCBFF"));
-        tabCalc.setTextSize(15);
+        tabCalc.setTextSize(CK * 15);
         tabCalc.setTypeface(Typeface.DEFAULT_BOLD);
         tabCalc.setGravity(Gravity.CENTER);
         tabCalc.setMinHeight((int) (38 * d));
@@ -1571,17 +1598,32 @@ public class ScreenReaderService extends AccessibilityService {
         tabBtns.setGravity(Gravity.CENTER);
         tabNo = tabButton("\u2715  No la hice", "#DC2626", false);
         tabYes = tabButton("\u2713  La acept\u00E9", "#16A34A", true);
-        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(0, (int) (54 * d), 1f);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(0, (int) (48 * getResources().getDisplayMetrics().density), 1f);
         blp.setMargins((int) (4 * d), 0, (int) (4 * d), 0);
         tabBtns.addView(tabNo, blp);
         tabBtns.addView(tabYes, blp);
         tabMsg = new TextView(this);
-        tabMsg.setTextSize(16);
+        tabMsg.setTextSize(CK * 16);
         tabMsg.setTypeface(Typeface.DEFAULT_BOLD);
         tabMsg.setGravity(Gravity.CENTER);
         tabMsg.setPadding(0, (int) (8 * d), 0, (int) (2 * d));
+        tabRateA = new TextView(this);
+        tabRateB = new TextView(this);
+        for (TextView tv : new TextView[]{tabRateA, tabRateB}) {
+            tv.setTextSize(CK * 15);
+            tv.setTypeface(Typeface.DEFAULT_BOLD);
+            tv.setGravity(Gravity.CENTER);
+            tv.setPadding((int) (4 * d), (int) (6 * d), (int) (4 * d), (int) (4 * d));
+        }
+        tabRate = new LinearLayout(this);   // v3.63: «Dejarla: 87,3 %  ·  Aceptarla: 90,0 %» encima de los botones (lo que le pasa a la tasa)
+        tabRate.setOrientation(LinearLayout.HORIZONTAL);
+        tabRate.setGravity(Gravity.CENTER);
+        tabRate.addView(tabRateA, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        tabRate.addView(tabRateB, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        tabRate.setVisibility(View.GONE);
         tabView.addView(tabTitle);
         tabView.addView(tabMoreRow);
+        tabView.addView(tabRate);
         tabView.addView(tabBtns);
         tabView.addView(tabMsg);
         int w = alp != null ? alp.width : (int) Math.min(getResources().getDisplayMetrics().widthPixels * 0.94f, 400 * d);
@@ -1590,7 +1632,7 @@ public class ScreenReaderService extends AccessibilityService {
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT);
         tabLp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-        tabLp.y = alp != null ? alp.y : (int) (70 * d);
+        tabLp.y = alp != null ? alp.y : (int) (70 * getResources().getDisplayMetrics().density);
         tabView.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
             @Override public void onLayoutChange(View v, int l, int t, int rr, int bb, int ol, int ot, int orr, int obb) { placeZoneChips(); }
         });
@@ -1621,11 +1663,11 @@ public class ScreenReaderService extends AccessibilityService {
     }
 
     private TextView tabButton(String txt, String color, final boolean yes) {
-        final float d = getResources().getDisplayMetrics().density;
+        final float d = getResources().getDisplayMetrics().density * CK;
         TextView b = new TextView(this);
         b.setText(txt);
         b.setTextColor(Color.WHITE);
-        b.setTextSize(18);
+        b.setTextSize(CK * 18);
         b.setTypeface(Typeface.DEFAULT_BOLD);
         b.setGravity(Gravity.CENTER);
         GradientDrawable g = new GradientDrawable();

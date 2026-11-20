@@ -113,11 +113,23 @@ public class ScreenReaderPlugin extends Plugin {
         call.resolve(r);
     }
 
+    /** v3.63: un numero grande (los milisegundos de «hasta cuando vale la cuenta») no cabe en un Integer y Capacitor solo da getDouble de Integer / Double: el Portal lo manda como TEXTO y aqui se lee como long (si viene como numero, se intenta tambien) */
+    private static long rateLong(PluginCall call, String k) {
+        try {
+            String s = call.getString(k, "");
+            if (s != null && s.trim().length() > 0) return Long.parseLong(s.trim());
+        } catch (Exception e) { }
+        try {
+            Double d = call.getDouble(k, 0.0);
+            return d == null ? 0L : Math.round(d.doubleValue());
+        } catch (Exception e) { return 0L; }
+    }
+
     @PluginMethod
     public void setTripLog(PluginCall call) {
         android.content.SharedPreferences.Editor ed = getContext().getSharedPreferences("portal", Context.MODE_PRIVATE).edit();
-        boolean hasAsg = call.hasOption("asgSec"), hasFold = call.hasOption("tabFold");
-        if (call.hasOption("enabled") || !(hasAsg || hasFold)) {   // v3.62: con solo «asgSec» o «tabFold» no se toca el interruptor de Viajes guardados
+        boolean hasAsg = call.hasOption("asgSec"), hasFold = call.hasOption("tabFold"), hasRate = call.hasOption("rateDen");
+        if (call.hasOption("enabled") || !(hasAsg || hasFold || hasRate)) {   // v3.62: con solo «asgSec» o «tabFold» no se toca el interruptor de Viajes guardados (v3.63: ni con la cuenta de la tasa)
             boolean en = call.getBoolean("enabled", true);
             ed.putInt("trip_on", en ? 1 : 0);
             if (!en) ed.remove("trip_cur").remove("trip_sig");
@@ -127,6 +139,16 @@ public class ScreenReaderPlugin extends Plugin {
             ed.putInt("trip_asg_sec", (int) Math.max(5, Math.min(300, Math.round(sec))));
         }
         if (hasFold) ed.putBoolean("tab_fold", call.getBoolean("tabFold", true));   // v3.62: cartel plegado (por defecto) o completo
+        if (hasRate) {   // v3.63: la cuenta de la tasa de la semana, para «Dejarla / Aceptarla» en el cartel (el Portal la manda cada vez que cambia)
+            ed.putBoolean("rate_has", true);
+            ed.putInt("rate_num", (int) Math.max(0, Math.round(call.getDouble("rateNum", 0.0))));
+            ed.putInt("rate_den", (int) Math.max(0, Math.round(call.getDouble("rateDen", 0.0))));
+            ed.putFloat("rate_orange", call.getDouble("rateOrange", 90.0).floatValue());
+            ed.putFloat("rate_red", call.getDouble("rateRed", 85.0).floatValue());
+            ed.putLong("rate_ts", System.currentTimeMillis());
+            ed.putLong("rate_until", rateLong(call, "rateUntil"));
+            ed.putLong("rate_seq", rateLong(call, "rateSeq"));
+        }
         ed.apply();
         call.resolve();
     }
