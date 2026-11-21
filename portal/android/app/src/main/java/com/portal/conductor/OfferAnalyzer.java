@@ -254,6 +254,7 @@ public class OfferAnalyzer {
         public int zoneKind = Z_MID;
         public String zoneName = "", zoneSrc = "default";
         public String zoneForce = "auto";    // auto (por tus zonas dibujadas) | low | mid | high
+        public boolean zoneAsk = false;      // v3.65: "Preguntarme la zona cuando hay duda". Apagado de fabrica: el aviso no saca los botones baja / media / alta (vale la zona automatica)
         public int zoneDef = Z_MID;          // zona de la recogida cuando no cae en ninguna zona dibujada
         public boolean on = true;
         public String mode = "auto";         // auto (por las franjas) | week (siempre valle) | weekend (siempre punta)
@@ -839,6 +840,7 @@ public class OfferAnalyzer {
         if (auto < Z_LOW || auto > Z_HIGH) return;
         if (manual) { double na = netWith(rawNodes, p, lenient, isBolt, auto, auto, r.baseSig); if (na >= 0) r.estNetAuto = na; }
         if (!(manual || "area".equals(src) || "default".equals(src))) return;       // codigo postal o zona forzada: no hay duda que resolver
+        if (!b.zoneAsk) return;                                                       // v3.65: "Preguntarme la zona cuando hay duda" apagado: sin botones de zona
         if ("pickup".equals(r.estAirport)) return;                                   // recogida en el aeropuerto: usa su propia tarjeta, la zona no cuenta
         boolean[] reach = new boolean[3];
         reach[auto] = true;

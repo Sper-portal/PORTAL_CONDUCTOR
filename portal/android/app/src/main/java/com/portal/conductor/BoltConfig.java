@@ -311,6 +311,7 @@ public class BoltConfig {
             Object zf = m.get("zoneForce");
             if (zf instanceof String && ("auto".equals(zf) || "low".equals(zf) || "mid".equals(zf) || "high".equals(zf))) c.zoneForce = (String) zf;
             c.zoneDef = kindWord(m.get("zoneDef"), c.zoneDef);
+            c.zoneAsk = bool(m.get("zoneAsk"), c.zoneAsk);   // v3.65
             Map<String, Object> sh = map(m.get("short"));
             if (sh != null) {
                 double sk = dbl(sh.get("km"), c.shortKm, 0, 50), sf = dbl(sh.get("from"), c.shortFrom, 1, 10);
@@ -478,6 +479,7 @@ public class BoltConfig {
         b.append(",\"peakKm\":").append(n(c.peakKm)).append(",\"longKm\":").append(n(c.longKm)).append(",\"longDisc\":").append(n(c.longDisc)).append(",\"eventOn\":").append(c.eventOn).append(",\"v\":").append(CFG_VER).append(",\"cpv\":351");
         appendDist(b, c);   // v3.58
         b.append(",\"zoneForce\":\"").append(c.zoneForce).append("\",\"zoneDef\":\"").append(kindWordKey(c.zoneDef)).append('"');
+        b.append(",\"zoneAsk\":").append(c.zoneAsk);   // v3.65
         b.append(",\"short\":{\"km\":").append(n(c.shortKm)).append(",\"from\":").append(n(c.shortFrom)).append(",\"lo\":").append(n(c.bumpLo)).append(",\"hi\":").append(n(c.bumpHi)).append('}');
         b.append(",\"airOn\":").append(c.airOn).append(",\"airFee\":").append(n(c.airFee)).append(",\"airFlatKm\":").append(n(c.airFlatKm));
         b.append(",\"holidaysWe\":").append(c.holidaysWe).append(",\"holidays\":[");

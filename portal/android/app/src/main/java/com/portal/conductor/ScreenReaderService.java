@@ -52,6 +52,8 @@ public class ScreenReaderService extends AccessibilityService {
     public static volatile String pendingJson = null;
 
     private static final Pattern DRIVER = Pattern.compile("mtakso|bolt|uber|cabify", Pattern.CASE_INSENSITIVE);
+    private static final Pattern NAVAPP = Pattern.compile("^(com\\.waze|com\\.google\\.android\\.apps\\.maps)$", Pattern.CASE_INSENSITIVE);   // v3.65: navegadores sobre los que la burbuja se queda
+    private static final long NAV_KEEP_MS = 2L * 60L * 60L * 1000L;   // v3.65: ...si en las ultimas 2 horas has estado en una app de conductor
     private static final Pattern AMT = Pattern.compile("(\\d{1,3}(?:\\.\\d{3})+,\\d{2}|\\d{1,4}[.,]\\d{2})(?!\\d)\\s*(\\u20AC|[eE][uU][rR]\\b)?");
     private static final Pattern TOTAL = Pattern.compile("\\btotal\\b");
 
@@ -60,6 +62,7 @@ public class ScreenReaderService extends AccessibilityService {
     private WindowManager.LayoutParams lp;
     private boolean shown = false;
     private String fgPkg = "";
+    private long lastDriverMs = 0;   // v3.65: ultima vez que se vio (o se dejo) una app de conductor delante
 
     public static boolean bubbleOn(Context c) {
         int v = c.getSharedPreferences("portal", Context.MODE_PRIVATE).getInt("bubble", -1);
@@ -81,7 +84,7 @@ public class ScreenReaderService extends AccessibilityService {
         buildBubble();
         try {
             AccessibilityNodeInfo r = getRootInActiveWindow();
-            if (r != null && r.getPackageName() != null) fgPkg = r.getPackageName().toString();
+            if (r != null && r.getPackageName() != null) { fgPkg = r.getPackageName().toString(); if (DRIVER.matcher(fgPkg).find()) lastDriverMs = System.currentTimeMillis(); }
         } catch (Exception e) { }
         refreshBubble();
         applyRentConfig();
@@ -169,7 +172,12 @@ public class ScreenReaderService extends AccessibilityService {
     };
 
     private boolean wantBubble() {
-        return forced || (bubbleOn(this) && !fgPkg.equals(getPackageName()) && DRIVER.matcher(fgPkg).find());
+        return forced || (bubbleOn(this) && !fgPkg.equals(getPackageName()) && (DRIVER.matcher(fgPkg).find() || navKeep()));
+    }
+
+    /** v3.65: Waze o Google Maps delante y has estado en Bolt, Uber o Cabify en las ultimas 2 horas: la burbuja se queda */
+    private boolean navKeep() {
+        return NAVAPP.matcher(fgPkg).find() && lastDriverMs > 0 && System.currentTimeMillis() - lastDriverMs < NAV_KEEP_MS;
     }
 
     private android.view.View bubbleRoot() {
@@ -200,6 +208,7 @@ public class ScreenReaderService extends AccessibilityService {
             fgLog.add(t + " " + fgPkg + " > " + pkg);
             while (fgLog.size() > 8) fgLog.remove(0);
         } catch (Exception ex) { }
+        if (DRIVER.matcher(fgPkg).find() || DRIVER.matcher(pkg).find()) lastDriverMs = System.currentTimeMillis();   // v3.65: al entrar o al salir de una app de conductor
         fgPkg = pkg;
     }
 
@@ -272,7 +281,7 @@ public class ScreenReaderService extends AccessibilityService {
 
     private void refreshBubble() {
         applyRentConfig();
-        boolean want = forced || (bubbleOn(this) && !fgPkg.equals(getPackageName()) && DRIVER.matcher(fgPkg).find()); if (want) cancelHide();
+        boolean want = wantBubble(); if (want) cancelHide();
         if (want && !shown) showBubble();
         else if (!want && shown) hideSoon();
     }
