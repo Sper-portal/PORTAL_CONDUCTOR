@@ -1404,7 +1404,14 @@ function changeDay(n){let d=new Date(selectedDay+'T12:00:00');d.setDate(d.getDat
 function changeFuelDay(n){let d=new Date(fuelSelected+'T12:00:00');d.setDate(d.getDate()+n);let min=new Date(today()+'T12:00:00');min.setMonth(min.getMonth()-18);const max=new Date(today()+'T12:00:00');if(d>max)d=max;if(d<min)d=min;fuelSelected=dateKey(d);renderControl()}
 function changeControlWeek(n){controlWeek=Math.max(-78,Math.min(0,controlWeek+n));renderControl()}
 function monthBounds(offset=0){const now=new Date();const first=new Date(now.getFullYear(),now.getMonth()+offset,1,12);const last=new Date(now.getFullYear(),now.getMonth()+offset+1,0,12);return [first,last]}
-function monthlyHours(offset=0){const [first,last]=monthBounds(offset);let all=0,bolt=0,pri=0,days=0,kb=0,ko=0;for(let d=new Date(first);d<=last;d.setDate(d.getDate()+1)){const k=dateKey(d),a=totalMinutesForDay(k),b=boltMinutesForDay(k);if(a>0)days++;all+=a;bolt+=b;pri+=priorityMinutesForDay(k);kb+=appKmForDay(k,'bolt');ko+=appKmForDay(k,'other')}return {total:bolt,pri,non:Math.max(0,bolt-pri),all,other:Math.max(0,all-bolt),kmBolt:r1km(kb),kmOther:r1km(ko),days,first,last}}
+function monthlyHours(offset=0){const [first,last]=monthBounds(offset);let all=0,bolt=0,pri=0,days=0,kb=0,ko=0;for(let d=new Date(first);d<=last;d.setDate(d.getDate()+1)){const k=dateKey(d),a=totalMinutesForDay(k),b=boltMinutesForDay(k);if(a>0)days++;all+=a;bolt+=b;pri+=priorityMinutesForDay(k);kb+=appKmForDay(k,'bolt');ko+=appKmForDay(k,'other')}return {total:bolt,pri,non:Math.max(0,bolt-pri),all,other:Math.max(0,all-bolt),kmBolt:r1km(kb),kmOther:r1km(ko),days,...goalRemainM(pri,bolt),first,last}}
+// v3.66 · metas MENSUALES (horas): goalPriM / goalNonM. Igual que las semanales: dos barras (🟢 prioritarias / 🔴 no prioritarias). En blanco = el mes no muestra barras.
+function goalNumM(v){v=Number(v);return Number.isFinite(v)&&v>0?Math.round(Math.min(744,v)*100)/100:0}
+function goalsCfgM(){const s=db.settings||{},p=goalNumM(s.goalPriM),n=goalNumM(s.goalNonM);return {split:p+n>0,pri:p,non:n,total:Math.round((p+n)*100)/100}}
+function goalRemainM(pri,bolt){const g=goalsCfgM(),non=Math.max(0,bolt-pri);
+  if(!g.split)return {goals:g,remainPri:0,remainNon:0,remain:0};
+  const rp=Math.max(0,Math.round(g.pri*60-pri)),rn=Math.max(0,Math.round(g.non*60-non));
+  return {goals:g,remainPri:rp,remainNon:rn,remain:rp+rn}}
 function changeControlMonth(n){controlMonth=Math.max(-17,Math.min(0,controlMonth+n));renderControl()}
 function weekBounds(offset){let d=new Date(today()+'T12:00:00'),day=d.getDay()||7;let mon=new Date(d);mon.setDate(d.getDate()-day+1+offset*7);let sun=new Date(mon);sun.setDate(mon.getDate()+6);return [mon,sun]}
 // v3.65 · metas semanales. goalPri / goalNon (horas) = metas por tipo; el total es la suma y se guarda tambien en settings.goal.
@@ -1499,7 +1506,7 @@ function renderControl(){
   let button=active?`<button class="toggle running" onclick="toggleSession()">■ Finalizar jornada · ${new Date(active.start).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}</button>`:`<button class="toggle" onclick="toggleSession()">▶ Iniciar jornada</button>`;
   document.querySelector('#content').innerHTML=`<section class="panel"><div class="section-title t-top">Control Horario · Diario</div><div class="navrow"><button class="back" onclick="changeDay(-1)">‹</button><b>${fmtDate(k)}</b><button class="back" onclick="changeDay(1)">›</button></div>${button}${appSwitchHtml()}<div class="appblk">${prioDot()} Solo ${prioName()}<span class="ctl-chip"><small>Estado</small><b>${active?'EN CURSO':'Finalizada'}</b></span></div><div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(dayPri)}</b></div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(dayNon)}</b></div><div class="metric control-metric control-total"><small>Total de horas</small><b>${hoursText(dayTotal)}</b></div></div>${daySplitHtml(k)}${ctlDetails('tr','🕒 Tramos del día ('+daySessions.length+') · añadir tramo manual',`<div class="note">Cada inicio y finalización se guarda como un tramo independiente. Tramos registrados hoy: <b>${daySessions.length}</b>. El total diario suma todos los tramos.</div><div class="row" style="margin-top:10px"><input type="time" id="start" value="00:00"><input type="time" id="end" value="00:00"></div><button id="saveHoursBtn" class="action" style="width:100%;margin-top:8px" onclick="saveHoursManual()">Añadir tramo manual</button><button id="cancelHourEdit" class="back" style="display:none;width:100%;margin-top:6px" onclick="cancelHourEdit()">Cancelar edición</button>${hourSegmentsHtml(k,daySessions)}`)}</section>
   <section class="panel"><div class="section-title">Resumen semanal</div><div class="navrow"><button class="back" onclick="changeControlWeek(-1)">‹</button><b>Semanal · ${fmtDate(dateKey(w.mon))} → ${fmtDate(dateKey(w.sun))}</b><button class="back" onclick="changeControlWeek(1)">›</button></div><div class="appblk">${prioDot()} Solo ${prioName()}<span class="ctl-chip"><small>${w.goals.split?'Faltan en total ('+goalTxt(w.goals.total)+')':'Faltan para '+goalTxt(db.settings.goal)}</small><b>${hoursText(w.remain)}</b></span></div><div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(w.pri)}</b>${w.goals.split&&w.goals.pri>0?'<span class="circ-de">de '+goalTxt(w.goals.pri)+'</span>':''}</div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(w.non)}</b>${w.goals.split&&w.goals.non>0?'<span class="circ-de">de '+goalTxt(w.goals.non)+'</span>':''}</div><div class="metric control-metric control-total"><small>Total semanal</small><b>${hoursText(w.total)}</b>${w.goals.split?'<span class="circ-de">de '+goalTxt(w.goals.total)+'</span>':''}</div></div>${goalBoxHtml(w)}${allBlockHtml(w,'sem')}${ctlDetails('sem','📅 Detalle por día de la semana',weekTable(w.mon))}${ctlDetails('meta','⏱️ Metas y horarios prioritarios',goalsPanelHtml())}</section>
-  <section class="panel"><div class="section-title">Resumen mensual</div><div class="navrow"><button class="back" onclick="changeControlMonth(-1)">‹</button><b>${m.first.toLocaleDateString('es-ES',{month:'long',year:'numeric'})}</b><button class="back" onclick="changeControlMonth(1)">›</button></div><div class="appblk">${prioDot()} Solo ${prioName()}<span class="ctl-chip"><small>Días trabajados</small><b>${m.days}</b></span></div><div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(m.pri)}</b></div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(m.non)}</b></div><div class="metric control-metric control-total"><small>Total mensual</small><b>${hoursText(m.total)}</b></div></div>${allBlockHtml(m,'mes')}${ctlDetails('mes','🗓️ Detalle por semana del mes',monthTable(m.first,m.last))}</section><div class="futuristic fuel-panel" style="margin-top:12px;padding:12px;border-radius:22px"><button class="action" style="width:100%" onclick="toggleFuelPanel()">⛽ Gasolina / odómetro · ${fuelPanelOpen?'▲ Ocultar':'▼ Mostrar'}</button>${fuelPanelOpen?`<div class="fuel-panel-content"><div class="section-title" style="font-size:15px">⛽ Gasolina</div><div class="navrow"><button class="back" onclick="changeFuelDay(-1)">‹</button><b>${fmtDate(fuelSelected)}</b><button class="back" onclick="changeFuelDay(1)">›</button></div>${(()=>{const o=dayOdometer(fuelSelected),km=kilometersForDay(fuelSelected),dayTotal=fact(fuelSelected);return `<div class="odometer-box"><div class="section-title" style="font-size:14px;margin:0">🚘 Odómetro de jornada (opcional)</div><div class="odo-fields"><div><label for="odoStart">Inicio (km)</label><input id="odoStart" type="number" min="0" step="1" inputmode="numeric" placeholder="Km inicial" value="${o.start!==''?o.start:''}"></div><div><label for="odoEnd">Final (km)</label><input id="odoEnd" type="number" min="0" step="1" inputmode="numeric" placeholder="Km final" value="${o.end!==''?o.end:''}"></div></div><button class="action" style="width:100%;margin-top:8px" onclick="saveOdometer('${fuelSelected}')">Guardar kilómetros</button><div class="odometer-result"><div class="odo-line"><span>Kilómetros recorridos</span><b>${km===null?'—':kmTxt(km)}</b></div><div class="odo-line"><span>Facturación por km</span><b>${km>0?euro(dayTotal/km)+'/km':'—'}</b></div></div></div>`})()}<div class="row"><input type="number" step="0.01" id="fuel" value="" placeholder="Añadir importe €" inputmode="decimal" onfocus="this.select()"><button class="action" onclick="saveFuel()">Añadir gasolina</button></div><button class="action fuel-summary-btn" style="width:100%;margin-top:10px" onclick="toggleFuelSummary()">${fuelSummaryOpen?'▲ Ocultar resumen':'📋 Ver resumen de gasolina'}</button>${fuelSummaryOpen?`<div class="fuel-summary" style="margin-top:12px"><div class="note">Acumulado del día: <b>${euro(db.fuel[fuelSelected]||0)}</b> · El resumen se organiza por meses.</div><div style="margin-top:12px"><b>Cargas de ${fmtDate(fuelSelected)}</b>${fuelEntriesHtml(fuelSelected)}</div>${fuelMonthSummaryHtml()}</div>`:''}</div>`:''}</div>` }
+  <section class="panel"><div class="section-title">Resumen mensual</div><div class="navrow"><button class="back" onclick="changeControlMonth(-1)">‹</button><b>${m.first.toLocaleDateString('es-ES',{month:'long',year:'numeric'})}</b><button class="back" onclick="changeControlMonth(1)">›</button></div><div class="appblk">${prioDot()} Solo ${prioName()}<span class="ctl-chip"><small>Días trabajados</small><b>${m.days}</b></span></div><div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(m.pri)}</b>${m.goals.split&&m.goals.pri>0?'<span class="circ-de">de '+goalTxt(m.goals.pri)+'</span>':''}</div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(m.non)}</b>${m.goals.split&&m.goals.non>0?'<span class="circ-de">de '+goalTxt(m.goals.non)+'</span>':''}</div><div class="metric control-metric control-total"><small>Total mensual</small><b>${hoursText(m.total)}</b>${m.goals.split?'<span class="circ-de">de '+goalTxt(m.goals.total)+'</span>':''}</div></div>${goalBoxHtml(m)}${allBlockHtml(m,'mes')}${ctlDetails('mes','🗓️ Detalle por semana del mes',monthTable(m.first,m.last))}</section><div class="futuristic fuel-panel" style="margin-top:12px;padding:12px;border-radius:22px"><button class="action" style="width:100%" onclick="toggleFuelPanel()">⛽ Gasolina y odómetro · ${fuelPanelOpen?'▲ Ocultar':'▼ Mostrar'}</button>${fuelPanelOpen?`<div class="fuel-panel-content"><div class="navrow"><button class="back" onclick="changeFuelDay(-1)">‹</button><b>${fmtDate(fuelSelected)}</b><button class="back" onclick="changeFuelDay(1)">›</button></div><div class="section-title fp-head" id="fpGas">⛽ Gasolina</div><div class="row"><input type="number" step="0.01" id="fuel" value="" placeholder="Añadir importe €" inputmode="decimal" onfocus="this.select()"><button class="action" onclick="saveFuel()">Añadir gasolina</button></div><button class="action fuel-summary-btn" style="width:100%;margin-top:10px" onclick="toggleFuelSummary()">${fuelSummaryOpen?'▲ Ocultar resumen':'📋 Ver resumen de gasolina'}</button>${fuelSummaryOpen?`<div class="fuel-summary" style="margin-top:12px"><div class="note">Acumulado del día: <b>${euro(db.fuel[fuelSelected]||0)}</b> · El resumen se organiza por meses.</div><div style="margin-top:12px"><b>Cargas de ${fmtDate(fuelSelected)}</b>${fuelEntriesHtml(fuelSelected)}</div>${fuelMonthSummaryHtml()}</div>`:''}<div class="section-title fp-head fp-odo" id="fpOdo">🚘 Odómetro</div>${(()=>{const o=dayOdometer(fuelSelected),km=kilometersForDay(fuelSelected),dayTotal=fact(fuelSelected);return `<div class="odometer-box"><div class="note" style="margin:0 0 6px">De la jornada · es opcional</div><div class="odo-fields"><div><label for="odoStart">Inicio (km)</label><input id="odoStart" type="number" min="0" step="1" inputmode="numeric" placeholder="Km inicial" value="${o.start!==''?o.start:''}"></div><div><label for="odoEnd">Final (km)</label><input id="odoEnd" type="number" min="0" step="1" inputmode="numeric" placeholder="Km final" value="${o.end!==''?o.end:''}"></div></div><button class="action" style="width:100%;margin-top:8px" onclick="saveOdometer('${fuelSelected}')">Guardar kilómetros</button><div class="odometer-result"><div class="odo-line"><span>Kilómetros recorridos</span><b>${km===null?'—':kmTxt(km)}</b></div><div class="odo-line"><span>Facturación por km</span><b>${km>0?euro(dayTotal/km)+'/km':'—'}</b></div></div></div>`})()}</div>`:''}</div>` }
 function saveHoursManual(){let st=document.querySelector('#start').value,en=document.querySelector('#end').value;if(!st||!en||st==='00:00'&&en==='00:00'){alert('Introduce la hora de inicio y finalización del tramo.');return}if(st===en){alert('La hora de inicio y finalización no pueden ser iguales.');return}let a=new Date(selectedDay+'T'+st+':00'),b=new Date(selectedDay+'T'+en+':00');if(b<a)b.setDate(b.getDate()+1);if(editingHourId!==null){const h=(db.hours||[]).find(x=>String(x.id)===String(editingHourId));if(h){db.hours=db.hours.filter(x=>String(x.id)!==String(editingHourId));const rec={...h,date:selectedDay,start:a.toISOString(),end:b.toISOString(),manual:true};db.hours.push(...splitHourRecordByCalendarDay(rec));}editingHourId=null;}else{const rec={id:'hour_manual_'+Date.now()+'_'+Math.random().toString(36).slice(2),date:selectedDay,app:currentWorkApp(),...(currentWorkApp()==='other'&&currentWorkSub()?{sub:currentWorkSub()}:{}),start:a.toISOString(),end:b.toISOString(),manual:true};db.hours.push(...splitHourRecordByCalendarDay(rec));}save();renderControl()}
 function saveFuel(){const v=Number(String(document.querySelector('#fuel').value||'').replace(',','.'))||0;if(v<=0)return;ensureFuelEntries();db.fuelEntries[fuelSelected]=fuelEntriesForDay(fuelSelected);db.fuelEntries[fuelSelected].push({id:Date.now()+Math.random(),amount:Number(v.toFixed(2))});recalcFuelDay(fuelSelected);save();renderControl()}
 // v3.65 · barras «🟢 Prioritarias / 🔴 No prioritarias»: lo hecho, la meta y lo que falta (o «✓ Cumplido»)
@@ -1516,13 +1523,20 @@ function goalsPanelHtml(){const s=db.settings,g=goalsCfg(),names={1:'Lunes',2:'M
   <label class="gl-lab" for="goalNon">Horas no prioritarias a la semana</label><input class="gl-in" id="goalNon" type="number" inputmode="decimal" min="0" step=".5" value="${val(g.split?g.non:0)}" placeholder="Ej.: 25" oninput="goalsPreview()">
   <div class="gl-tot"><span>Total semanal</span><b id="goalTot">${goalTxt(g.total)}${g.split?'':' (el de antes)'}</b></div>
   <div class="gl-note">El total es la suma de las dos. Si dejas las dos en blanco, vale solo el total de antes.</div>
+  <div class="gl-sub">Metas del mes</div>
+  <label class="gl-lab" for="goalPriM">Horas prioritarias al mes</label><input class="gl-in" id="goalPriM" type="number" inputmode="decimal" min="0" step=".5" value="${val(goalsCfgM().pri)}" placeholder="Ej.: 130" oninput="goalsPreview()">
+  <label class="gl-lab" for="goalNonM">Horas no prioritarias al mes</label><input class="gl-in" id="goalNonM" type="number" inputmode="decimal" min="0" step=".5" value="${val(goalsCfgM().non)}" placeholder="Ej.: 110" oninput="goalsPreview()">
+  <div class="gl-tot"><span>Total mensual</span><b id="goalTotM">${goalsCfgM().split?goalTxt(goalsCfgM().total):'sin meta'}</b></div>
+  <div class="gl-note">Con estas metas, el resumen mensual enseña las dos barras. Si las dejas en blanco, el mes no lleva barras.</div>
   <div class="gl-sub">Horario prioritario de cada día</div>
   <div class="gl-note">Separa varios tramos con comas. Si acaba pasada la medianoche, se escribe por ejemplo 17:00-02:00.</div>${rows}
   <button class="gl-btn" onclick="saveGoals()">✓ Guardar</button>${window.__goalsOk?'<div class="gl-ok" id="glOk">✓ Guardado</div>':''}`}
 function goalsPreview(){const el=(id)=>{const e=document.querySelector('#'+id);return e?goalNum(String(e.value).replace(',','.')):0},p=el('goalPri'),n=el('goalNon'),t=document.querySelector('#goalTot');
-  if(t)t.textContent=p+n>0?goalTxt(p+n):goalTxt((db.settings.goal||0))+' (el de antes)'}
+  if(t)t.textContent=p+n>0?goalTxt(p+n):goalTxt((db.settings.goal||0))+' (el de antes)';
+  {const em=(id)=>{const e=document.querySelector('#'+id);return e?goalNumM(String(e.value).replace(',','.')):0},pm=em('goalPriM'),nm_=em('goalNonM'),tm=document.querySelector('#goalTotM');if(tm)tm.textContent=pm+nm_>0?goalTxt(pm+nm_):'sin meta'}}
 function saveGoals(){const el=(id)=>{const e=document.querySelector('#'+id);return e?goalNum(String(e.value).replace(',','.')):0},p=el('goalPri'),n=el('goalNon');
   db.settings.goalPri=p;db.settings.goalNon=n;
+  {const gv=(id)=>{const e=document.querySelector('#'+id);return e?goalNumM(String(e.value).replace(',','.')):0};db.settings.goalPriM=gv('goalPriM');db.settings.goalNonM=gv('goalNonM')}   // v3.66: metas del mes
   if(p+n>0)db.settings.goal=Math.round((p+n)*100)/100;
   db.settings.priority=db.settings.priority||{};
   [1,2,3,4,5,6,0].forEach(d=>{const i=document.querySelector('#sch'+d);if(i)db.settings.priority[d]=(i.value||'').split(',').map(x=>x.trim()).filter(Boolean)});
@@ -2633,10 +2647,13 @@ async function heal(){
 }
 setInterval(heal,30000);heal();async function liveKm(){try{if(!db.activeSession){window.__gpsLiveKm=0;window.__gpsDay=null;return;}if(!auto())return;const dk=today();if(!window.__gpsDay)window.__gpsDay=dateKey(db.activeSession.start);const s=await G.status();if(window.__gpsDay!==dk){if(s&&s.active){const km=Math.round((Number(s.meters)||0)/100)/10;if(km>0){db.odometer=db.odometer||{};const o=db.odometer[window.__gpsDay]||{};db.odometer[window.__gpsDay]=Object.assign({start:'',end:''},o,{gpsKm:Math.round(((Number(o.gpsKm)||0)+km)*10)/10,updatedAt:new Date().toISOString()});save();}}window.__gpsDay=dk;window.__gpsLiveKm=0;try{await G.start({reset:true,session:db.activeSession.start+'|'+dk})}catch(e){}return;}if(document.hidden)return;if(s&&s.active)window.__gpsLiveKm=Math.round((Number(s.meters)||0)/100)/10;}catch(e){}}document.addEventListener('visibilitychange',()=>{if(!document.hidden)liveKm()});setInterval(liveKm,30000);liveKm();
 const orig=window.toggleSession;
+let gpsQ=Promise.resolve();   // v3.66: lo nativo (parar / arrancar el GPS) va EN FILA: finalizar y volver a iniciar al momento ya no se cruzan
 window.toggleSession=async function(){
   const starting=!db.activeSession;
   const k0=db.activeSession?(window.__gpsDay||dateKey(db.activeSession.start)):null;
   orig();
+  try{window.__gpsLiveKm=0}catch(e){}   // v3.66: lo «en vivo» de la jornada que acaba NO pasa a la nueva (va a la jornada anterior); antes se sumaba otra vez y salian km dobles
+  const job=async()=>{
   try{
     if(starting){
       if(!auto())return;
@@ -2656,6 +2673,8 @@ window.toggleSession=async function(){
       }
     }
   }catch(e){}
+  };
+  const pr=gpsQ.then(job,job);gpsQ=pr.catch(()=>{});return pr;
 };
 const content=document.querySelector('#content');
 function paintMode(){const m=document.getElementById('gpsModeLine');if(m)m.textContent='📍 Odómetro automático: '+(auto()?'ACTIVADO':'DESACTIVADO')+' · toca para cambiar';}
@@ -2783,7 +2802,7 @@ const J_KB=[
 ['frase','💬','Frase del día','frase,impulso,motivac,cita','Arriba, en Calculadora, tienes cada día una frase distinta. Hay 365, una para cada día del año.'],
 ['voz','🔔','Botones con voz para el pasajero','voz^4,audio^3,cinturon^4,gracias^3,pasajero^3,hablar^3,decir^2,altavoz^2,idioma^2,ingles^2,editar^2,boton,frase','A la izquierda de la frase del día hay 2 botones con voz: «Cinturón» dice «Por favor, póngase el cinturón de seguridad» y «Gracias» dice «Gracias por viajar con nosotros». Tócalos y el móvil lo dice en voz alta, con el volumen de multimedia del móvil. Para cambiar el nombre del botón, lo que dice o el idioma de la voz (por ejemplo inglés), mantén pulsado el botón: sale una ventana con «Probar», «Guardar» y «Restaurar». Se guarda en tu cuenta. Si no suena, mira en Ajustes de Android → Texto a voz que haya una voz instalada.'],
 ['tasa','📊','Mi tasa de finalización','tasa,finalizacion,aceptacion,cancelacion,cancelar,bolt,calidad,servicio,limite,ajustes,semana,mes','En Ajustes → Tasa de finalización ves tu cuenta propia, de lunes a domingo y por meses: viajes hechos ÷ ofertas que cuentan. Toda oferta que lee la app suma a Recibidas; si trae el cartel «Fuera del radio / no te afectará» suma también a Con aviso y no cuenta (si la aceptas con ✓, pasa a contar). Las reservas (etiqueta «Reservado») con la recogida a más de 2 km se tratan igual aunque no traigan el cartel; a 2 km o menos cuentan como una oferta normal. Sin cartel y sin ✓ baja tu tasa. ✓ y la haces: sube. ✓ y luego la borras de la lista: es una cancelación y baja; si el cliente cancela en pocos minutos (los eliges en la página) no penaliza. Cada día se puede corregir con − + ✎ y puedes cargar días pasados. Avisos: naranja al bajar de 90 % y rojo por debajo de 85 % (se cambian). Es una estimación tuya: Bolt no enseña su tasa interna. Los datos se quedan en el móvil. La barra ✗ / ✓ de abajo de la app ya no sale de fábrica (si la echas de menos: Ajustes de Bolt → General → «Barra ✗ / ✓ de abajo de la app»; trae «Dejarla / Hacerla» con lo que pasa con tu tasa). En el aviso del neto de Bolt sale debajo una lengüeta «Más datos» con los botones ✕ «No la hice» y ✓ «La acepté»: los puedes pulsar ahí (hasta 90 segundos después) y cuentan en tu tasa aunque el Portal esté cerrado; si la oferta ya se fue, los botones quedan 15 segundos. «Más datos» abre las líneas sencillas (viaje, recogida, bruto y comisión, si es una reserva) y «Cálculo completo» todas las de siempre. Si prefieres el aviso entero como antes: Ajustes de Bolt → General → «Cartel plegado».'],
-['grabar','🎥','Grabar vídeo del viaje','grabar,grabacion,video,camara,dashcam,interior,audio,microfono','Arriba, en la frase del día de Calculadora, hay un botón pequeño con una cámara. Púlsalo, elige 15 o 30 minutos y con o sin audio. Graba el interior del coche en Full HD y el vídeo se queda solo en tu móvil: no se sube a internet ni gasta datos. Al acabar eliges Guardar (queda en la Galería, en Películas, carpeta Portal del Conductor) o Eliminar. Unos 30 minutos ocupan alrededor de 1,4 GB, así que mira que tengas sitio. Mientras graba, Android enseña un aviso y un punto verde: es normal y no se puede quitar. Si llevas pasajeros y grabas con audio, avísalos con un cartel visible en el coche.'],
+['grabar','🎥','Grabar vídeo del viaje','grabar,grabacion,video,camara,dashcam,interior,audio,microfono','Arriba, en la frase del día de Calculadora, hay un botón pequeño con una cámara. Púlsalo, elige 15 o 30 minutos y con o sin audio. Graba el interior del coche en Full HD y el vídeo se queda solo en tu móvil: no se sube a internet ni gasta datos. Al acabar no sale ningún aviso en la pantalla: la cámara pasa a poner «Listo». Cuando te venga bien, púlsala y eliges Guardar (queda en la Galería, en Películas, carpeta Portal del Conductor) o Eliminar. Unos 30 minutos ocupan alrededor de 1,4 GB, así que mira que tengas sitio. Mientras graba, Android enseña un aviso y un punto verde: es normal y no se puede quitar. Si llevas pasajeros y grabas con audio, avísalos con un cartel visible en el coche.'],
 ['freenow','💗','Free Now y Pide Taxi','free now^4,freenow^4,pide taxi^4,pidetaxi^4','En Calculadora tienes los botones Free Now (rosa) y Pide Taxi (amarillo) en la segunda fila, junto a Aeropuerto y Cancelaciones. Escribe el importe y púlsalo: se guarda el importe entero, sin comisión de la app, y suma a tu facturación, al informe y a la nómina. También puedes elegirlos como aplicación prioritaria en Control, cargar sus importes a mano en Facturación y apuntar sus cancelaciones.'],
 ['tema','🎨','Tema claro, oscuro o automático','tema claro^4,tema oscuro^4,tema automatico^4,cambiar el tema^4,el tema^3,modo oscuro^4,modo claro^4,modo noche^4,modo dia^3,fondo oscuro^3,fondo claro^3,pantalla oscura^3,pantalla clara^3,oscuro^3,oscura^3','En Ajustes → Tema eliges cómo se ve la app: Automático (claro de día y oscuro de noche, según el sol en Madrid; cambia solo), Claro u Oscuro fijo. Afecta a Calculadora, Control, Facturación e Informe; Ajustes, el menú y Madrid hoy son siempre oscuros. Se guarda en este aparato.'],
 ['appprio','🎯','Aplicación prioritaria','app prioritaria^4,aplicacion prioritaria^4,ahora trabajo con^4,horas prioritarias^4,otras apps^3,prioritaria^3','En Control, «Aplicación prioritaria» elige tu app principal: Bolt, Uber, Cabify, Free Now o Pide Taxi. Sus horas y kilómetros salen en el bloque «Solo …» y las del resto en «Otras apps». Con «Ahora trabajo con» marcas con cuál empiezas la jornada. Todo lo prioritario toma el color de esa app (verde, negro, morado, rosa o amarillo). Al pulsar «Otras apps» te sale una lista para elegir cuál (Uber, Cabify…): esas apps solo cuentan horas y km por separado, no tienen horas prioritarias. Toca el círculo «Otras apps» para ver el desglose por app y «Todas juntas».'],
@@ -2832,7 +2851,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.65';
+const APP_VERSION='v3.66';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -4777,7 +4796,7 @@ window.kilometersForDay=function(k){
   const a=db.activeSession;
   if(a&&k===today()){
     const gd=a.gpsDay||dateKey(a.start);
-    if(gd===k)live=Math.max(nm(a.liveKm),nm(window.__gpsLiveKm));
+    if(gd===k)live=Math.max(nm(a.liveKm),nm(a.nat)>0?nm(window.__gpsLiveKm):0);   // v3.66: el dato en vivo solo vale si ya hay una lectura de ESTA jornada (a.nat)
   }
   const sum=g+live;
   return sum>=1?sum:null;
@@ -7097,6 +7116,122 @@ function rentAutoSave(){
     });
   });
 }
+/* ===== v3.66 · «Datos del fabricante»: lo avanzado de Rentabilidad queda detrás de una contraseña (Juan 22-11 01:23) =====
+   Arriba, a la vista de todos: 🫧 Burbuja flotante, 🔊 Voz y 🎯 Tus objetivos (+ «Guardar parámetros»). Todo lo demás (semáforos, opciones avanzadas, estimación de Bolt, zona dudosa,
+   probar el aviso, estado de la lectura, diagnóstico y cómo se calcula) va dentro de #rtFab, tapado hasta poner la contraseña. Los elementos SIGUEN en la página (solo ocultos), con sus mismos id.
+   La contraseña NO está en el código: solo su huella (SHA-256 con sal, repetido 20.000 veces). Una vez abierto se queda abierto en este móvil hasta pulsar «Bloquear». Frena a quien se asome al móvil;
+   no es un blindaje contra quien desmonte el APK. */
+const K256=new Uint32Array([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
+function sha256(m){
+  const l=m.length,n=((l+9+63)>>6)<<6,b=new Uint8Array(n);b.set(m);b[l]=0x80;
+  const dv=new DataView(b.buffer);dv.setUint32(n-8,Math.floor(l/0x20000000));dv.setUint32(n-4,(l<<3)>>>0);
+  let h0=0x6a09e667,h1=0xbb67ae85,h2=0x3c6ef372,h3=0xa54ff53a,h4=0x510e527f,h5=0x9b05688c,h6=0x1f83d9ab,h7=0x5be0cd19;
+  const w=new Uint32Array(64);
+  for(let o=0;o<n;o+=64){
+    for(let i=0;i<16;i++)w[i]=dv.getUint32(o+i*4);
+    for(let i=16;i<64;i++){const x=w[i-15],y=w[i-2];w[i]=(w[i-16]+(((x>>>7)|(x<<25))^((x>>>18)|(x<<14))^(x>>>3))+w[i-7]+(((y>>>17)|(y<<15))^((y>>>19)|(y<<13))^(y>>>10)))|0}
+    let a=h0,bb=h1,c=h2,d=h3,e=h4,f=h5,g=h6,h=h7;
+    for(let i=0;i<64;i++){
+      const t1=(h+(((e>>>6)|(e<<26))^((e>>>11)|(e<<21))^((e>>>25)|(e<<7)))+((e&f)^(~e&g))+K256[i]+w[i])|0;
+      const t2=((((a>>>2)|(a<<30))^((a>>>13)|(a<<19))^((a>>>22)|(a<<10)))+((a&bb)^(a&c)^(bb&c)))|0;
+      h=g;g=f;f=e;e=(d+t1)|0;d=c;c=bb;bb=a;a=(t1+t2)|0}
+    h0=(h0+a)|0;h1=(h1+bb)|0;h2=(h2+c)|0;h3=(h3+d)|0;h4=(h4+e)|0;h5=(h5+f)|0;h6=(h6+g)|0;h7=(h7+h)|0}
+  const out=new Uint8Array(32),ov=new DataView(out.buffer);[h0,h1,h2,h3,h4,h5,h6,h7].forEach((v,i)=>ov.setUint32(i*4,v>>>0));
+  return out}
+const FAB_SALT='6bae8e2b56689e67',FAB_N=20000,FAB_H='feeda0394f39e1b821698bc71de12a2d1debdbc9cf1110bb5c0689eb5cb09fad',FAB_KEY='pdc_fab';
+function fabHash(pw){
+  const te=new TextEncoder(),s=te.encode(FAB_SALT);let h=sha256(te.encode(FAB_SALT+'\u0000'+pw));
+  const buf=new Uint8Array(32+s.length);buf.set(s,32);
+  for(let i=1;i<FAB_N;i++){buf.set(h,0);h=sha256(buf)}
+  return [...h].map(x=>x.toString(16).padStart(2,'0')).join('')}
+function fabOk(){try{return localStorage.getItem(FAB_KEY)===FAB_H}catch(e){return false}}
+function fabSet(on){const f=document.getElementById('rtFab');if(!f)return;f.classList.toggle('locked',!on);const t=document.getElementById('rtFabT');if(t)t.textContent=(on?'🔓':'🔒')+' Datos del fabricante'}
+let fabBad=0,fabWait=0;
+function fabTry(){
+  const pw=document.getElementById('rtFabPw'),msg=document.getElementById('rtFabMsg'),go=document.getElementById('rtFabGo');if(!pw||!msg)return;
+  if(Date.now()<fabWait){msg.textContent='Demasiados intentos: espera un minuto.';return}
+  const v=pw.value;if(!v){msg.textContent='Escribe la contraseña.';return}
+  msg.textContent='Comprobando…';if(go)go.disabled=true;
+  setTimeout(()=>{
+    let ok=false;try{ok=fabHash(v)===FAB_H}catch(e){}
+    if(go)go.disabled=false;
+    if(ok){fabBad=0;try{localStorage.setItem(FAB_KEY,FAB_H)}catch(e){}pw.value='';msg.textContent='';fabSet(true);try{P.say('🔓 Desbloqueado')}catch(e){}}
+    else{pw.value='';fabBad++;if(fabBad>=5){fabBad=0;fabWait=Date.now()+60000;msg.textContent='Contraseña incorrecta. Demasiados intentos: espera un minuto.'}else msg.textContent='Contraseña incorrecta.'}
+  },30)}
+function fabBye(){try{localStorage.removeItem(FAB_KEY)}catch(e){}fabSet(false);const m=document.getElementById('rtFabMsg');if(m)m.textContent='';try{P.say('🔒 Bloqueado')}catch(e){}}
+function mkCard(id,icon,title,html){
+  const d=document.createElement('div');d.className='note rt-card';d.id=id;d.setAttribute('data-rt','1');d.style.cssText='margin:12px 0';
+  d.innerHTML='<div class="rt-card-title">'+icon+' '+title+'</div>'+html;return d}
+function toCard(el,icon,title,id){
+  if(!el)return null;
+  const d=document.createElement('div');d.className='note rt-card';d.setAttribute('data-rt','1');d.style.cssText=el.style.cssText||'margin:12px 0';
+  const t=document.createElement('div');t.className='rt-card-title';t.textContent=icon+' '+title;d.appendChild(t);
+  const first=el.querySelector(':scope > b');
+  if(first){const nx=first.nextSibling;first.remove();if(nx&&nx.nodeName==='BR')nx.remove()}
+  while(el.firstChild)d.appendChild(el.firstChild);
+  if(id)d.id=id;else if(el.id)d.id=el.id;
+  el.replaceWith(d);return d}
+/* orden de lo que va dentro del bloque (llega cada cosa en su momento; se reordena al llegar una nueva) */
+const FAB_ORDER=['rtThr','rtAdv','boltBox','rtFabTrips','rtTst','rStatBox','rtDiag','rtHow'];
+function rentFabApply(){
+  const fab=document.getElementById('rtFab');if(!fab)return;
+  const body=fab.querySelector('#rtFabBody'),end=body.querySelector('#rtFabEnd');if(!body||!end)return;
+  let moved=false;
+  const z=document.getElementById('tripsZone');                       // el interruptor «Zona dudosa» sale de la lista de viajes y viene aquí
+  if(z&&!fab.contains(z)&&z.parentElement){
+    let g=document.getElementById('rtFabTrips');
+    if(!g){g=document.createElement('div');g.id='rtFabTrips';g.className='note rt-card';g.style.cssText='margin:12px 0';g.innerHTML='<div class="rt-card-title">📋 Viajes guardados</div>';body.insertBefore(g,end)}
+    g.appendChild(z.parentElement);moved=true}
+  for(const id of FAB_ORDER){const e=document.getElementById(id);if(e&&!body.contains(e)){body.insertBefore(e,end);moved=true}}
+  if(moved)for(const id of FAB_ORDER){const e=document.getElementById(id);if(e&&body.contains(e))body.insertBefore(e,end)}
+}
+/* interruptor «Con voz» a la vista: es el mismo ajuste que «Leer en voz alta» de la estimación de Bolt (lo mueve y lo guarda por ella) */
+function rentVoiceSync(){
+  const c=document.getElementById('rtVoiceChk'),b=document.getElementById('bz_voice');if(!c)return;
+  if(!b){c.disabled=true;const o=document.getElementById('rtVoiceOff');if(o)o.textContent='Cargando…';return}
+  if(b._rtl)return;b._rtl=1;
+  c.checked=!!b.checked;c.disabled=false;const o=document.getElementById('rtVoiceOff');if(o)o.textContent='';
+  b.addEventListener('change',()=>{c.checked=!!b.checked});
+  c.onchange=async()=>{
+    const want=c.checked,bb=document.getElementById('bz_voice');if(!bb){c.checked=!want;return}
+    bb.checked=want;window.boltIn(bb);
+    let ok=false;try{ok=(await window.boltSave(true))!==false}catch(e){}
+    if(!ok){bb.checked=!want;window.boltIn(bb);c.checked=!want;try{P.say('No se pudo guardar la voz')}catch(e){}}
+    else{try{P.say(want?'🔊 Con voz: encendida':'🔇 Con voz: apagada')}catch(e){}}
+  };
+}
+let fabMo=null,fabRaf=0;
+function rentFabWatch(){
+  if(fabMo)return;const root=document.querySelector('#content');if(!root)return;
+  fabMo=new MutationObserver(()=>{
+    if(fabRaf)return;
+    fabRaf=requestAnimationFrame(()=>{fabRaf=0;
+      if(!document.getElementById('rtFab')){try{fabMo.disconnect()}catch(e){}fabMo=null;return}
+      try{rentFabApply();rentVoiceSync()}catch(e){console.warn('v3.66 fabricante',e)}})});
+  fabMo.observe(root,{childList:true,subtree:true});
+}
+function rentFabBuild(panel){
+  if(!panel||document.getElementById('rtFab'))return;
+  const find=re=>[...panel.querySelectorAll(':scope > details.note')].find(d=>re.test((d.querySelector('summary')||{}).textContent||''));
+  const tst=find(/Probar el aviso/),how=find(/C.mo se calcula/),adv=find(/Opciones avanzadas/);
+  if(tst)tst.id='rtTst';if(how)how.id='rtHow';if(adv)adv.id='rtAdv';
+  const voice=mkCard('rtVoice','🔊','Voz','<div class="rt-row"><div><b>Con voz</b><br><small>Lee en voz alta el neto estimado y los kilómetros cuando sale el aviso de Bolt.</small></div><input type="checkbox" id="rtVoiceChk" style="width:26px;height:26px;flex:none" disabled></div><div class="rt-off" id="rtVoiceOff">Cargando…</div>');
+  const fab=document.createElement('div');fab.id='rtFab';fab.className='note rt-card rt-fab locked';fab.setAttribute('data-rt','1');fab.style.cssText='margin:16px 0 12px';
+  fab.innerHTML='<div class="rt-card-title" id="rtFabT">🔒 Datos del fabricante</div>'
+   +'<div id="rtFabLock"><small>Ajustes avanzados que solo toca quien hizo la app. Pon la contraseña para verlos.</small>'
+   +'<div class="row" style="margin-top:8px;gap:8px"><input type="password" id="rtFabPw" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Contraseña" style="flex:1;min-width:0"><button class="action" id="rtFabGo" type="button">Desbloquear</button></div>'
+   +'<div class="rt-off" id="rtFabMsg"></div></div>'
+   +'<div id="rtFabBody"><div id="rtFabEnd"><button class="action" id="rtFabBye" type="button" style="width:100%;margin-top:12px">🔒 Bloquear otra vez</button></div></div>';
+  const save=panel.querySelector('button[onclick="rentSave()"]'),bub=document.getElementById('rtBubble'),obj=document.getElementById('rtObj');
+  const anchor=document.getElementById('rRestr')||document.getElementById('rtGen'),seq=[bub,voice,obj,save,fab].filter(Boolean);
+  if(anchor){let prev=anchor;for(const x of seq){prev.insertAdjacentElement('afterend',x);prev=x}}else for(const x of seq)panel.appendChild(x);
+  fabSet(fabOk());
+  const pw=fab.querySelector('#rtFabPw');
+  fab.querySelector('#rtFabGo').onclick=fabTry;pw.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();fabTry()}});
+  fab.querySelector('#rtFabBye').onclick=fabBye;
+  rentFabApply();rentVoiceSync();rentFabWatch();
+}
+P.sha256=sha256;P.fabHash=fabHash;P.fabOk=fabOk;P.rentFabApply=rentFabApply;
 const bText=el=>((el.querySelector(':scope > b')||{}).textContent||'').trim();
 function restructureRent(){
   const root=document.querySelector('#content');
@@ -7104,13 +7239,13 @@ function restructureRent(){
   const panel=document.getElementById('rOn').closest('section')||root;
   const kids=[...panel.children];
   const note=re=>kids.find(e=>e.classList&&e.classList.contains('note')&&re.test(bText(e)));
-  const obj=toDetails(note(/^Tus objetivos$/),'🎯','Tus objetivos',false);      /* v3.49: cerrado, como los demas */
+  const obj=toCard(note(/^Tus objetivos$/),'🎯','Tus objetivos','rtObj');      /* v3.49: cerrado, como los demas */
   const est=toDetails(document.getElementById('rStatBox'),'👀','Estado de la lectura',false);
   const tst=toDetails(note(/^Probar el aviso$/),'🧪','Probar el aviso',false);
   const how=toDetails(note(/^C.mo se calcula$/),'ℹ️','Cómo se calcula',false);
   const adv=[...panel.querySelectorAll(':scope > details.note')].find(d=>!d.hasAttribute('data-rt')&&/^\s*Opciones avanzadas/.test((d.querySelector('summary')||{}).textContent||''));
   if(adv){adv.classList.add('rt-sec');adv.setAttribute('data-rt','1');const sm=adv.querySelector('summary');if(sm&&sm.textContent.indexOf('⚙')<0)sm.textContent='⚙️ '+sm.textContent.trim()}
-  const bub=mkSection('rtBubble','🫧','Burbuja flotante',bubbleHtml());
+  const bub=mkCard('rtBubble','🫧','Burbuja flotante',bubbleHtml());
   const thr=mkSection('rtThr','🚦','Semáforos de viajes',thrHtml());
   const dg=mkSection('rtDiag','🔎','¿No te sale la burbuja? Diagnóstico',diagHtml());
   if(obj){obj.insertAdjacentElement('afterend',bub);bub.insertAdjacentElement('afterend',thr)}
@@ -7130,7 +7265,7 @@ function restructureRent(){
       row.className='rt-row';row.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #ffffff22';
       det.querySelector('#rtGenBody').appendChild(row);
     }}catch(e){console.warn('v3.44 isla',e)}
-  initBubble();initThr();accordion();rentAutoSave();
+  rentFabBuild(panel);initBubble();initThr();accordion();rentAutoSave();
 }
 /* v3.15h: acordeón — al abrir un apartado de Rentabilidad se cierran los demás (también «Estimación del precio de Bolt») */
 function accordion(){
@@ -7153,7 +7288,7 @@ if(typeof _rr==='function')window.renderRent=async function(){
 /* ---------- ayuda ---------- */
 try{
   const e=jEntry('rentabilidad');
-  if(e)e[4]=String(e[4]).replace('Se activa en Ajustes → Rentabilidad de viajes.','Se activa en Ajustes → Rentabilidad de viajes (es una opción propia, con desplegables (al abrir uno se cierran los demás): objetivos, burbuja flotante, semáforos, estimación de Bolt, opciones avanzadas, estado de la lectura y diagnóstico). Los números que cambies (objetivos, recogida, comisión) se guardan solos.');
+  if(e)e[4]=String(e[4]).replace('Se activa en Ajustes → Rentabilidad de viajes.','Se activa en Ajustes → Rentabilidad de viajes (es una opción propia: arriba están la burbuja flotante, la voz y tus objetivos; los ajustes avanzados están en «Datos del fabricante», con contraseña). Los números que cambies (objetivos, recogida, comisión) se guardan solos.');
 }catch(e){}
 })();
 
@@ -8214,6 +8349,8 @@ html body.lt #content .obd-k{color:#52607a}
 .ctl-det[open]>summary:after{content:"▲"}
 .ctl-det>.ctl-in{padding:0 12px 12px}
 /* v3.65 · metas prioritarias / no prioritarias */
+.fuel-panel-content .fp-head{font-size:16px;margin:16px 0 6px}
+.fuel-panel-content .fp-head.fp-odo{margin-top:22px;padding-top:14px;border-top:1px solid rgba(140,200,255,.28)}
 .goalbox{margin:12px 0 6px;padding:12px 14px;border-radius:18px;border:1px solid rgba(140,200,255,.38);background:linear-gradient(135deg,rgba(255,255,255,.09),rgba(255,255,255,.02))}
 .goalrow{margin:2px 0 12px}.goalrow:last-child{margin-bottom:2px}
 .goalrow .top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:2px 8px;font:800 14px system-ui,sans-serif;color:#eaf6ff}
@@ -8382,6 +8519,12 @@ html body .airport-row>.cancel-btn{justify-content:center!important;border:1px s
 .rt-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .rt-off{color:#9fb4c8;font-size:12px;margin-top:6px}
 .rt-off:empty{display:none}
+.rt-card-title{font-weight:800;font-size:1.2em;margin-bottom:2px}
+.rt-card>.rt-row{padding-top:8px}
+#rtFab.locked #rtFabBody{display:none!important}
+#rtFab:not(.locked) #rtFabLock{display:none}
+#rtFab .rt-card-title{margin-bottom:4px}
+#rtFabBody>.note{margin:12px 0}
 /* --- Modo ligero (Ajustes → Configuración de la app → Velocidad de la app): sin sombras, brillos, desenfoques ni animaciones.
        La clase se repite para ganar a las reglas con !important del diseño; «.money-hidden» (ocultar importes) NO se toca. --- */
 html.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite.pdc-lite *,
@@ -10594,7 +10737,7 @@ const CSS=''
 +'#tripBar .rt-bar{margin-top:3px;font-size:13px;font-weight:700;line-height:1.25;overflow-wrap:anywhere}'
 +'#tripBar .rt-bar span{white-space:nowrap}#tripBar .rt-bar span.z-n{white-space:normal}'
 /* aviso que salta al cancelar o dejar pasar */
-+'#rateBanner{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 8px);width:min(94%,440px);box-sizing:border-box;z-index:100025;display:none;border:2px solid #f59e0b;border-radius:20px;padding:10px 12px;color:#fff;font:15px/1.3 system-ui;box-shadow:0 8px 26px #000a;cursor:pointer;background:linear-gradient(#2c1704,#150b03)}'
++'#rateBanner{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 8px);width:min(94%,440px);box-sizing:border-box;z-index:100025;display:none;border:2px solid #f59e0b;border-radius:20px;padding:10px 12px;color:#fff;font:15px/1.3 system-ui;box-shadow:0 8px 26px #000a;cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none;background:linear-gradient(#2c1704,#150b03)}'
 +'#rateBanner.rb-r{border-color:#ef4444;background:linear-gradient(#32060d,#170308)}#rateBanner.rb-g{border-color:#22c55e;background:linear-gradient(#042a12,#021508)}#rateBanner.rb-n{border-color:#3b82f6;background:linear-gradient(#0b1c44,#08163a)}'
 +'#rateBanner .rb-row{display:flex;align-items:center;gap:10px}#rateBanner .rb-ico{flex:none;width:34px;text-align:center;font-size:30px;line-height:1}'
 +'#rateBanner.rb-o .rb-ico{color:#f59e0b}#rateBanner.rb-r .rb-ico{color:#ef4444}#rateBanner.rb-g .rb-ico{color:#22c55e}#rateBanner.rb-n .rb-ico{color:#60a5fa}'
@@ -10698,11 +10841,36 @@ function banner(kind){
   b.className='rb-'+cls;
   b.innerHTML='<div class="rb-row"><div class="rb-ico">'+ico+'</div><div class="rb-tx"><div class="rb-t">'+title+'</div><div class="rb-s">'+msg+'</div></div><div class="rb-pc">'+pc(c.rate)+'</div></div>'
     +'<div class="rb-mini"><div>Viajes finalizados <b>'+c.num+'</b></div><div>Ofertas que cuentan <b>'+c.den+'</b></div></div>';
-  b.style.display='block';
+  b.style.display='block';b.style.transition='none';b.style.transform='';b.style.opacity='';bannerSwipe(b);   // v3.66: se quita deslizando
   clearTimeout(bannerT);bannerT=setTimeout(hideBanner,7000);
   try{if(navigator.vibrate)navigator.vibrate(cls==='r'?[200,100,200]:cls==='o'?[120]:40)}catch(e){}
 }
-function hideBanner(){const b=$('#rateBanner');if(b)b.style.display='none';clearTimeout(bannerT)}
+function hideBanner(){const b=$('#rateBanner');if(b){b.style.display='none';b.style.transition='none';b.style.transform='';b.style.opacity=''}clearTimeout(bannerT)}
+/* v3.66 · el cartel se quita DESLIZANDO (a un lado o hacia arriba); un toque suelto sigue abriendo la pagina de tasa (antes tapaba la ✕ y los botones durante 7 s) */
+let bnSwAt=0;
+function bannerSwipe(b){
+  if(b._sw)return;b._sw=1;
+  let x0=0,y0=0,dx=0,dy=0,on=false,mv=false;
+  const put=()=>{const y=Math.min(0,dy);b.style.transform='translateX(calc(-50% + '+dx+'px)) translateY('+y+'px)';b.style.opacity=String(Math.max(.2,1-Math.max(Math.abs(dx),-y)/280))};
+  b.addEventListener('pointerdown',e=>{on=true;mv=false;dx=dy=0;x0=e.clientX;y0=e.clientY;b.style.transition='none';try{b.setPointerCapture(e.pointerId)}catch(_){}});
+  b.addEventListener('pointermove',e=>{if(!on)return;dx=e.clientX-x0;dy=e.clientY-y0;if(!mv&&Math.abs(dx)<8&&Math.abs(dy)<8)return;mv=true;clearTimeout(bannerT);put()});
+  const end=()=>{
+    if(!on)return;on=false;
+    if(!mv)return;
+    bnSwAt=Date.now();
+    if(Math.abs(dx)>=70||dy<=-40){
+      const side=Math.abs(dx)>=Math.abs(dy)?(dx<0?-1:1):0;
+      b.style.transition='transform .16s ease-out,opacity .16s ease-out';
+      b.style.transform=side?'translateX(calc(-50% + '+(side*window.innerWidth)+'px))':'translateX(-50%) translateY(-160%)';b.style.opacity='0';
+      setTimeout(hideBanner,170);
+    }else{
+      b.style.transition='transform .15s ease-out,opacity .15s ease-out';b.style.transform='';b.style.opacity='';
+      clearTimeout(bannerT);bannerT=setTimeout(hideBanner,4000);
+    }
+  };
+  b.addEventListener('pointerup',end);b.addEventListener('pointercancel',end);
+  b.addEventListener('click',e=>{if(Date.now()-bnSwAt<300){e.stopPropagation();e.preventDefault()}},true);   // tras deslizar no se abre la pagina de tasa
+}
 
 /* ---------------- pregunta al borrar un viaje aceptado ---------------- */
 let askS=null,askT=null;
@@ -11036,11 +11204,13 @@ var CSS=''
 +'.trec-btn.rec{background:#7a1020e6;border-color:#ff6b7f;color:#fff;font-variant-numeric:tabular-nums}'
 +'.trec-btn .rd{width:8px;height:8px;border-radius:50%;background:#ff3b52;animation:trecp 1.2s ease-in-out infinite}'
 +'.trec-btn.pend{border-color:#ffd25e;color:#ffd25e}'
++'.trec-btn .trec-l{pointer-events:none;white-space:nowrap}'
 +'.trec-btn.pend::after{content:"";position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:#ff3b52}'
 +'@keyframes trecp{0%,100%{opacity:1}50%{opacity:.25}}'
 +'#trecFloat{position:fixed;top:calc(env(safe-area-inset-top,0px) + 6px);right:8px;z-index:99990;height:22px;width:76px}'
 +'#trecFloat .trec-btn{top:0;right:0}'
 +'html body.lt #content .trec-btn:not(.rec){background:#fff3c4;border-color:#ffd25e;color:#c97a00}'
++'html body.lt #content .trec-btn.pend{color:#8a5200;border-color:#e0a400}'
 +'#trecModal{position:fixed;inset:0;z-index:100000;background:#000b;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}'
 +'#trecModal .trec-card{background:#0f2236;border:1px solid #2f6fa3;border-radius:18px;padding:18px 16px 14px;max-width:420px;width:100%;max-height:92vh;overflow:auto;color:#eaf4ff;box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}'
 +'#trecModal h3{margin:0 0 8px;font-size:20px;line-height:1.25;color:#fff}'
@@ -11101,7 +11271,7 @@ function kind(){return isRec()?'rec':(S.st==='pending'?'pend':'idle')}
 function chipHtml(){
  if(!P())return '';
  if(isRec())return '<button type="button" data-k="rec" class="trec-btn rec" aria-label="Grabando vídeo. Toca para ver" onclick="PDCREC.tap()"><i class="rd"></i><span class="trec-t">'+clockText()+'</span></button>';
- if(S.st==='pending')return '<button type="button" data-k="pend" class="trec-btn pend" aria-label="Tienes un vídeo grabado sin guardar" onclick="PDCREC.tap()">'+CAM+'</button>';
+ if(S.st==='pending')return '<button type="button" data-k="pend" class="trec-btn pend" aria-label="Vídeo grabado: toca para guardarlo o eliminarlo" onclick="PDCREC.tap()">'+CAM+'<span class="trec-l">Listo</span></button>';   /* v3.66: «Listo» al lado de la camarita */
  return '<button type="button" data-k="idle" class="trec-btn" aria-label="Grabar vídeo del viaje" onclick="PDCREC.tap()">'+CAM+'</button>';
 }
 
@@ -11299,7 +11469,7 @@ async function poll(quiet){
  if(isRec())timers(true);else timers(false);
  if(!isRec()&&infoOpen)closeM();
  if(!quiet&&!document.hidden&&!modalOpen()){
-  if(S.st==='pending'&&S.pending&&S.pending.at!==S.dismissed){openFinished();return}
+  /* v3.66: al acabar la grabacion (por tiempo, al parar o al abrir la app con un video sin resolver) NO sale ninguna ventana sola: la camarita dice «Listo» y la ventana de Guardar / Eliminar sale al tocarla */
   if(S.st==='idle'&&r.error){
    var key=r.error+':'+(r.errorAt||0);
    if(key!==S.errKey){S.errKey=key;try{p.ackError()}catch(e){}note(errText(r.error))}
