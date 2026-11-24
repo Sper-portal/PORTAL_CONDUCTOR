@@ -60,14 +60,14 @@ public class ShareFilePlugin extends Plugin {
             ContentValues v = new ContentValues();
             v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
             v.put(MediaStore.MediaColumns.MIME_TYPE, mime);
-            v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Portal del Conductor");
+            v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Driver Hub 360");
             Uri uri = getContext().getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
             if (uri == null) { call.reject("No se pudo crear el archivo"); return; }
             OutputStream o = getContext().getContentResolver().openOutputStream(uri);
             o.write(Base64.decode(b64, Base64.DEFAULT));
             o.close();
             JSObject r = new JSObject();
-            r.put("path", "Descargas/Portal del Conductor/" + name);
+            r.put("path", "Descargas/Driver Hub 360/" + name);
             call.resolve(r);
         } catch (Exception e) {
             call.reject("No se pudo guardar: " + e.getMessage());

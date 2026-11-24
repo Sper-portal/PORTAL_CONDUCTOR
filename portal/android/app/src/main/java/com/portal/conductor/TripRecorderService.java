@@ -156,7 +156,7 @@ public class TripRecorderService extends Service {
         stop.setAction(ACTION_STOP);
         PendingIntent ps = PendingIntent.getService(this, 1, stop, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, CHANNEL) : new Notification.Builder(this);
-        b.setContentTitle("Portal: grabando el viaje");
+        b.setContentTitle("Driver Hub 360: grabando el viaje");
         b.setContentText(wantAudio ? "Con audio. Toca para abrir." : "Sin audio. Toca para abrir.");
         b.setSmallIcon(android.R.drawable.ic_menu_camera);
         b.setOngoing(true);

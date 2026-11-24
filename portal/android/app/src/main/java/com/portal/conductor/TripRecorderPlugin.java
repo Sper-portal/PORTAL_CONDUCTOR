@@ -319,7 +319,7 @@ public class TripRecorderPlugin extends Plugin {
                     ContentValues v = new ContentValues();
                     v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
                     v.put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4");
-                    v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Portal del Conductor");
+                    v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Driver Hub 360");
                     v.put(MediaStore.MediaColumns.IS_PENDING, 1);
                     uri = ctx.getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, v);
                     if (uri == null) throw new java.io.IOException("insert");
@@ -343,7 +343,7 @@ public class TripRecorderPlugin extends Plugin {
                     TripRecorderStore.forgetPending(sp);
                     r.put("ok", true);
                     r.put("name", name);
-                    r.put("folder", "Movies/Portal del Conductor");
+                    r.put("folder", "Movies/Driver Hub 360");
                     r.put("sizeBytes", size);
                 } catch (Exception e) {
                     if (uri != null) {

@@ -61,7 +61,7 @@ public class GpsService extends Service implements LocationListener {
         Intent open = new Intent(this, MainActivity.class);
         PendingIntent pi = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, "gps_odo") : new Notification.Builder(this);
-        b.setContentTitle("Portal: contando kil\u00f3metros");
+        b.setContentTitle("Driver Hub 360: contando kil\u00f3metros");
         b.setContentText("Jornada en curso");
         b.setSmallIcon(android.R.drawable.ic_menu_mylocation);
         b.setOngoing(true);
