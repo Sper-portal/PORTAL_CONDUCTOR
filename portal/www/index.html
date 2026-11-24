@@ -580,7 +580,7 @@ function confirmPayment(payment){if(!pendingTrip)return;const p=pendingTrip;if(p
 function openUberCashModal(){if(!pendingTrip)return;const p=pendingTrip;const modal=document.querySelector('#uberCashModal');const amount=document.querySelector('#uberCashActual');if(amount)amount.value=Number(p.amount).toFixed(2);const original=document.querySelector('#uberCashOriginal');if(original)original.textContent=euro(p.amount);const platform=document.querySelector('#uberCashPlatform');if(platform)platform.textContent=p.platform;document.querySelector('#paymentModal')?.classList.add('hidden');modal?.classList.remove('hidden')}
 function cancelUberCashModal(){document.querySelector('#uberCashModal')?.classList.add('hidden');document.querySelector('#paymentModal')?.classList.remove('hidden')}
 function saveUberCashTrip(){if(!pendingTrip||!['Bolt','Uber','Cabify'].includes(pendingTrip.platform))return;const raw=String(document.querySelector('#uberCashActual')?.value??'').trim().replace(',','.');const actual=Number(raw);if(raw===''||!Number.isFinite(actual)||actual<0){alert('Introduce el efectivo realmente cobrado. Puede ser 0 si no recibiste efectivo.');return;}savePendingTrip('cash',Number(actual.toFixed(2)))}
-function savePendingTrip(payment,cashActual){if(!pendingTrip)return;const p=pendingTrip;const tripDate=calcAnchor||today();const trip={id:Date.now()+Math.random(),date:tripDate,time:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}),platform:p.platform,airport:p.airport,orig:p.amount,net:p.net,payment};if(p.platform==='Bolt'&&tripDate===today()){try{const a=acceptedStartFor(tripDate,trip.time);if(a){trip.start=a.start;trip.lid=a.id}}catch(e){}}if(payment==='cash'&&['Bolt','Uber','Cabify'].includes(p.platform))trip.cashActual=Number(cashActual)||0;db.trips.push(trip);save();const inp=document.querySelector('#price');if(inp)inp.value='';document.querySelector('#uberCashModal')?.classList.add('hidden');closePaymentModal();renderCalc()}
+function savePendingTrip(payment,cashActual){if(!pendingTrip)return;const p=pendingTrip;const tripDate=calcAnchor||today();const trip={id:Date.now()+Math.random(),date:tripDate,time:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}),platform:p.platform,airport:p.airport,orig:p.amount,net:p.net,payment};if(p.platform==='Bolt'&&tripDate===today()){try{const a=acceptedStartFor(tripDate,trip.time,p.amount);if(a){trip.start=a.start;trip.lid=a.id}}catch(e){}}if(payment==='cash'&&['Bolt','Uber','Cabify'].includes(p.platform))trip.cashActual=Number(cashActual)||0;db.trips.push(trip);save();const inp=document.querySelector('#price');if(inp)inp.value='';document.querySelector('#uberCashModal')?.classList.add('hidden');closePaymentModal();renderCalc()}
 function addTripTip(id,source='calc'){const t=db.trips.find(x=>String(x.id)===String(id));if(!t)return;const current=Number(t.tip)||0;const raw=prompt('Propina recibida para '+t.platform+' (€):',current.toFixed(2).replace('.',','));if(raw===null)return;const value=Number(String(raw).trim().replace(',','.'));if(!Number.isFinite(value)||value<0){alert('Introduce una propina válida.');return;}t.tip=Number(value.toFixed(2));save();if(source==='billing')renderBilling();else renderCalc()}
 function delTrip(id){db.trips=db.trips.filter(t=>t.id!==id);save();renderCalc()}
 function delLast(){let ts=db.trips.filter(t=>t.date===calcAnchor);if(ts.length){let id=ts[ts.length-1].id;delTrip(id)}}
@@ -598,19 +598,25 @@ function tripsByTimeDesc(ts){
   a.sort((x,y)=>y.k-x.k||y.i-x.i);
   return a.map(x=>x.t);
 }
-/* Bolt: el ✓ más reciente (aún sin usar) de hoy, de las 3 últimas horas y anterior a la hora de fin → {id,start:'HH:MM'} o null */
-function acceptedStartFor(k,endHM){
+/* Bolt: la hora de aceptación del ✓ de ESE viaje (lista de «Viajes guardados») → {id,start:'HH:MM'} o null.
+   v3.68 (Juan 24-11): no cuentan los cancelados de ninguna de las 3 formas («sin penalización», «cancelé yo», «canceló el pasajero»), ni los «me equivoqué con el ✓»,
+   ni los viajes añadidos a mano o por albarán (su hora es la de añadirlos, no la de aceptar). Si quedan varios ✓ sin usar, se prefiere el del MISMO importe que el viaje que apuntas
+   (así no se confunde con el siguiente que ya aceptaste); si ninguno coincide, el último aceptado de hoy, de las 3 últimas horas y anterior a la hora de fin. */
+function acceptedStartFor(k,endHM,amt){
   const T=window.__pdcTrips;if(!T||!T.state)return null;
   const used={};db.trips.forEach(x=>{if(x&&x.lid)used[x.lid]=1});
-  const em=hmMin(endHM);let best=null;
+  const em=hmMin(endHM),C=[];
   ((T.state()||{}).open||[]).forEach(x=>{
-    if(!x||!x.okAt||used[x.id])return;
-    if(x.rt&&(x.rt.res==='c1'||x.rt.res==='c2'))return;              /* la cancelaste tú o el pasajero: no hubo viaje */
+    if(!x||!x.okAt||used[x.id]||x.manual)return;
+    const rs=x.rt&&x.rt.res;if(rs==='c1'||rs==='c2'||rs==='g'||rs==='n')return;   /* cancelado (las 3 formas) o «me equivoqué con el ✓»: no hubo viaje */
     const d=new Date(x.okAt);if(isNaN(d.getTime())||dateKey(d)!==k)return;
     const m=d.getHours()*60+d.getMinutes();
     if(em!=null&&(m>em||em-m>180))return;                             /* aceptada después de acabar, o hace más de 3 h */
-    if(!best||x.okAt>best.okAt)best=x;
+    C.push(x);
   });
+  const a=Number(amt),same=a>0?C.filter(x=>x.offer&&Math.abs(Number(x.offer.price)-a)<0.011):[];
+  let best=null;
+  (same.length?same:C).forEach(x=>{if(!best||x.okAt>best.okAt)best=x});
   if(!best)return null;
   const d=new Date(best.okAt);
   return {id:best.id,start:String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
@@ -1274,7 +1280,7 @@ function kmLineHtml(v){return v>0?`<small>${kmTxt(v)} (GPS)</small>`:''}
 /*v322-ui*/
 // v3.22 · Control Horario: bloques «Todas las apps» en circulos grises, tramos y detalle semanal en ventanas que se esconden.
 window.ctlOpen=(function(){let o={tr:0,sem:0,mes:0,meta:0};try{const s=JSON.parse(localStorage.getItem('pdc_ctl_open')||'{}');o={tr:s.tr?1:0,sem:s.sem?1:0,mes:s.mes?1:0,meta:s.meta?1:0}}catch(e){}return o})();
-function ctlSet(id,v){ctlOpen[id]=v?1:0;try{localStorage.setItem('pdc_ctl_open',JSON.stringify(ctlOpen))}catch(e){}if(id==='meta'&&v){try{planRefresh(false)}catch(e){}}}
+function ctlSet(id,v){ctlOpen[id]=v?1:0;try{localStorage.setItem('pdc_ctl_open',JSON.stringify(ctlOpen))}catch(e){}if(id==='plan'&&v){try{planRefresh(false)}catch(e){}}}
 function ctlDetails(id,title,inner){return `<details class="ctl-det" id="ctl_${id}"${ctlOpen[id]?' open':''} ontoggle="ctlSet('${id}',this.open)"><summary>${title}</summary><div class="ctl-in">${inner}</div></details>`}
 function kmcHtml(v){return v>0?`<small>${kmTxt(v)}</small>`:''}
 function grayCircle(label,val,extra,cls,attrs){return `<div class="metric control-metric control-gray${cls?' '+cls:''}"${attrs||''}><small>${label}</small><b>${val}</b>${extra||''}</div>`}
@@ -1542,7 +1548,7 @@ function renderControl(){
   let dayTotal=boltMinutesForDay(k),dayPri=priorityMinutesForDay(k),dayNon=Math.max(0,dayTotal-dayPri);
   let button=active?`<button class="toggle running" onclick="toggleSession()">■ Finalizar jornada · ${new Date(active.start).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}</button>`:`<button class="toggle" onclick="toggleSession()">▶ Iniciar jornada</button>`;
   document.querySelector('#content').innerHTML=`<section class="panel"><div class="section-title t-top">Control Horario · Diario</div><div class="navrow"><button class="back" onclick="changeDay(-1)">‹</button><b>${fmtDate(k)}</b><button class="back" onclick="changeDay(1)">›</button></div>${button}${appSwitchHtml()}<div class="appblk">${prioDot()} Solo ${prioName()}<span class="ctl-chip"><small>Estado</small><b>${active?'EN CURSO':'Finalizada'}</b></span></div><div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(dayPri)}</b></div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(dayNon)}</b></div><div class="metric control-metric control-total"><small>Total de horas</small><b>${hoursText(dayTotal)}</b></div></div>${daySplitHtml(k)}${ctlDetails('tr','🕒 Tramos del día ('+daySessions.length+') · añadir tramo manual',`<div class="note">Cada inicio y finalización se guarda como un tramo independiente. Tramos registrados hoy: <b>${daySessions.length}</b>. El total diario suma todos los tramos.</div><div class="row" style="margin-top:10px"><input type="time" id="start" value="00:00"><input type="time" id="end" value="00:00"></div><button id="saveHoursBtn" class="action" style="width:100%;margin-top:8px" onclick="saveHoursManual()">Añadir tramo manual</button><button id="cancelHourEdit" class="back" style="display:none;width:100%;margin-top:6px" onclick="cancelHourEdit()">Cancelar edición</button>${hourSegmentsHtml(k,daySessions)}`)}</section>
-  <section class="panel"><div class="section-title">Resumen semanal</div><div class="navrow"><button class="back" onclick="changeControlWeek(-1)">‹</button><b>Semanal · ${fmtDate(dateKey(w.mon))} → ${fmtDate(dateKey(w.sun))}</b><button class="back" onclick="changeControlWeek(1)">›</button></div><div class="appblk">${prioDot()} Solo ${prioName()}<span class="ctl-chip"><small>${w.goals.split?'Faltan en total ('+goalTxt(w.goals.total)+')':'Faltan para '+goalTxt(db.settings.goal)}</small><b>${hoursText(w.remain)}</b></span></div><div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(w.pri)}</b>${w.goals.split&&w.goals.pri>0?'<span class="circ-de">de '+goalTxt(w.goals.pri)+'</span>':''}</div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(w.non)}</b>${w.goals.split&&w.goals.non>0?'<span class="circ-de">de '+goalTxt(w.goals.non)+'</span>':''}</div><div class="metric control-metric control-total"><small>Total semanal</small><b>${hoursText(w.total)}</b>${w.goals.split?'<span class="circ-de">de '+goalTxt(w.goals.total)+'</span>':''}</div></div>${goalBoxHtml(w)}${allBlockHtml(w,'sem')}${ctlDetails('sem','📅 Detalle por día de la semana',weekTable(w.mon))}${ctlDetails('meta','⏱️ Metas y horarios prioritarios',goalsPanelHtml())}</section>
+  <section class="panel"><div class="section-title">Resumen semanal</div><div class="navrow"><button class="back" onclick="changeControlWeek(-1)">‹</button><b>Semanal · ${fmtDate(dateKey(w.mon))} → ${fmtDate(dateKey(w.sun))}</b><button class="back" onclick="changeControlWeek(1)">›</button></div><div class="appblk">${prioDot()} Solo ${prioName()}<span class="ctl-chip"><small>${w.goals.split?'Faltan en total ('+goalTxt(w.goals.total)+')':'Faltan para '+goalTxt(db.settings.goal)}</small><b>${hoursText(w.remain)}</b></span></div><div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(w.pri)}</b>${w.goals.split&&w.goals.pri>0?'<span class="circ-de">de '+goalTxt(w.goals.pri)+'</span>':''}</div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(w.non)}</b>${w.goals.split&&w.goals.non>0?'<span class="circ-de">de '+goalTxt(w.goals.non)+'</span>':''}</div><div class="metric control-metric control-total"><small>Total semanal</small><b>${hoursText(w.total)}</b>${w.goals.split?'<span class="circ-de">de '+goalTxt(w.goals.total)+'</span>':''}</div></div>${goalBoxHtml(w)}${allBlockHtml(w,'sem')}${ctlDetails('sem','📅 Detalle por día de la semana',weekTable(w.mon))}${ctlDetails('meta','⏱️ Metas y horarios prioritarios',goalsPanelHtml())}${ctlDetails('plan','🗓️ Plan de días libres',goalsPlanHtml())}${ctlDetails('hor','🕘 Horario prioritario de día',goalsHorHtml())}</section>
   <section class="panel"><div class="section-title">Resumen mensual</div><div class="navrow"><button class="back" onclick="changeControlMonth(-1)">‹</button><b>${m.first.toLocaleDateString('es-ES',{month:'long',year:'numeric'})}</b><button class="back" onclick="changeControlMonth(1)">›</button></div><div class="appblk">${prioDot()} Solo ${prioName()}<span class="ctl-chip"><small>Días trabajados</small><b>${m.days}</b></span></div><div class="summary-grid control-circles"><div class="metric control-metric control-pri"><small>Horas prioritarias</small><b>${hoursText(m.pri)}</b>${m.goals.split&&m.goals.pri>0?'<span class="circ-de">de '+goalTxt(m.goals.pri)+'</span>':''}</div><div class="metric control-metric control-non"><small>Horas no prioritarias</small><b>${hoursText(m.non)}</b>${m.goals.split&&m.goals.non>0?'<span class="circ-de">de '+goalTxt(m.goals.non)+'</span>':''}</div><div class="metric control-metric control-total"><small>Total mensual</small><b>${hoursText(m.total)}</b>${m.goals.split?'<span class="circ-de">de '+goalTxt(m.goals.total)+'</span>':''}</div></div>${goalBoxHtml(m)}${allBlockHtml(m,'mes')}${ctlDetails('mes','🗓️ Detalle por semana del mes',monthTable(m.first,m.last))}</section><div class="futuristic fuel-panel" style="margin-top:12px;padding:12px;border-radius:22px"><button class="action" style="width:100%" onclick="toggleFuelPanel()">⛽ Gasolina y odómetro · ${fuelPanelOpen?'▲ Ocultar':'▼ Mostrar'}</button>${fuelPanelOpen?`<div class="fuel-panel-content"><div class="navrow"><button class="back" onclick="changeFuelDay(-1)">‹</button><b>${fmtDate(fuelSelected)}</b><button class="back" onclick="changeFuelDay(1)">›</button></div><div class="section-title fp-head" id="fpGas">⛽ Gasolina</div><div class="row"><input type="number" step="0.01" id="fuel" value="" placeholder="Añadir importe €" inputmode="decimal" onfocus="this.select()"><button class="action" onclick="saveFuel()">Añadir gasolina</button></div><button class="action fuel-summary-btn" style="width:100%;margin-top:10px" onclick="toggleFuelSummary()">${fuelSummaryOpen?'▲ Ocultar resumen':'📋 Ver resumen de gasolina'}</button>${fuelSummaryOpen?`<div class="fuel-summary" style="margin-top:12px"><div class="note">Acumulado del día: <b>${euro(db.fuel[fuelSelected]||0)}</b> · El resumen se organiza por meses.</div><div style="margin-top:12px"><b>Cargas de ${fmtDate(fuelSelected)}</b>${fuelEntriesHtml(fuelSelected)}</div>${fuelMonthSummaryHtml()}</div>`:''}<div class="section-title fp-head fp-odo" id="fpOdo">🚘 Odómetro</div>${(()=>{const o=dayOdometer(fuelSelected),km=kilometersForDay(fuelSelected),dayTotal=fact(fuelSelected);return `<div class="odometer-box"><div class="note" style="margin:0 0 6px">De la jornada · es opcional</div><div class="odo-fields"><div><label for="odoStart">Inicio (km)</label><input id="odoStart" type="number" min="0" step="1" inputmode="numeric" placeholder="Km inicial" value="${o.start!==''?o.start:''}"></div><div><label for="odoEnd">Final (km)</label><input id="odoEnd" type="number" min="0" step="1" inputmode="numeric" placeholder="Km final" value="${o.end!==''?o.end:''}"></div></div><button class="action" style="width:100%;margin-top:8px" onclick="saveOdometer('${fuelSelected}')">Guardar kilómetros</button><div class="odometer-result"><div class="odo-line"><span>Kilómetros recorridos</span><b>${km===null?'—':kmTxt(km)}</b></div><div class="odo-line"><span>Facturación por km</span><b>${km>0?euro(dayTotal/km)+'/km':'—'}</b></div></div></div>`})()}</div>`:''}</div>` }
 function saveHoursManual(){let st=document.querySelector('#start').value,en=document.querySelector('#end').value;if(!st||!en||st==='00:00'&&en==='00:00'){alert('Introduce la hora de inicio y finalización del tramo.');return}if(st===en){alert('La hora de inicio y finalización no pueden ser iguales.');return}let a=new Date(selectedDay+'T'+st+':00'),b=new Date(selectedDay+'T'+en+':00');if(b<a)b.setDate(b.getDate()+1);if(editingHourId!==null){const h=(db.hours||[]).find(x=>String(x.id)===String(editingHourId));if(h){db.hours=db.hours.filter(x=>String(x.id)!==String(editingHourId));const rec={...h,date:selectedDay,start:a.toISOString(),end:b.toISOString(),manual:true};db.hours.push(...splitHourRecordByCalendarDay(rec));}editingHourId=null;}else{const rec={id:'hour_manual_'+Date.now()+'_'+Math.random().toString(36).slice(2),date:selectedDay,app:currentWorkApp(),...(currentWorkApp()==='other'&&currentWorkSub()?{sub:currentWorkSub()}:{}),start:a.toISOString(),end:b.toISOString(),manual:true};db.hours.push(...splitHourRecordByCalendarDay(rec));}save();renderControl()}
 function saveFuel(){const v=Number(String(document.querySelector('#fuel').value||'').replace(',','.'))||0;if(v<=0)return;ensureFuelEntries();db.fuelEntries[fuelSelected]=fuelEntriesForDay(fuelSelected);db.fuelEntries[fuelSelected].push({id:Date.now()+Math.random(),amount:Number(v.toFixed(2))});recalcFuelDay(fuelSelected);save();renderControl()}
@@ -1717,10 +1723,10 @@ function planSecHtml(){
   <label class="gl-lab" for="planMax" style="margin-top:14px">Máximo de horas por día</label><input class="gl-in" id="planMax" type="number" inputmode="decimal" min="1" max="24" step=".5" value="${c.set?String(c.max):''}" placeholder="10" onchange="planSetMax()">
   <div class="gl-note">El plan nunca te pone más horas que esto en un solo día. En blanco = 10 h.</div>`}
 function planBoxHtml(){
-  if(!ctlOpen.meta)return '';
+  if(!ctlOpen.plan)return '';
   const sc=planScope,r=planBuild(sc);
   const head=`<div class="gl-sub">🗓️ Plan para cumplir</div><div class="pl-pills" id="planScope"><button type="button" class="pl-pill${sc==='w'?' on':''}" onclick="planScopeSet('w')">Esta semana</button><button type="button" class="pl-pill${sc==='m'?' on':''}" onclick="planScopeSet('m')">Este mes</button></div>`;
-  if(!r.ok)return head+`<div class="gl-note">Pon las horas prioritarias y no prioritarias ${sc==='w'?'de la semana':'del mes'} (más arriba) y pulsa Guardar para ver el plan.</div>`;
+  if(!r.ok)return head+`<div class="gl-note">Pon las horas prioritarias y no prioritarias ${sc==='w'?'de la semana':'del mes'} (en «Metas y horarios prioritarios», justo arriba) y pulsa Guardar para ver el plan.</div>`;
   if(r.need.pri+r.need.non<=0)return head+`<div class="pl-oky">✅ Ya cumpliste las metas ${sc==='w'?'de esta semana':'de este mes'}.</div>`;
   const ok=r.shortPri+r.shortNon<=0,peak=Math.max(0,...r.days.map(d=>d.totalMin));
   const sum=`<div class="goalbox pl-sum${ok?'':' no'}"><div class="goalrow pri"><div class="top"><span>🟢 Prioritarias</span><em>faltan ${planDur(r.need.pri)}</em></div></div><div class="goalrow non"><div class="top"><span>🔴 No prioritarias</span><em>faltan ${planDur(r.need.non)}</em></div></div>
@@ -1755,10 +1761,9 @@ function planSetMax(){const e=document.getElementById('planMax');if(!e)return;co
   if(v>0)db.settings.planMax=Math.max(1,Math.min(24,Math.round(v*4)/4));else delete db.settings.planMax;
   save();e.value=planCfg().set?String(planCfg().max):'';planRefresh(false)}
 function planScopeSet(s){planScope=s==='m'?'m':'w';planRefresh(false)}
-function planGo(s){planScope=s==='m'?'m':'w';goToGoals();setTimeout(()=>{const b=document.getElementById('planBox');if(b){try{b.scrollIntoView({behavior:'smooth',block:'start'})}catch(e){b.scrollIntoView()}}},260)}
+function planGo(s){planScope=s==='m'?'m':'w';goToGoals('plan');setTimeout(()=>{const b=document.getElementById('planBox');if(b){try{b.scrollIntoView({behavior:'smooth',block:'start'})}catch(e){b.scrollIntoView()}}},260)}
 function goalsPanelHtml(){const s=db.settings,g=goalsCfg(),names={1:'Lunes',2:'Martes',3:'Miércoles',4:'Jueves',5:'Viernes',6:'Sábado',0:'Domingo'},pri=s.priority||{};
   const val=v=>v>0?String(v):'';
-  const rows=[1,2,3,4,5,6,0].map(d=>`<label class="gl-lab" for="sch${d}">${names[d]}</label><input class="gl-in" id="sch${d}" value="${((pri[d]||[]).join(', ')).replace(/"/g,'&quot;')}" placeholder="07:00-10:00, 17:00-20:00">`).join('');
   return `<div class="gl-sub">Metas de la semana</div>
   <label class="gl-lab" for="goalPri">Horas prioritarias a la semana</label><input class="gl-in" id="goalPri" type="number" inputmode="decimal" min="0" step=".5" value="${val(g.split?g.pri:0)}" placeholder="Ej.: 30" oninput="goalsPreview()">
   <label class="gl-lab" for="goalNon">Horas no prioritarias a la semana</label><input class="gl-in" id="goalNon" type="number" inputmode="decimal" min="0" step=".5" value="${val(g.split?g.non:0)}" placeholder="Ej.: 25" oninput="goalsPreview()">
@@ -1769,25 +1774,28 @@ function goalsPanelHtml(){const s=db.settings,g=goalsCfg(),names={1:'Lunes',2:'M
   <label class="gl-lab" for="goalNonM">Horas no prioritarias al mes</label><input class="gl-in" id="goalNonM" type="number" inputmode="decimal" min="0" step=".5" value="${val(goalsCfgM().non)}" placeholder="Ej.: 110" oninput="goalsPreview()">
   <div class="gl-tot"><span>Total mensual</span><b id="goalTotM">${goalsCfgM().split?goalTxt(goalsCfgM().total):'sin meta'}</b></div>
   <div class="gl-note">Con estas metas, el resumen mensual enseña las dos barras. Si las dejas en blanco, el mes no lleva barras.</div>
-  <div class="gl-sub">Horario prioritario de cada día</div>
+  <button class="gl-btn" onclick="saveGoals()">✓ Guardar</button>${window.__goalsOk===1?'<div class="gl-ok" id="glOk">✓ Guardado</div>':''}`}
+function goalsPlanHtml(){return `<div id="planSec">${planSecHtml()}</div><div id="planBox">${planBoxHtml()}</div>`}
+function goalsHorHtml(){const s=db.settings,names={1:'Lunes',2:'Martes',3:'Miércoles',4:'Jueves',5:'Viernes',6:'Sábado',0:'Domingo'},pri=s.priority||{};
+  const rows=[1,2,3,4,5,6,0].map(d=>`<label class="gl-lab" for="sch${d}">${names[d]}</label><input class="gl-in" id="sch${d}" value="${((pri[d]||[]).join(', ')).replace(/"/g,'&quot;')}" placeholder="07:00-10:00, 17:00-20:00">`).join('');
+  return `<div class="gl-sub">Horario prioritario de cada día</div>
   <div class="gl-note">Separa varios tramos con comas. Si acaba pasada la medianoche, se escribe por ejemplo 17:00-02:00.</div>${rows}
-  <button class="gl-btn" onclick="saveGoals()">✓ Guardar</button>${window.__goalsOk?'<div class="gl-ok" id="glOk">✓ Guardado</div>':''}
-  <div id="planSec">${planSecHtml()}</div><div id="planBox">${planBoxHtml()}</div>`}
+  <button class="gl-btn" onclick="saveGoals('hor')">✓ Guardar</button>${window.__goalsOk===2?'<div class="gl-ok" id="glOk">✓ Guardado</div>':''}`}
 function goalsPreview(){const el=(id)=>{const e=document.querySelector('#'+id);return e?goalNum(String(e.value).replace(',','.')):0},p=el('goalPri'),n=el('goalNon'),t=document.querySelector('#goalTot');
   if(t)t.textContent=p+n>0?goalTxt(p+n):goalTxt((db.settings.goal||0))+' (el de antes)';
   {const em=(id)=>{const e=document.querySelector('#'+id);return e?goalNumM(String(e.value).replace(',','.')):0},pm=em('goalPriM'),nm_=em('goalNonM'),tm=document.querySelector('#goalTotM');if(tm)tm.textContent=pm+nm_>0?goalTxt(pm+nm_):'sin meta'}}
-function saveGoals(){const el=(id)=>{const e=document.querySelector('#'+id);return e?goalNum(String(e.value).replace(',','.')):0},p=el('goalPri'),n=el('goalNon');
+function saveGoals(w){w=w==='hor'?'hor':'meta';const el=(id)=>{const e=document.querySelector('#'+id);return e?goalNum(String(e.value).replace(',','.')):0},p=el('goalPri'),n=el('goalNon');
   db.settings.goalPri=p;db.settings.goalNon=n;
   {const gv=(id)=>{const e=document.querySelector('#'+id);return e?goalNumM(String(e.value).replace(',','.')):0};db.settings.goalPriM=gv('goalPriM');db.settings.goalNonM=gv('goalNonM')}   // v3.66: metas del mes
   if(p+n>0)db.settings.goal=Math.round((p+n)*100)/100;
   db.settings.priority=db.settings.priority||{};
   [1,2,3,4,5,6,0].forEach(d=>{const i=document.querySelector('#sch'+d);if(i)db.settings.priority[d]=(i.value||'').split(',').map(x=>x.trim()).filter(Boolean)});
-  normalizeDbSettings();save();ctlOpen.meta=1;ctlSet('meta',1);window.__goalsOk=1;
+  normalizeDbSettings();save();ctlOpen[w]=1;ctlSet(w,1);window.__goalsOk=(w==='hor'?2:1);
   const y=window.scrollY;renderControl();try{window.scrollTo(0,y)}catch(e){}
   setTimeout(()=>{window.__goalsOk=0;const o=document.querySelector('#glOk');if(o)o.remove()},2500)}
 // desde Ajustes: lleva a la lengüeta nueva de Control horario
-function goToGoals(){ctlOpen.meta=1;ctlSet('meta',1);controlWeek=0;show('control');
-  setTimeout(()=>{const d=document.querySelector('#ctl_meta');if(d){d.open=true;try{d.scrollIntoView({behavior:'smooth',block:'start'})}catch(e){d.scrollIntoView()}}},80)}
+function goToGoals(w){w=(w==='plan'||w==='hor')?w:'meta';ctlOpen[w]=1;ctlSet(w,1);controlWeek=0;show('control');
+  setTimeout(()=>{const d=document.querySelector('#ctl_'+w);if(d){d.open=true;try{d.scrollIntoView({behavior:'smooth',block:'start'})}catch(e){d.scrollIntoView()}}},80)}
 function weekTable(mon){let rows='';const hh=m=>{m=Math.max(0,Math.round(m));return Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')};for(let i=0;i<7;i++){let x=new Date(mon);x.setDate(mon.getDate()+i);let k=dateKey(x),t=boltMinutesForDay(k),p=priorityMinutesForDay(k),all=totalMinutesForDay(k);rows+=`<tr><td>${new Date(k+'T12:00:00').toLocaleDateString('es-ES',{weekday:'short',day:'2-digit',month:'2-digit'})}</td><td class="g">${hh(p)}</td><td class="r">${hh(t-p)}</td><td class="b">${hh(t)}</td><td class="s">${hh(all)}</td></tr>`}return `<table class="wk"><tr><th>Día</th><th class="g">Prior.</th><th class="r">No prior.</th><th class="b">${prioName()}</th><th class="s">Todas</th></tr>${rows}</table>`}
 function monthTable(first,last){const hh=m=>{m=Math.max(0,Math.round(m));return Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')};const weeks=[];let cur=null;
 for(let d=new Date(first);d<=last;d.setDate(d.getDate()+1)){const k=dateKey(d),dow=d.getDay()||7;if(!cur||dow===1){cur={a:new Date(d),b:new Date(d),t:0,p:0,all:0};weeks.push(cur)}cur.b=new Date(d);cur.t+=boltMinutesForDay(k);cur.p+=priorityMinutesForDay(k);cur.all+=totalMinutesForDay(k)}
@@ -3095,7 +3103,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.67';
+const APP_VERSION='v3.68';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -9722,7 +9730,7 @@ function onClick(e){
     const t={id:'t'+Date.now()+'_'+Math.floor(Math.random()*1e5),ts:Date.now(),offer:null,alb:null,man:{},st:'ok',okAt:Date.now(),manual:true};
     s.open.push(t);rh('manual',t);save();refresh();view={name:'detail',id:t.id,tab:'alb',from:'list'};paint();listScroll=null;return;
   }
-  if(a==='pend-ok'){const t=s.pend.find(x=>x.id===id);if(t){s.pend=s.pend.filter(x=>x!==t);t.okAt=Date.now();s.open.push(t);s.open.sort((x,y)=>x.ts-y.ts);rh('yes',t);save();refresh();toast('Viaje añadido a la lista')}return}
+  if(a==='pend-ok'){const t=s.pend.find(x=>x.id===id);if(t){s.pend=s.pend.filter(x=>x!==t);t.okAt=(fin(t.ts)&&t.ts<=Date.now())?t.ts:Date.now();s.open.push(t);s.open.sort((x,y)=>x.ts-y.ts);rh('yes',t);save();refresh();toast('Viaje añadido a la lista')}return}
   if(a==='pend-del'){s.pend=s.pend.filter(x=>x.id!==id);save();return paint()}
   if(a==='close-day'){
     if(!s.open.length)return;
@@ -12533,4 +12541,624 @@ body.vista-sec .hdr-tit{display:flex;position:absolute;left:0;right:0;top:0;heig
 body[data-vista=control] .app .header .hdr-tit img[data-v=control],body[data-vista=billing] .app .header .hdr-tit img[data-v=billing],body[data-vista=report] .app .header .hdr-tit img[data-v=report],body[data-vista=settings] .app .header .hdr-tit img[data-v=settings]{display:block!important}
 body.vista-sec .app::before{content:"";position:absolute;left:0;right:0;top:0;height:0;padding-top:43.2%;z-index:0;pointer-events:none;background:url(fondo-vista.webp) 50% 0/100% 100% no-repeat;-webkit-mask-image:linear-gradient(180deg,rgba(0,0,0,.80) 0,rgba(0,0,0,.70) 46%,rgba(0,0,0,.42) 70%,rgba(0,0,0,.12) 88%,rgba(0,0,0,0) 100%);mask-image:linear-gradient(180deg,rgba(0,0,0,.80) 0,rgba(0,0,0,.70) 46%,rgba(0,0,0,.42) 70%,rgba(0,0,0,.12) 88%,rgba(0,0,0,0) 100%)}
 body.vista-sec .app .header.hdr-banner,body.vista-sec #content{position:relative!important;z-index:1}
+</style>
+<style id="pdc-relieve">
+/* v3.68 · relieve y esquinas redondeadas (generado; claro y oscuro; mantiene los colores y brillos de siempre). Modo ligero: relieve «duro» sin desenfoque (barato). */
+html body.lt:not(#za):not(#zb):not(#zc) #content button.platform.bolt{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content button.platform.uber{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content button.platform.cabify{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content button.platform.private{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content button.airport{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content button.plat2.freenow{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content button.plat2.pidetaxi{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content button.cancel-btn{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content button.camera-capture{border-radius:28px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.ps.bolt{border-radius:24px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.ps.uber{border-radius:24px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.ps.cabify{border-radius:24px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.ps.private{border-radius:24px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.ps.freenow{border-radius:24px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.ps.pidetaxi{border-radius:24px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content span.trip-actions>button.action{border-radius:13px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.ctl-in>button.action{border-radius:18px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.futuristic.fuel-panel>button.action{border-radius:18px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content section.panel>button.action{border-radius:18px!important}
+html body.lt:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn.active{border-radius:21px!important}
+html body.lt:not(#za):not(#zb):not(#zc) button.navbtn.active{border-radius:22px!important}
+html body.lt:not(#za):not(#zb):not(#zc) button.navbtn{border-radius:22px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content section.panel{border-radius:30px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.metric.totalMetric{border-radius:26px!important}
+html body.lt:not(.vista-sec):not(#za):not(#zb):not(#zc) #content div.metric{border-radius:26px!important}
+html body.lt.vista-sec:not(#za):not(#zb):not(#zc) #content div.metric{border-radius:26px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.daily-motivation{border-radius:24px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.navrow.calc-day-nav{border-radius:22px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.efficiency-card{border-radius:22px!important}
+html body.lt:not(#za):not(#zb):not(#zc) button.drawer-item{border-radius:24px!important}
+html body.lt:not(#za):not(#zb):not(#zc) button.drawer-close{border-radius:15px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content button.toggle{border-radius:20px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content button.gl-btn{border-radius:20px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.sg>button.on{border-radius:20px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.pl-pills>button.pl-pill.on{border-radius:11px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.navrow{border-radius:18px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content details.ctl-det{border-radius:20px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.futuristic.fuel-panel{border-radius:28px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.pl-form{border-radius:24px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.gl-tot{border-radius:16px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content button.pl-pill.on{border-radius:14px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content button.pl-pill{border-radius:14px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.sg>button{border-radius:20px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.period-tabs>button.active{border-radius:21px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.canc-sum{border-radius:24px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.cs-cell{border-radius:20px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.cs-cell.cs-canc{border-radius:20px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.cs-cell.cs-total{border-radius:20px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.period-tabs>button{border-radius:21px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.panel{border-radius:30px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content section.panel.payroll-panel{border-radius:30px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.payroll-final{border-radius:26px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content button.action.cmp-full{border-radius:22px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-tabs>button.on{border-radius:22px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-tabs{border-radius:22px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-hero{border-radius:26px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-chip{border-radius:22px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-card.cmp-pfull{border-radius:28px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-card{border-radius:28px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-uber{border-radius:26px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-private{border-radius:26px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-cabify{border-radius:26px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-bolt{border-radius:26px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-tabs>button{border-radius:22px!important}
+html body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn.active:nth-child(5){border-radius:22px!important}
+html body:not(.lt):not(.vista-sec):not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn.active:nth-child(1){border-radius:22px!important}
+html body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn.active:nth-child(2){border-radius:22px!important}
+html body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn.active:nth-child(3){border-radius:22px!important}
+html body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn.active:nth-child(4){border-radius:22px!important}
+html body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(1){border-radius:22px!important}
+html body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(2){border-radius:22px!important}
+html body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(3){border-radius:22px!important}
+html body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(4){border-radius:22px!important}
+html body:not(.lt):not(.vista-sec):not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(2){border-radius:22px!important}
+html body:not(.lt):not(.vista-sec):not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(3){border-radius:22px!important}
+html body:not(.lt):not(.vista-sec):not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(4){border-radius:22px!important}
+html body:not(.lt):not(.vista-sec):not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(5){border-radius:22px!important}
+html body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(5){border-radius:22px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content section.panel.futuristic{border-radius:30px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) button.drawer-item{border-radius:24px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.rateopt{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.sosopt{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.account{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.appsettings{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.themerow{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.rentopt{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) button.drawer-close{border-radius:15px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.account-badge{border-radius:18px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.secondary{border-radius:18px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.danger{border-radius:18px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.action{border-radius:18px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content section.panel{border-radius:30px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.st-blk{border-radius:24px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.payroll-final{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.tm-list>button.settings-option.tm-opt.on{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.tm-opt{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.tm-opt.on{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) div.rp-tabs>button.on{border-radius:22px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) div.rp-days>button.rp-d.on.hoy{border-radius:16px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) div.rp-card{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) div.rp-ed{border-radius:20px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) button.rp-d.on.hoy{border-radius:16px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) div.rp-d.off{border-radius:16px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) button.rp-nav{border-radius:12px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) button.bt.m{border-radius:14px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) button.bt.p{border-radius:14px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) button.bt.e{border-radius:14px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) button.rp-b{border-radius:16px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) div.rp-tabs>button{border-radius:22px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-tabs>button.on{border-radius:11px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-note.inf-warn{border-radius:18px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-card{border-radius:20px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-note{border-radius:18px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-tabs{border-radius:14px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-tabs>button{border-radius:11px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-tabs.sp-sub>button.on{border-radius:11px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-tabs.sp-sub{border-radius:14px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-tabs.sp-sub>button{border-radius:11px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.inf-btn{border-radius:20px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.help-hero{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.subpage-row{border-radius:22px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.info-logo{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content details.subpage-row{border-radius:22px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.subpage-row{border-radius:22px!important}
+html body.lt:not(#za):not(#zb):not(#zc) div.rp-tabs>button.on{border-radius:22px!important}
+html body.lt:not(#za):not(#zb):not(#zc) div.rp-card{border-radius:26px!important}
+html body.lt:not(#za):not(#zb):not(#zc) button.rp-nav{border-radius:12px!important}
+html body.lt:not(#za):not(#zb):not(#zc) button.bt.m{border-radius:14px!important}
+html body.lt:not(#za):not(#zb):not(#zc) button.bt.p{border-radius:14px!important}
+html body.lt:not(#za):not(#zb):not(#zc) button.rp-b{border-radius:16px!important}
+html body.lt:not(#za):not(#zb):not(#zc) div.rp-tabs>button{border-radius:22px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.platform.bolt{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.platform.uber{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.platform.cabify{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.platform.private{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.airport{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.plat2.freenow{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.plat2.pidetaxi{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.cancel-btn{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.camera-capture{border-radius:28px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.ps.bolt{border-radius:24px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.ps.uber{border-radius:24px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.ps.cabify{border-radius:24px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.ps.private{border-radius:24px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.ps.freenow{border-radius:24px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.ps.pidetaxi{border-radius:24px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.totalMetric{border-radius:26px!important}
+html body:not(.lt):not(.vista-sec):not(#za):not(#zb):not(#zc) #content div.metric{border-radius:26px!important}
+html body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) #content div.metric{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.daily-motivation{border-radius:24px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.navrow.calc-day-nav{border-radius:22px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.efficiency-card{border-radius:22px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.toggle{border-radius:20px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.gl-btn{border-radius:20px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.sg>button.on{border-radius:20px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.pl-pills>button.pl-pill.on{border-radius:11px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content details.ctl-det{border-radius:20px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.futuristic.fuel-panel{border-radius:28px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.pl-form{border-radius:24px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.gl-tot{border-radius:16px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.pl-pill.on{border-radius:14px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.pl-pill{border-radius:14px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.sg>button{border-radius:20px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.period-tabs>button.active{border-radius:21px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.canc-sum{border-radius:24px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cs-cell{border-radius:20px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cs-cell.cs-canc{border-radius:20px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cs-cell.cs-total{border-radius:20px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.period-tabs>button{border-radius:21px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.panel{border-radius:30px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content section.panel.payroll-panel{border-radius:30px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.action.cmp-full{border-radius:22px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-tabs>button.on{border-radius:22px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-tabs{border-radius:22px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-hero{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-chip{border-radius:22px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-card.cmp-pfull{border-radius:28px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-card{border-radius:28px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-uber{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-private{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-cabify{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-bolt{border-radius:26px!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-tabs>button{border-radius:22px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.platform.bolt{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body:not(#za):not(#zb):not(#zc) #content button.platform.uber{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body:not(#za):not(#zb):not(#zc) #content button.platform.cabify{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body:not(#za):not(#zb):not(#zc) #content button.platform.private{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body:not(#za):not(#zb):not(#zc) #content button.airport{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body:not(#za):not(#zb):not(#zc) #content button.plat2.freenow{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body:not(#za):not(#zb):not(#zc) #content button.plat2.pidetaxi{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body:not(#za):not(#zb):not(#zc) #content button.cancel-btn{border-radius:clamp(14px,calc(17.3vw - 41.3px),30px)!important}
+html body:not(#za):not(#zb):not(#zc) #content button.camera-capture{border-radius:28px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.ps.bolt{border-radius:24px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.ps.uber{border-radius:24px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.ps.cabify{border-radius:24px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.ps.private{border-radius:24px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.ps.freenow{border-radius:24px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.ps.pidetaxi{border-radius:24px!important}
+html body:not(#za):not(#zb):not(#zc) button.navbtn.active{border-radius:22px!important}
+html body:not(#za):not(#zb):not(#zc) button.navbtn{border-radius:22px!important}
+html body:not(#za):not(#zb):not(#zc) #content section.panel{border-radius:30px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.metric.totalMetric{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.metric{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.daily-motivation{border-radius:24px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.navrow.calc-day-nav{border-radius:22px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.efficiency-card{border-radius:22px!important}
+html body:not(#za):not(#zb):not(#zc) button.drawer-item{border-radius:24px!important}
+html body:not(#za):not(#zb):not(#zc) button.drawer-close{border-radius:15px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.toggle{border-radius:20px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.gl-btn{border-radius:20px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.navrow{border-radius:18px!important}
+html body:not(#za):not(#zb):not(#zc) #content details.ctl-det{border-radius:20px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.futuristic.fuel-panel{border-radius:28px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.pl-form{border-radius:24px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.gl-tot{border-radius:16px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.pl-pill.on{border-radius:14px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.pl-pill{border-radius:14px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.canc-sum{border-radius:24px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.cs-cell{border-radius:20px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.cs-cell.cs-canc{border-radius:20px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.cs-cell.cs-total{border-radius:20px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.panel{border-radius:30px!important}
+html body:not(#za):not(#zb):not(#zc) #content section.panel.payroll-panel{border-radius:30px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.payroll-final{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.action.cmp-full{border-radius:22px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.cmp-tabs{border-radius:22px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.cmp-hero{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.cmp-chip{border-radius:22px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.cmp-card.cmp-pfull{border-radius:28px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.cmp-card{border-radius:28px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-uber{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-private{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-cabify{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-bolt{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) #content section.panel.futuristic{border-radius:30px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.settings-option.rateopt{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.settings-option.sosopt{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.settings-option.account{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.settings-option.appsettings{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.settings-option.themerow{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.settings-option.rentopt{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.account-badge{border-radius:18px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.secondary{border-radius:18px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.danger{border-radius:18px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.st-blk{border-radius:24px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.settings-option.tm-opt{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.settings-option.tm-opt.on{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) div.rp-card{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) div.rp-ed{border-radius:20px!important}
+html body:not(#za):not(#zb):not(#zc) button.rp-d.on.hoy{border-radius:16px!important}
+html body:not(#za):not(#zb):not(#zc) div.rp-d.off{border-radius:16px!important}
+html body:not(#za):not(#zb):not(#zc) button.rp-nav{border-radius:12px!important}
+html body:not(#za):not(#zb):not(#zc) button.bt.m{border-radius:14px!important}
+html body:not(#za):not(#zb):not(#zc) button.bt.p{border-radius:14px!important}
+html body:not(#za):not(#zb):not(#zc) button.bt.e{border-radius:14px!important}
+html body:not(#za):not(#zb):not(#zc) button.rp-b{border-radius:16px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.inf-note.inf-warn{border-radius:18px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.inf-card{border-radius:20px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.inf-note{border-radius:18px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.inf-tabs{border-radius:14px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.inf-tabs.sp-sub{border-radius:14px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.inf-btn{border-radius:20px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.help-hero{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) #content button.subpage-row{border-radius:22px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.info-logo{border-radius:26px!important}
+html body:not(#za):not(#zb):not(#zc) #content details.subpage-row{border-radius:22px!important}
+html body:not(#za):not(#zb):not(#zc) #content div.subpage-row{border-radius:22px!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-pri{border-radius:50%!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-non{border-radius:50%!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-total{border-radius:50%!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-tot{border-radius:50%!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray{border-radius:50%!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-bolt{border-radius:50%!important}
+html body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-oth.tap{border-radius:50%!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-pri{border-radius:50%!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-non{border-radius:50%!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-total{border-radius:50%!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-tot{border-radius:50%!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray{border-radius:50%!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-bolt{border-radius:50%!important}
+html body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-oth.tap{border-radius:50%!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content button.platform.bolt{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(44, 185, 79, 0.4) 0px 8px 20px 0px, rgba(255, 255, 255, 0.55) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content button.platform.uber{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(28, 29, 34, 0.35) 0px 8px 20px 0px, rgba(255, 255, 255, 0.35) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content button.platform.cabify{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(141, 70, 209, 0.38) 0px 8px 20px 0px, rgba(255, 255, 255, 0.5) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content button.platform.private{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(10, 132, 255, 0.4) 0px 8px 20px 0px, rgba(255, 255, 255, 0.55) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content button.airport{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(44, 185, 79, 0.38) 0px 8px 20px 0px, rgba(255, 255, 255, 0.5) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content button.plat2.freenow{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(214, 4, 111, 0.38) 0px 8px 20px 0px, rgba(255, 255, 255, 0.5) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content button.plat2.pidetaxi{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(242, 169, 0, 0.4) 0px 8px 20px 0px, rgba(255, 255, 255, 0.6) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content button.cancel-btn{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(232, 54, 44, 0.38) 0px 8px 20px 0px, rgba(255, 255, 255, 0.5) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content button.camera-capture{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(43, 109, 240, 0.3) 0px 6px 16px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.ps.bolt{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(44, 185, 79, 0.4) 0px 8px 20px 0px, rgba(255, 255, 255, 0.55) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.ps.uber{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(28, 29, 34, 0.35) 0px 8px 20px 0px, rgba(255, 255, 255, 0.35) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.ps.cabify{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(141, 70, 209, 0.38) 0px 8px 20px 0px, rgba(255, 255, 255, 0.5) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.ps.private{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(10, 132, 255, 0.4) 0px 8px 20px 0px, rgba(255, 255, 255, 0.55) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.ps.freenow{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(214, 4, 111, 0.38) 0px 8px 20px 0px, rgba(255, 255, 255, 0.5) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.ps.pidetaxi{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(242, 169, 0, 0.4) 0px 8px 20px 0px, rgba(255, 255, 255, 0.6) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content span.trip-actions>button.action{border:0!important;box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18),rgba(43, 109, 240, 0.3) 0px 6px 16px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.ctl-in>button.action{border:0!important;box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18),rgba(43, 109, 240, 0.3) 0px 6px 16px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.futuristic.fuel-panel>button.action{border:0!important;box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18),rgba(40, 110, 200, 0.07) 0px 4px 18px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content section.panel>button.action{border:0!important;box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18),rgba(43, 109, 240, 0.3) 0px 6px 16px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn.active{box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(43, 109, 240, 0.4) 0px 6px 16px 0px, rgba(255, 255, 255, 0.5) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) button.navbtn.active{box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(43, 109, 240, 0.4) 0px 6px 16px 0px, rgba(255, 255, 255, 0.5) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content section.panel{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12),rgba(40, 110, 200, 0.09) 0px 8px 30px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.metric.totalMetric{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(10, 132, 255, 0.2) 0px 8px 22px 0px, rgb(255, 255, 255) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt:not(.vista-sec):not(#za):not(#zb):not(#zc) #content div.metric{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(44, 185, 79, 0.2) 0px 8px 22px 0px, rgb(255, 255, 255) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt.vista-sec:not(#za):not(#zb):not(#zc) #content div.metric{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(40, 110, 200, 0.07) 0px 4px 18px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.daily-motivation{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(40, 110, 200, 0.07) 0px 4px 18px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.navrow.calc-day-nav{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(40, 110, 200, 0.07) 0px 4px 18px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.efficiency-card{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(40, 110, 200, 0.07) 0px 4px 18px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) button.drawer-item{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content button.toggle{border:0!important;box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18),rgba(43, 109, 240, 0.3) 0px 6px 16px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content button.gl-btn{box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.sg>button.on{border:0!important;box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18),rgba(44, 185, 79, 0.34) 0px 6px 16px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.navrow{box-shadow:inset 0 3px 4px rgba(255,255,255,.95),inset 0 -4px 6px rgba(40,100,190,.12),rgba(40, 110, 200, 0.07) 0px 4px 18px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content details.ctl-det{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12),rgba(40, 110, 200, 0.07) 0px 4px 18px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.futuristic.fuel-panel{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(30, 90, 180, 0.14) 0px 8px 24px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.pl-form{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.period-tabs>button.active{border:0!important;box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18),rgba(0, 141, 255, 0.333) 0px 0px 18px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.canc-sum{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(40, 110, 200, 0.07) 0px 4px 18px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.cs-cell{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(40, 110, 200, 0.07) 0px 4px 18px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.cs-cell.cs-canc{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(40, 110, 200, 0.07) 0px 4px 18px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.cs-cell.cs-total{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(40, 110, 200, 0.07) 0px 4px 18px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.panel{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12),rgba(40, 110, 200, 0.09) 0px 8px 30px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content section.panel.payroll-panel{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12),rgba(40, 110, 200, 0.09) 0px 8px 30px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.payroll-final{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38),rgba(40, 124, 255, 0.267) 0px 0px 22px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content button.action.cmp-full{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(43, 109, 240, 0.3) 0px 6px 16px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-tabs>button.on{border:0!important;box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18),rgba(0, 140, 255, 0.467) 0px 0px 16px 0px!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-tabs{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-hero{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(0, 140, 255, 0.2) 0px 0px 22px 0px, rgba(255, 255, 255, 0.133) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-chip{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-card.cmp-pfull{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-card{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-uber{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-private{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-cabify{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-bolt{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13)!important}
+html:not(.pdc-lite) body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn.active:nth-child(5){box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgb(158, 197, 232) 0px 0px 16px 0px, color(srgb 0.619608 0.772549 0.909804 / 0.35) 0px 0px 14px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(.vista-sec):not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn.active:nth-child(1){box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgb(22, 223, 255) 0px 0px 16px 0px, color(srgb 0.0862745 0.87451 1 / 0.35) 0px 0px 14px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn.active:nth-child(2){box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgb(0, 245, 138) 0px 0px 16px 0px, color(srgb 0 0.960784 0.541176 / 0.35) 0px 0px 14px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn.active:nth-child(3){box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgb(255, 177, 43) 0px 0px 16px 0px, color(srgb 1 0.694118 0.168627 / 0.35) 0px 0px 14px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn.active:nth-child(4){box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgb(211, 76, 255) 0px 0px 16px 0px, color(srgb 0.827451 0.298039 1 / 0.35) 0px 0px 14px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(1){box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),color(srgb 0.0862745 0.87451 1 / 0.45) 0px 0px 8px 0px!important}
+html:not(.pdc-lite) body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(2){box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),color(srgb 0 0.960784 0.541176 / 0.45) 0px 0px 8px 0px!important}
+html:not(.pdc-lite) body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(3){box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),color(srgb 1 0.694118 0.168627 / 0.45) 0px 0px 8px 0px!important}
+html:not(.pdc-lite) body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(4){box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),color(srgb 0.827451 0.298039 1 / 0.45) 0px 0px 8px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(.vista-sec):not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(2){box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),color(srgb 0 0.960784 0.541176 / 0.45) 0px 0px 8px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(.vista-sec):not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(3){box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),color(srgb 1 0.694118 0.168627 / 0.45) 0px 0px 8px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(.vista-sec):not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(4){box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),color(srgb 0.827451 0.298039 1 / 0.45) 0px 0px 8px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(.vista-sec):not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(5){box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),color(srgb 0.619608 0.772549 0.909804 / 0.45) 0px 0px 8px 0px!important}
+html:not(.pdc-lite) body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(5){box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),color(srgb 0.619608 0.772549 0.909804 / 0.45) 0px 0px 8px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content section.panel.futuristic{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35),rgba(0, 140, 255, 0.094) 0px 0px 14px 0px, rgba(255, 255, 255, 0.047) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) button.drawer-item{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.rateopt{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(0, 0, 0, 0.05) 0px 5px 15px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.sosopt{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(0, 0, 0, 0.05) 0px 5px 15px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.account{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(0, 0, 0, 0.05) 0px 5px 15px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.appsettings{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(0, 0, 0, 0.05) 0px 5px 15px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.themerow{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(0, 0, 0, 0.05) 0px 5px 15px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.rentopt{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(0, 0, 0, 0.05) 0px 5px 15px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.account-badge{box-shadow:inset 0 3px 4px rgba(255,255,255,.95),inset 0 -4px 6px rgba(40,100,190,.12)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.secondary{box-shadow:inset 0 3px 5px rgba(255,255,255,.1),inset 0 -4px 6px rgba(0,0,0,.34)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.danger{box-shadow:inset 0 3px 5px rgba(255,255,255,.1),inset 0 -4px 6px rgba(0,0,0,.34)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.action{box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18),rgba(32, 186, 255, 0.094) 0px 0px 9px 0px, rgba(0, 27, 43, 0.082) 0px 4px 13px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content section.panel{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35),rgba(0, 140, 255, 0.094) 0px 0px 14px 0px, rgba(255, 255, 255, 0.047) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.st-blk{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.payroll-final{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38),rgba(40, 124, 255, 0.267) 0px 0px 22px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.tm-list>button.settings-option.tm-opt.on{box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(10, 132, 255, 0.4) 0px 0px 0px 2px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.tm-opt{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(0, 0, 0, 0.05) 0px 5px 15px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.tm-opt.on{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13),rgba(10, 132, 255, 0.4) 0px 0px 0px 2px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) div.rp-tabs>button.on{box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) div.rp-days>button.rp-d.on.hoy{box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(52, 195, 255, 0.4) 0px 0px 10px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) div.rp-card{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) div.rp-ed{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) div.rp-ring{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) button.rp-d.on.hoy{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38),rgba(52, 195, 255, 0.4) 0px 0px 10px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) div.rp-d.off{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-tabs>button.on{box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18),rgba(0, 0, 0, 0.4) 0px 1px 3px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-note.inf-warn{box-shadow:inset 0 3px 5px rgba(255,255,255,.1),inset 0 -4px 6px rgba(0,0,0,.34)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-card{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-note{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-tabs.sp-sub>button.on{box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18),rgba(0, 0, 0, 0.4) 0px 1px 3px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.inf-btn{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.help-hero{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.subpage-row{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.info-logo{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38),rgba(42, 167, 255, 0.133) 0px 0px 22px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content details.subpage-row{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.subpage-row{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) div.rp-tabs>button.on{box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) div.rp-card{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) div.rp-ring{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.platform.bolt{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(0, 245, 139, 0.6) 0px 0px 0px 1px, rgba(0, 245, 139, 0.6) 0px 0px 12px 0px, rgba(0, 16, 29, 0.208) 0px 6px 18px 0px, rgba(255, 255, 255, 0.44) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.platform.uber{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(168, 223, 255, 0.533) 0px 0px 0px 1px, rgba(168, 223, 255, 0.533) 0px 0px 12px 0px, rgba(0, 16, 29, 0.208) 0px 6px 18px 0px, rgba(255, 255, 255, 0.44) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.platform.cabify{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(179, 76, 255, 0.667) 0px 0px 0px 1px, rgba(179, 76, 255, 0.667) 0px 0px 12px 0px, rgba(0, 16, 29, 0.208) 0px 6px 18px 0px, rgba(255, 255, 255, 0.44) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.platform.private{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(32, 186, 255, 0.667) 0px 0px 0px 1px, rgba(32, 186, 255, 0.667) 0px 0px 12px 0px, rgba(0, 16, 29, 0.208) 0px 6px 18px 0px, rgba(255, 255, 255, 0.44) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.airport{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(0, 245, 139, 0.6) 0px 0px 0px 1px, rgba(0, 245, 139, 0.6) 0px 0px 12px 0px, rgba(0, 16, 29, 0.208) 0px 6px 18px 0px, rgba(255, 255, 255, 0.44) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.plat2.freenow{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(242, 58, 146, 0.333) 0px 0px 14px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.plat2.pidetaxi{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(255, 196, 0, 0.333) 0px 0px 14px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.cancel-btn{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(255, 106, 61, 0.333) 0px 0px 14px 0px, rgba(255, 255, 255, 0.267) 0px 1px 3px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.camera-capture{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(79, 227, 255, 0.45) 0px 0px 16px 0px, rgba(79, 227, 255, 0.14) 0px 0px 16px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.ps.bolt{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(0, 245, 139, 0.6) 0px 0px 8px 0px, rgba(0, 245, 139, 0.333) 0px 0px 18px 0px, rgba(255, 255, 255, 0.4) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.ps.uber{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(143, 202, 255, 0.4) 0px 0px 8px 0px, rgba(143, 202, 255, 0.19) 0px 0px 16px 0px, rgba(255, 255, 255, 0.333) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.ps.cabify{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(165, 44, 255, 0.667) 0px 0px 8px 0px, rgba(165, 44, 255, 0.4) 0px 0px 18px 0px, rgba(255, 255, 255, 0.4) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.ps.private{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(20, 157, 255, 0.667) 0px 0px 8px 0px, rgba(20, 157, 255, 0.4) 0px 0px 18px 0px, rgba(255, 255, 255, 0.4) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.ps.freenow{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(242, 58, 146, 0.533) 0px 0px 12px 0px, rgba(255, 255, 255, 0.4) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.ps.pidetaxi{border:0!important;box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(255, 196, 0, 0.533) 0px 0px 12px 0px, rgba(255, 255, 255, 0.533) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.totalMetric{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38),rgba(47, 140, 255, 0.32) 0px 0px 18px 0px, rgba(255, 255, 255, 0.16) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(.vista-sec):not(#za):not(#zb):not(#zc) #content div.metric{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38),rgba(150, 80, 255, 0.32) 0px 0px 18px 0px, rgba(255, 255, 255, 0.16) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) #content div.metric{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38),rgba(0, 140, 255, 0.094) 0px 0px 14px 0px, rgba(255, 255, 255, 0.047) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.daily-motivation{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38),rgba(243, 184, 75, 0.125) 0px 0px 18px 0px, rgba(255, 255, 255, 0.03) 0px 0px 18px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.navrow.calc-day-nav{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.efficiency-card{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38),rgba(63, 210, 255, 0.267) 0px 0px 11px 0px, rgba(63, 210, 255, 0.08) 0px 0px 14px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.toggle{box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18),rgba(0, 140, 255, 0.333) 0px 0px 18px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.gl-btn{box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.sg>button.on{box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content details.ctl-det{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12),rgba(47, 140, 255, 0.2) 0px 0px 14px 0px, rgba(255, 255, 255, 0.14) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.futuristic.fuel-panel{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38),rgba(0, 141, 255, 0.125) 0px 0px 18px 0px, rgba(255, 255, 255, 0.07) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.pl-form{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.period-tabs>button.active{box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18),rgba(0, 141, 255, 0.333) 0px 0px 18px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.canc-sum{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cs-cell{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cs-cell.cs-canc{box-shadow:inset 0 4px 6px rgba(255,255,255,.95),inset 0 -5px 8px rgba(40,100,190,.13)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cs-cell.cs-total{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.panel{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35),rgba(0, 140, 255, 0.094) 0px 0px 14px 0px, rgba(255, 255, 255, 0.047) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content section.panel.payroll-panel{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35),rgba(0, 140, 255, 0.094) 0px 0px 14px 0px, rgba(255, 255, 255, 0.047) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.action.cmp-full{box-shadow:inset 0 6px 8px rgba(255,255,255,.38),inset 0 -8px 10px rgba(0,0,0,.21),rgba(32, 186, 255, 0.094) 0px 0px 9px 0px, rgba(0, 27, 43, 0.082) 0px 4px 13px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-tabs>button.on{box-shadow:inset 0 3px 5px rgba(255,255,255,.4),inset 0 -5px 7px rgba(0,0,0,.18),rgba(0, 140, 255, 0.467) 0px 0px 16px 0px!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-tabs{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-hero{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38),rgba(0, 140, 255, 0.2) 0px 0px 22px 0px, rgba(255, 255, 255, 0.133) 0px 1px 0px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-chip{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-card.cmp-pfull{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-card{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-uber{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-private{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-cabify{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-bolt{box-shadow:inset 0 4px 7px rgba(255,255,255,.1),inset 0 -6px 9px rgba(0,0,0,.38)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-pri{border:0!important;box-shadow:inset 0 0 0 4px rgb(31,157,66),inset 0 0 0 6px rgba(255,255,255,.55),inset 0 12px 16px rgba(255,255,255,.18),inset 0 -10px 14px rgba(0,0,0,.08),0 0 10px rgba(31,157,66,.55)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-non{border:0!important;box-shadow:inset 0 0 0 4px rgb(232,69,60),inset 0 0 0 6px rgba(255,255,255,.55),inset 0 12px 16px rgba(255,255,255,.18),inset 0 -10px 14px rgba(0,0,0,.08),0 0 10px rgba(232,69,60,.55)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-total{border:0!important;box-shadow:inset 0 0 0 4px rgb(43,109,240),inset 0 0 0 6px rgba(255,255,255,.55),inset 0 12px 16px rgba(255,255,255,.18),inset 0 -10px 14px rgba(0,0,0,.08),0 0 10px rgba(43,109,240,.55)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-tot{border:0!important;box-shadow:inset 0 0 0 4px rgb(170,182,200),inset 0 0 0 6px rgba(255,255,255,.55),inset 0 12px 16px rgba(255,255,255,.18),inset 0 -10px 14px rgba(0,0,0,.08),0 0 10px rgba(170,182,200,.55)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray{border:0!important;box-shadow:inset 0 0 0 4px rgb(170,182,200),inset 0 0 0 6px rgba(255,255,255,.55),inset 0 12px 16px rgba(255,255,255,.18),inset 0 -10px 14px rgba(0,0,0,.08),0 0 10px rgba(170,182,200,.55)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-bolt{border:0!important;box-shadow:inset 0 0 0 4px rgb(31,157,66),inset 0 0 0 6px rgba(255,255,255,.55),inset 0 12px 16px rgba(255,255,255,.18),inset 0 -10px 14px rgba(0,0,0,.08),0 0 10px rgba(31,157,66,.55)!important}
+html:not(.pdc-lite) body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-oth.tap{border:0!important;box-shadow:inset 0 0 0 4px rgb(90,200,245),inset 0 0 0 6px rgba(255,255,255,.55),inset 0 12px 16px rgba(255,255,255,.18),inset 0 -10px 14px rgba(0,0,0,.08),0 0 10px rgba(90,200,245,.55)!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-pri{box-shadow:inset 0 9px 13px rgba(255,255,255,.12),inset 0 -10px 14px rgba(0,0,0,.4),rgb(0, 255, 154) 0px 0px 10px 0px, rgba(0, 255, 154, 0.4) 0px 0px 16px 0px, rgba(0, 255, 154, 0.157) 0px 0px 20px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-non{box-shadow:inset 0 9px 13px rgba(255,255,255,.12),inset 0 -10px 14px rgba(0,0,0,.4),rgb(255, 49, 95) 0px 0px 10px 0px, rgba(255, 49, 95, 0.4) 0px 0px 16px 0px, rgba(255, 49, 95, 0.157) 0px 0px 20px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-total{box-shadow:inset 0 9px 13px rgba(255,255,255,.12),inset 0 -10px 14px rgba(0,0,0,.4),rgb(22, 143, 255) 0px 0px 10px 0px, rgba(22, 143, 255, 0.467) 0px 0px 16px 0px, rgba(22, 143, 255, 0.157) 0px 0px 20px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-tot{box-shadow:inset 0 9px 13px rgba(255,255,255,.12),inset 0 -10px 14px rgba(0,0,0,.4),rgb(170, 180, 196) 0px 0px 10px 0px, rgba(170, 180, 196, 0.333) 0px 0px 16px 0px, rgba(170, 180, 196, 0.133) 0px 0px 20px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray{box-shadow:inset 0 9px 13px rgba(255,255,255,.12),inset 0 -10px 14px rgba(0,0,0,.4),rgb(170, 180, 196) 0px 0px 10px 0px, rgba(170, 180, 196, 0.333) 0px 0px 16px 0px, rgba(170, 180, 196, 0.133) 0px 0px 20px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-bolt{box-shadow:inset 0 9px 13px rgba(255,255,255,.12),inset 0 -10px 14px rgba(0,0,0,.4),rgba(55, 229, 143, 0.533) 0px 0px 12px 0px, rgba(55, 229, 143, 0.2) 0px 0px 14px 0px inset!important}
+html:not(.pdc-lite) body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-oth.tap{box-shadow:inset 0 9px 13px rgba(255,255,255,.12),inset 0 -10px 14px rgba(0,0,0,.4),rgba(178, 125, 255, 0.533) 0px 0px 12px 0px, rgba(178, 125, 255, 0.2) 0px 0px 14px 0px inset!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content button.platform.bolt{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content button.platform.uber{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content button.platform.cabify{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content button.platform.private{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content button.airport{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content button.plat2.freenow{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content button.plat2.pidetaxi{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content button.cancel-btn{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content button.camera-capture{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.ps.bolt{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.ps.uber{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.ps.cabify{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.ps.private{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.ps.freenow{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.ps.pidetaxi{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content span.trip-actions>button.action{border:0!important;box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.ctl-in>button.action{border:0!important;box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.futuristic.fuel-panel>button.action{border:0!important;box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content section.panel>button.action{border:0!important;box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn.active{box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) button.navbtn.active{box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content section.panel{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.metric.totalMetric{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(.vista-sec):not(#za):not(#zb):not(#zc) #content div.metric{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt.vista-sec:not(#za):not(#zb):not(#zc) #content div.metric{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.daily-motivation{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.navrow.calc-day-nav{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.efficiency-card{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) button.drawer-item{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content button.toggle{border:0!important;box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content button.gl-btn{box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.sg>button.on{border:0!important;box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.navrow{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content details.ctl-det{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.futuristic.fuel-panel{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.pl-form{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.period-tabs>button.active{border:0!important;box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.canc-sum{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.cs-cell{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.cs-cell.cs-canc{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.cs-cell.cs-total{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.panel{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content section.panel.payroll-panel{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.payroll-final{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content button.action.cmp-full{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-tabs>button.on{border:0!important;box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-tabs{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-hero{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-chip{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-card.cmp-pfull{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.cmp-card{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-uber{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-private{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-cabify{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-bolt{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn.active:nth-child(5){box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(.vista-sec):not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn.active:nth-child(1){box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn.active:nth-child(2){box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn.active:nth-child(3){box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn.active:nth-child(4){box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(1){box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(2){box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(3){box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(4){box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(.vista-sec):not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(2){box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(.vista-sec):not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(3){box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(.vista-sec):not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(4){box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(.vista-sec):not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(5){box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) nav.neon-nav>button.navbtn:nth-child(5){box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content section.panel.futuristic{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) button.drawer-item{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.rateopt{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.sosopt{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.account{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.appsettings{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.themerow{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.rentopt{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.account-badge{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.secondary{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.danger{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.action{box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content section.panel{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.st-blk{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.payroll-final{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.tm-list>button.settings-option.tm-opt.on{box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.tm-opt{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.settings-option.tm-opt.on{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) div.rp-tabs>button.on{box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) div.rp-days>button.rp-d.on.hoy{box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) div.rp-card{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) div.rp-ed{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) div.rp-ring{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) button.rp-d.on.hoy{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) div.rp-d.off{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-tabs>button.on{box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-note.inf-warn{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-card{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-note{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.inf-tabs.sp-sub>button.on{box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.inf-btn{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.help-hero{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.subpage-row{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.info-logo{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content details.subpage-row{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.subpage-row{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) div.rp-tabs>button.on{box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) div.rp-card{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) div.rp-ring{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.platform.bolt{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.platform.uber{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.platform.cabify{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.platform.private{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.airport{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.plat2.freenow{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.plat2.pidetaxi{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.cancel-btn{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.camera-capture{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.ps.bolt{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.ps.uber{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.ps.cabify{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.ps.private{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.ps.freenow{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.ps.pidetaxi{border:0!important;box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.totalMetric{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(.vista-sec):not(#za):not(#zb):not(#zc) #content div.metric{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt).vista-sec:not(#za):not(#zb):not(#zc) #content div.metric{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.daily-motivation{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.navrow.calc-day-nav{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.efficiency-card{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.toggle{box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.gl-btn{box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.sg>button.on{box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content details.ctl-det{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.futuristic.fuel-panel{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.pl-form{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.period-tabs>button.active{box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.canc-sum{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cs-cell{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cs-cell.cs-canc{box-shadow:inset 0 2px 0 rgba(255,255,255,.95),inset 0 -3px 0 rgba(40,100,190,.12)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cs-cell.cs-total{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.panel{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content section.panel.payroll-panel{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.action.cmp-full{box-shadow:inset 0 3px 0 rgba(255,255,255,.34),inset 0 -4px 0 rgba(0,0,0,.2)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-tabs>button.on{box-shadow:inset 0 2px 0 rgba(255,255,255,.34),inset 0 -3px 0 rgba(0,0,0,.18)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-tabs{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-hero{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-chip{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-card.cmp-pfull{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.cmp-card{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-uber{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-private{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-cabify{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content button.cmp-app.cmp-bolt{box-shadow:inset 0 2px 0 rgba(255,255,255,.1),inset 0 -3px 0 rgba(0,0,0,.35)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-pri{border:0!important;box-shadow:inset 0 0 0 4px rgb(31,157,66),inset 0 0 0 6px rgba(255,255,255,.55)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-non{border:0!important;box-shadow:inset 0 0 0 4px rgb(232,69,60),inset 0 0 0 6px rgba(255,255,255,.55)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-total{border:0!important;box-shadow:inset 0 0 0 4px rgb(43,109,240),inset 0 0 0 6px rgba(255,255,255,.55)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-tot{border:0!important;box-shadow:inset 0 0 0 4px rgb(170,182,200),inset 0 0 0 6px rgba(255,255,255,.55)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray{border:0!important;box-shadow:inset 0 0 0 4px rgb(170,182,200),inset 0 0 0 6px rgba(255,255,255,.55)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-bolt{border:0!important;box-shadow:inset 0 0 0 4px rgb(31,157,66),inset 0 0 0 6px rgba(255,255,255,.55)!important}
+html.pdc-lite body.lt:not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-oth.tap{border:0!important;box-shadow:inset 0 0 0 4px rgb(90,200,245),inset 0 0 0 6px rgba(255,255,255,.55)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-pri{box-shadow:inset 0 2px 0 rgba(255,255,255,.14),inset 0 -3px 0 rgba(0,0,0,.4)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-non{box-shadow:inset 0 2px 0 rgba(255,255,255,.14),inset 0 -3px 0 rgba(0,0,0,.4)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-total{box-shadow:inset 0 2px 0 rgba(255,255,255,.14),inset 0 -3px 0 rgba(0,0,0,.4)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-tot{box-shadow:inset 0 2px 0 rgba(255,255,255,.14),inset 0 -3px 0 rgba(0,0,0,.4)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray{box-shadow:inset 0 2px 0 rgba(255,255,255,.14),inset 0 -3px 0 rgba(0,0,0,.4)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-bolt{box-shadow:inset 0 2px 0 rgba(255,255,255,.14),inset 0 -3px 0 rgba(0,0,0,.4)!important}
+html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-oth.tap{box-shadow:inset 0 2px 0 rgba(255,255,255,.14),inset 0 -3px 0 rgba(0,0,0,.4)!important}
+/* menu lateral: el boton SOS (fijo arriba a la izquierda) ya no tapa el titulo «MI CUENTA» */
+html body:not(#za):not(#zb):not(#zc) #sideDrawer .drawer-list{padding-top:max(12px,calc(var(--sos-t,69px) - 40px))!important}
 </style>
