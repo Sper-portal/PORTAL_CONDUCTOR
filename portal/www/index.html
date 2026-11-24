@@ -179,11 +179,11 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:8px 4px;b
     <div class="drawer-section">MI CUENTA</div>
     <button class="drawer-item" onclick="settingsFrom=0;closeSideMenu();renderAccount()"><span class="di">👤</span><span><b>Cuenta</b><small>Correo o móvil, sesión y seguridad</small></span><span class="arr">›</span></button>
     <div class="drawer-section">APLICACIÓN</div>
-    <button class="drawer-item" onclick="settingsFrom=0;closeSideMenu();renderAppSettings()"><span class="di">⚙️</span><span><b>Configuración de la app</b><small>Comisiones, horarios, Bolt y nómina</small></span><span class="arr">›</span></button>
+    <button class="drawer-item" onclick="settingsFrom=0;closeSideMenu();renderAppSettings()"><span class="di">⚙️</span><span><b>Nóminas y comisiones</b><small>Tu nómina y la comisión de Bolt</small></span><span class="arr">›</span></button>
     <button class="drawer-item" onclick="closeSideMenu();renderNotifications()"><span class="di">🔔</span><span><b>Notificaciones</b><small>Avisos y recordatorios</small></span><span class="arr">›</span></button>
     <button class="drawer-item" onclick="closeSideMenu();renderInfo()"><span class="di">ℹ️</span><span><b>Información</b><small>Versión, actualizaciones y datos de la app</small></span><span class="arr">›</span></button>
     <button class="drawer-item" onclick="closeSideMenu();renderHelp()"><span class="di">❓</span><span><b>Ayuda</b><small>Ayuda para conductores y contacto</small></span><span class="arr">›</span></button>
-    <!--v316-menu--><button class="drawer-item" onclick="closeSideMenu();renderMadridHoy()"><span class="di">🌦️</span><span><b>Madrid hoy</b><small>Tiempo y eventos de Madrid</small></span><span class="arr">›</span></button><!--v316-menu-end-->
+    <!--v316-menu--><button class="drawer-item" onclick="closeSideMenu();renderMadridHoy()"><span class="di">🌦️</span><span><b>Eventos Madrid hoy</b><small>Tiempo y eventos de Madrid</small></span><span class="arr">›</span></button><!--v316-menu-end-->
   </div>
 </aside>
 <main id="content"></main>
@@ -580,12 +580,49 @@ function confirmPayment(payment){if(!pendingTrip)return;const p=pendingTrip;if(p
 function openUberCashModal(){if(!pendingTrip)return;const p=pendingTrip;const modal=document.querySelector('#uberCashModal');const amount=document.querySelector('#uberCashActual');if(amount)amount.value=Number(p.amount).toFixed(2);const original=document.querySelector('#uberCashOriginal');if(original)original.textContent=euro(p.amount);const platform=document.querySelector('#uberCashPlatform');if(platform)platform.textContent=p.platform;document.querySelector('#paymentModal')?.classList.add('hidden');modal?.classList.remove('hidden')}
 function cancelUberCashModal(){document.querySelector('#uberCashModal')?.classList.add('hidden');document.querySelector('#paymentModal')?.classList.remove('hidden')}
 function saveUberCashTrip(){if(!pendingTrip||!['Bolt','Uber','Cabify'].includes(pendingTrip.platform))return;const raw=String(document.querySelector('#uberCashActual')?.value??'').trim().replace(',','.');const actual=Number(raw);if(raw===''||!Number.isFinite(actual)||actual<0){alert('Introduce el efectivo realmente cobrado. Puede ser 0 si no recibiste efectivo.');return;}savePendingTrip('cash',Number(actual.toFixed(2)))}
-function savePendingTrip(payment,cashActual){if(!pendingTrip)return;const p=pendingTrip;const tripDate=calcAnchor||today();const trip={id:Date.now()+Math.random(),date:tripDate,time:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}),platform:p.platform,airport:p.airport,orig:p.amount,net:p.net,payment};if(payment==='cash'&&['Bolt','Uber','Cabify'].includes(p.platform))trip.cashActual=Number(cashActual)||0;db.trips.push(trip);save();const inp=document.querySelector('#price');if(inp)inp.value='';document.querySelector('#uberCashModal')?.classList.add('hidden');closePaymentModal();renderCalc()}
+function savePendingTrip(payment,cashActual){if(!pendingTrip)return;const p=pendingTrip;const tripDate=calcAnchor||today();const trip={id:Date.now()+Math.random(),date:tripDate,time:new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}),platform:p.platform,airport:p.airport,orig:p.amount,net:p.net,payment};if(p.platform==='Bolt'&&tripDate===today()){try{const a=acceptedStartFor(tripDate,trip.time);if(a){trip.start=a.start;trip.lid=a.id}}catch(e){}}if(payment==='cash'&&['Bolt','Uber','Cabify'].includes(p.platform))trip.cashActual=Number(cashActual)||0;db.trips.push(trip);save();const inp=document.querySelector('#price');if(inp)inp.value='';document.querySelector('#uberCashModal')?.classList.add('hidden');closePaymentModal();renderCalc()}
 function addTripTip(id,source='calc'){const t=db.trips.find(x=>String(x.id)===String(id));if(!t)return;const current=Number(t.tip)||0;const raw=prompt('Propina recibida para '+t.platform+' (€):',current.toFixed(2).replace('.',','));if(raw===null)return;const value=Number(String(raw).trim().replace(',','.'));if(!Number.isFinite(value)||value<0){alert('Introduce una propina válida.');return;}t.tip=Number(value.toFixed(2));save();if(source==='billing')renderBilling();else renderCalc()}
 function delTrip(id){db.trips=db.trips.filter(t=>t.id!==id);save();renderCalc()}
 function delLast(){let ts=db.trips.filter(t=>t.date===calcAnchor);if(ts.length){let id=ts[ts.length-1].id;delTrip(id)}}
 function changeCalcDay(n){let d=new Date(calcAnchor+'T12:00:00');d.setDate(d.getDate()+n);const max=new Date(today()+'T12:00:00');const min=new Date(max);min.setMonth(min.getMonth()-18);if(d>max)d=max;if(d<min)d=min;calcAnchor=dateKey(d);renderCalc()}
 function dayTrips(k){return db.trips.filter(t=>t.date===k)}
+/* v3.67 · horas de cada viaje (Juan 24-11 03:50). «time» = hora en que ACABA (la de siempre: la que se guarda al apuntar el viaje) y «start» = hora en que lo ACEPTASTE (opcional).
+   Bolt: si aceptaste el viaje con ✓ (lengüeta «Viajes guardados») al apuntarlo se pone sola la hora de ese ✓ (y se guarda «lid» para no usar la misma dos veces). Las dos horas se editan con el lápiz.
+   La lista «Últimos viajes» va ordenada por la hora de fin (la última arriba): un viaje apuntado tarde y corregido a las 06:10 se coloca entre los de las 06:00 y las 06:30, no en la punta. */
+const HM_RE=/^([01]?\d|2[0-3]):([0-5]\d)$/;
+function hmNorm(s){const m=HM_RE.exec(String(s==null?'':s).trim());return m?(m[1].length<2?'0':'')+m[1]+':'+m[2]:''}
+function hmMin(s){const m=HM_RE.exec(String(s==null?'':s).trim());return m?(+m[1])*60+(+m[2]):null}
+/* por hora de fin, la última arriba; los que no tienen hora heredan la del viaje anterior (se quedan donde estaban); a igual hora, el apuntado después va antes */
+function tripsByTimeDesc(ts){
+  let last=-1;const a=ts.map((t,i)=>{const m=hmMin(t.time);if(m!=null)last=m;return {t:t,i:i,k:m!=null?m:last}});
+  a.sort((x,y)=>y.k-x.k||y.i-x.i);
+  return a.map(x=>x.t);
+}
+/* Bolt: el ✓ más reciente (aún sin usar) de hoy, de las 3 últimas horas y anterior a la hora de fin → {id,start:'HH:MM'} o null */
+function acceptedStartFor(k,endHM){
+  const T=window.__pdcTrips;if(!T||!T.state)return null;
+  const used={};db.trips.forEach(x=>{if(x&&x.lid)used[x.lid]=1});
+  const em=hmMin(endHM);let best=null;
+  ((T.state()||{}).open||[]).forEach(x=>{
+    if(!x||!x.okAt||used[x.id])return;
+    if(x.rt&&(x.rt.res==='c1'||x.rt.res==='c2'))return;              /* la cancelaste tú o el pasajero: no hubo viaje */
+    const d=new Date(x.okAt);if(isNaN(d.getTime())||dateKey(d)!==k)return;
+    const m=d.getHours()*60+d.getMinutes();
+    if(em!=null&&(m>em||em-m>180))return;                             /* aceptada después de acabar, o hace más de 3 h */
+    if(!best||x.okAt>best.okAt)best=x;
+  });
+  if(!best)return null;
+  const d=new Date(best.okAt);
+  return {id:best.id,start:String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
+}
+/* segunda línea de la fila (solo si el viaje tiene hora de aceptación): «Aceptado 06:00 · Finalizado 06:10 · 10 min» */
+function tripTimes2(t){
+  const s=hmNorm(t.start);if(!s)return '';
+  const e=hmNorm(t.time),a=hmMin(s),b=hmMin(e);
+  const dur=(a!=null&&b!=null&&b>=a)?' · '+(b-a)+' min':'';
+  return '<span class="tt2">Aceptado '+s+(e?' · Finalizado '+e:'')+dur+'</span>';
+}
+
 function hasManualPlatformAmounts(m){return !!(m&&m.platforms&&Object.values(m.platforms).some(v=>Number(v)>0))}
 function baseFact(k){const auto=dayTrips(k).reduce((a,t)=>a+(Number(t.net)||0),0);const m=db.manual[k];if(hasManualPlatformAmounts(m))return PLAT6.reduce((a,p)=>a+(Number(m.platforms[p])||0),0);if(m&&(!m.platforms)&&Number(m.total)>0)return Number(m.total);return auto}
 function tipsForDay(k){return dayTrips(k).reduce((a,t)=>a+Math.max(0,Number(t.tip)||0),0)}
@@ -1083,7 +1120,7 @@ ${dailyMotivationHtml()}
 <div class="navrow calc-day-nav"><button class="back" onclick="changeCalcDay(-1)" aria-label="Día anterior">‹</button><b>${fmtDate(k)}</b><button class="back" onclick="changeCalcDay(1)" aria-label="Día siguiente" ${k===today()?'disabled':''}>›</button></div>
 <div class="results"><div class="metric totalMetric"><div class="metricLabelRow"><small>Total facturación diaria</small><button class="billing-eye" type="button" aria-label="${hidden?'Mostrar':'Ocultar'} facturación diaria" onclick="toggleDailyBillingVisibility()">${hidden?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M6.6 7.6C4.6 8.9 3.2 10.7 2.5 12c1 1.8 4.5 6 9.5 6 1.5 0 2.8-.3 3.9-.8"/><path d="M10.7 6.1c.4-.1.8-.1 1.3-.1 5 0 8.5 4.2 9.5 6-.4.8-1.3 2-2.6 3.1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="3"/></svg>'}</button></div><b>${money(tot)}</b></div><div class="metric"><div class="metricLabelRow"><small>Mi comisión diaria (${window.PDC314&&window.PDC314.billPct?window.PDC314.billPct(k):db.settings.commission}%)</small></div><b>${money(comm)}</b></div></div>
 <div class="platform-summary">${PLAT6.map(p=>{let s=ts.filter(t=>t.platform===p).reduce((a,t)=>a+(Number(t.net)||0)+(Number(t.tip)||0),0);if(p==='Bolt')s+=calcDayComp(k);let c=platCls(p);return `<div class="ps ${c}">${p}<b>${money(s)}</b></div>`}).join('')}</div><div class="note" style="color:#18c987">🎁 Propinas del día: <b>${money(ts.reduce((a,t)=>a+(Number(t.tip)||0),0))}</b></div>
-${performanceStripHtml(k)}<div class="triplist"><div class="triplist-head"><b>Últimos viajes · ${ts.length}</b></div>${ts.length?ts.slice().reverse().map(t=>{let c=platCls(t.platform);return `<div class="trip"><i class="dot ${c}"></i><span class="platform-name ${c}">${t.platform}${t.airport?' ✈':''}</span><span>${t.time}</span><span class="orig">${money(t.orig)} → ${money(t.net)} ${t.payment==='cash'?'💵':t.payment==='card'?'💳':''}${Number(t.tip)>0?`<small style="display:block;color:#18c987">🎁 Propina: ${money(t.tip)}</small>`:''}</span><span class="trip-actions"><button class="action" title="Propina" onclick="addTripTip('${t.id}','calc')">🎁</button><button class="action" title="Editar viaje" onclick="editCalcTrip('${t.id}')">✏️</button><button class="trash" title="Borrar viaje" onclick="delTrip(${t.id})">🗑</button></span></div>`}).join(''):`<div class="empty">No hay viajes registrados el ${fmtDate(k)}.</div>`}</div>
+${performanceStripHtml(k)}<div class="triplist"><div class="triplist-head"><b>Últimos viajes · ${ts.length}</b></div>${ts.length?tripsByTimeDesc(ts).map(t=>{let c=platCls(t.platform);return `<div class="trip"><i class="dot ${c}"></i><span class="platform-name ${c}">${t.platform}${t.airport?' ✈':''}</span><span>${t.time}</span><span class="orig">${money(t.orig)} → ${money(t.net)} ${t.payment==='cash'?'💵':t.payment==='card'?'💳':''}${Number(t.tip)>0?`<small style="display:block;color:#18c987">🎁 Propina: ${money(t.tip)}</small>`:''}</span><span class="trip-actions"><button class="action" title="Propina" onclick="addTripTip('${t.id}','calc')">🎁</button><button class="action" title="Editar viaje" onclick="editCalcTrip('${t.id}')">✏️</button><button class="trash" title="Borrar viaje" onclick="delTrip(${t.id})">🗑</button></span>${tripTimes2(t)}</div>`}).join(''):`<div class="empty">No hay viajes registrados el ${fmtDate(k)}.</div>`}</div>
 </section>
 `}
 function priorityWindowsForDate(k){
@@ -1237,7 +1274,7 @@ function kmLineHtml(v){return v>0?`<small>${kmTxt(v)} (GPS)</small>`:''}
 /*v322-ui*/
 // v3.22 · Control Horario: bloques «Todas las apps» en circulos grises, tramos y detalle semanal en ventanas que se esconden.
 window.ctlOpen=(function(){let o={tr:0,sem:0,mes:0,meta:0};try{const s=JSON.parse(localStorage.getItem('pdc_ctl_open')||'{}');o={tr:s.tr?1:0,sem:s.sem?1:0,mes:s.mes?1:0,meta:s.meta?1:0}}catch(e){}return o})();
-function ctlSet(id,v){ctlOpen[id]=v?1:0;try{localStorage.setItem('pdc_ctl_open',JSON.stringify(ctlOpen))}catch(e){}}
+function ctlSet(id,v){ctlOpen[id]=v?1:0;try{localStorage.setItem('pdc_ctl_open',JSON.stringify(ctlOpen))}catch(e){}if(id==='meta'&&v){try{planRefresh(false)}catch(e){}}}
 function ctlDetails(id,title,inner){return `<details class="ctl-det" id="ctl_${id}"${ctlOpen[id]?' open':''} ontoggle="ctlSet('${id}',this.open)"><summary>${title}</summary><div class="ctl-in">${inner}</div></details>`}
 function kmcHtml(v){return v>0?`<small>${kmTxt(v)}</small>`:''}
 function grayCircle(label,val,extra,cls,attrs){return `<div class="metric control-metric control-gray${cls?' '+cls:''}"${attrs||''}><small>${label}</small><b>${val}</b>${extra||''}</div>`}
@@ -1296,7 +1333,7 @@ try{if(window.visualViewport)window.visualViewport.addEventListener('resize',fun
 // v3.24 · restyling: marca de pantalla clara (solo para Calculadora, Control, Facturacion e Informe) y color de la app prioritaria en Control.
 /*v327-theme*/
 /* v3.27 · Tema claro / oscuro (Ajustes). «Automatico»: claro de dia y oscuro de noche segun la salida y la puesta del sol en Madrid (se calcula en el movil, sin internet ni GPS);
-   «Claro» y «Oscuro» lo dejan fijo. Se guarda en este aparato (pdc_theme). Solo afecta a Calculadora, Control, Facturacion e Informe: Ajustes, el menu y Madrid hoy ya eran oscuros. */
+   «Claro» y «Oscuro» lo dejan fijo. Se guarda en este aparato (pdc_theme). Solo afecta a Calculadora, Control, Facturacion e Informe: Ajustes, el menu y Eventos Madrid hoy ya eran oscuros. */
 var K_TH='pdc_theme',LT_WANT=false;
 function themeMode(){var m=null;try{m=localStorage.getItem(K_TH)}catch(e){}return m==='light'||m==='dark'?m:'auto'}
 function sunTimes(d){
@@ -1348,7 +1385,7 @@ function themeCardAdd(){
 function renderTema(){
   ltSet(false);
   var o=function(m,ic,t,s){return '<button type="button" class="settings-option tm-opt" role="radio" data-m="'+m+'" onclick="themeSet(\''+m+'\')"><span class="ico">'+ic+'</span><span><b>'+t+'</b><small>'+s+'</small></span><span class="tm-ck">✓</span></button>'};
-  jPanel('Tema',"show('settings')",'<div class="note" style="margin-bottom:12px">Elige cómo se ven Calculadora, Control, Facturación e Informe. Ajustes, el menú y Madrid hoy son siempre oscuros.</div><div class="tm-list" id="themeOpts" role="radiogroup" aria-label="Tema">'
+  jPanel('Tema',"show('settings')",'<div class="note" style="margin-bottom:12px">Elige cómo se ven Calculadora, Control, Facturación e Informe. Ajustes, el menú y Eventos Madrid hoy son siempre oscuros.</div><div class="tm-list" id="themeOpts" role="radiogroup" aria-label="Tema">'
     +o('auto','🌗','Automático','Claro de día y oscuro de noche, según el sol en Madrid')
     +o('light','☀️','Claro','Siempre claro')
     +o('dark','🌙','Oscuro','Siempre oscuro')
@@ -1514,7 +1551,211 @@ function goalBoxHtml(w){const g=w.goals;if(!g||!g.split)return '';
   const row=(cls,name,done,goal,left)=>{if(!(goal>0))return '';
     const f=Math.max(0,Math.min(100,Math.round(done/(goal*60)*100))),over=Math.round(done-goal*60);
     return `<div class="goalrow ${cls}${left<=0?' done':''}"><div class="top"><span>${name}</span><em>${hoursText(done)} de ${goalTxt(goal)}</em></div><div class="goalbar"><i style="width:${f}%"></i></div><div class="fal">${left<=0?'✓ Cumplido'+(over>=1?' · +'+hoursText(over)+' de más':''):'Faltan '+hoursText(left)}</div></div>`};
-  return `<div class="goalbox">${row('pri','🟢 Prioritarias',w.pri,g.pri,w.remainPri)}${row('non','🔴 No prioritarias',w.non,g.non,w.remainNon)}</div>`}
+  return `<div class="goalbox">${row('pri','🟢 Prioritarias',w.pri,g.pri,w.remainPri)}${row('non','🔴 No prioritarias',w.non,g.non,w.remainNon)}</div>`+planLineHtml(w.mon?'w':'m')}
+/*PLAN-ENGINE-START*/
+// ===== v3.67 · PLAN PARA CUMPLIR LAS METAS (Juan 23-11 06:19 / 06:26) =====
+// MOTOR (funcion pura, sin pantalla ni base de datos). Todo en MINUTOS dentro del «marco» de cada dia (0 = 00:00; lo que pasa de 1440 es ya el dia siguiente).
+//  Entrada P: {u, needPri, needNon, days:[{k, win:[desde,hasta]|null (null = libre), wins:[[a,b],...] tramos prioritarios del dia, room: minutos maximos de ese dia}]}
+//  Reglas:  · se trabaja en bloques de u minutos (15);  · lo PRIORITARIO solo va dentro de los tramos prioritarios y lo NO PRIORITARIO solo fuera de ellos (asi la app lo cuenta igual que el plan);
+//           · primero se cubren las prioritarias; despues las no prioritarias;  · se reparte lo mas PAREJO posible entre los dias y nunca pasa del maximo de cada dia;
+//           · si no se llega, se da lo maximo que cabe y se dice cuanto falta.
+const PLAN_U=15;
+function planNorm(list,lo,hi,u,out){
+  // 1) se unen los tramos que se solapan o se tocan; 2) se recortan a la ventana; 3) se ajustan a la rejilla (hacia dentro = solo bloques enteros; hacia fuera = todo bloque que roce el tramo)
+  const raw=list.map(x=>[x[0],x[1]]).filter(x=>x[1]>x[0]).sort((p,q)=>p[0]-q[0]);
+  const un=[];for(const x of raw){const l=un[un.length-1];if(l&&x[0]<=l[1])l[1]=Math.max(l[1],x[1]);else un.push(x)}
+  const r=[];
+  for(const x of un){let a=Math.max(x[0],lo),b=Math.min(x[1],hi);if(b<=a)continue;
+    a=out?Math.floor(a/u)*u:Math.ceil(a/u)*u;b=out?Math.ceil(b/u)*u:Math.floor(b/u)*u;
+    a=Math.max(a,lo);b=Math.min(b,hi);if(b>a)r.push([a,b])}
+  const m=[];for(const x of r){const l=m[m.length-1];if(l&&x[0]<=l[1])l[1]=Math.max(l[1],x[1]);else m.push([x[0],x[1]])}
+  return m}
+function planSub(lo,hi,cut){const o=[];let c=lo;for(const x of cut){if(x[0]>c)o.push([c,x[0]]);c=Math.max(c,x[1])}if(hi>c)o.push([c,hi]);return o}
+function planLen(l){let s=0;for(const x of l)s+=x[1]-x[0];return s}
+// colocacion dentro del dia: x bloques prioritarios y y bloques no prioritarios -> franjas con hora
+function planPlace(e,x,y,u){
+  const pri=[],non=[];
+  if(x>0){let need=x*u;
+    const ord=e.P.map((r,i)=>i).sort((i,j)=>((e.P[j][1]-e.P[j][0])-(e.P[i][1]-e.P[i][0]))||(j-i));   // primero los tramos mas largos (a igualdad, el mas tardio)
+    for(const i of ord){if(need<=0)break;const a=e.P[i][0],b=e.P[i][1],len=b-a;if(len<=need){pri.push([a,b]);need-=len}else{pri.push([b-need,b]);need=0}}   // el ultimo, a medias, por el FINAL del tramo
+    pri.sort((p,q)=>p[0]-q[0])}
+  if(y>0){
+    // las no prioritarias se pegan a las prioritarias para que el turno quede junto: primero HACIA DELANTE desde la ultima franja prioritaria (y luego desde las anteriores),
+    // despues hacia atras; si no hay franjas prioritarias se usan los tramos del dia, y si tampoco hay tramos, desde las 09:00.
+    const free=new Set();for(const r of e.N)for(let t=r[0];t+u<=r[1];t+=u)free.add(t);
+    let ref=pri.length?pri:e.P;const order=[];const seen=new Set();
+    const add=t=>{if(free.has(t)&&!seen.has(t)){seen.add(t);order.push(t)}};
+    if(ref.length){
+      for(let k=ref.length-1;k>=0;k--)for(let t=ref[k][1];free.has(t);t+=u)add(t);   // hacia delante
+      for(let k=ref.length-1;k>=0;k--)for(let t=ref[k][0]-u;free.has(t);t-=u)add(t);  // hacia atras
+    }else{const an=Math.max(e.lo,540);for(let t=an;free.has(t);t+=u)add(t);for(let t=an-u;free.has(t);t-=u)add(t)}
+    // si aun falta (hay huecos separados), el resto por cercania
+    if(order.length<y){const rest=[...free].filter(t=>!seen.has(t));const near=t=>{let b=1e9;if(ref.length){for(const q of ref)b=Math.min(b,t>=q[1]?t-q[1]:q[0]-(t+u))}else b=Math.abs(t-Math.max(e.lo,540));return b};
+      rest.sort((p,q)=>near(p)-near(q)||p-q);for(const t of rest)add(t)}
+    const pick=order.slice(0,y).sort((p,q)=>p-q);
+    for(const t of pick){const l=non[non.length-1];if(l&&l[1]===t)l[1]=t+u;else non.push([t,t+u])}}
+  return {pri,non}}
+function planEngine(P){
+  const u=P.u||PLAN_U,n=P.days.length;
+  const D=P.days.map(d=>{
+    const e={k:d.k,off:!d.win,P:[],N:[],A:0,B:0,C:0,lo:0,hi:0};
+    if(!d.win)return e;
+    const lo=Math.ceil(d.win[0]/u)*u,hi=Math.floor(d.win[1]/u)*u;e.lo=lo;e.hi=hi;
+    if(hi<=lo)return e;
+    e.P=planNorm(d.wins||[],lo,hi,u,false);                       // prioritarias: solo bloques ENTEROS dentro del tramo
+    e.N=planSub(lo,hi,planNorm(d.wins||[],lo,hi,u,true));           // no prioritarias: solo bloques que no tocan NINGUN tramo
+    e.A=planLen(e.P)/u;e.B=planLen(e.N)/u;
+    e.C=Math.max(0,Math.min(Math.floor((d.room==null?1440:d.room)/u),(hi-lo)/u));
+    return e});
+  const Pn=Math.ceil(Math.max(0,P.needPri||0)/u-1e-9),Nn=Math.ceil(Math.max(0,P.needNon||0)/u-1e-9);
+  const X=new Array(n).fill(0),Y=new Array(n).fill(0);
+  const rem=i=>D[i].C-X[i]-Y[i],cA=i=>Math.max(0,Math.min(D[i].A-X[i],rem(i))),cB=i=>Math.max(0,Math.min(D[i].B-Y[i],rem(i))),cC=i=>Math.max(0,Math.min(rem(i),D[i].A-X[i]+D[i].B-Y[i]));
+  // (x,y) cabe si x<=suma de cA, y<=suma de cB y x+y<=suma de cC (cada dia es un «polimatroide»: la suma de ellos tambien)
+  const feas=(p,q)=>{let a=0,b=0,c=0;for(let i=0;i<n;i++){a+=cA(i);b+=cB(i);c+=cC(i)}return p<=a&&q<=b&&p+q<=c};
+  let a0=0,b0=0,c0=0;for(let i=0;i<n;i++){a0+=cA(i);b0+=cB(i);c0+=cC(i)}
+  const Xt=Math.min(Pn,a0),Yt=Math.max(0,Math.min(Nn,b0,c0-Xt));   // lo maximo que cabe (las prioritarias, primero)
+  let p=Xt,q=Yt;
+  while(p>0){let best=-1;
+    for(let i=0;i<n;i++){if(cA(i)<=0)continue;X[i]++;const ok=feas(p-1,q);X[i]--;if(!ok)continue;
+      if(best<0||X[i]<X[best]||(X[i]===X[best]&&X[i]+Y[i]<X[best]+Y[best]))best=i}
+    if(best<0)break;X[best]++;p--}
+  while(q>0){let best=-1;
+    for(let i=0;i<n;i++){if(cB(i)<=0)continue;Y[i]++;const ok=feas(p,q-1);Y[i]--;if(!ok)continue;
+      if(best<0||X[i]+Y[i]<X[best]+Y[best]||(X[i]+Y[i]===X[best]+Y[best]&&Y[i]<Y[best]))best=i}
+    if(best<0)break;Y[best]++;q--}
+  const days=D.map((e,i)=>{const pl=planPlace(e,X[i],Y[i],u);return {k:e.k,off:e.off,pri:pl.pri,non:pl.non,priMin:X[i]*u,nonMin:Y[i]*u,totalMin:(X[i]+Y[i])*u}});
+  const gp=(Xt-p)*u,gn=(Yt-q)*u;   // lo realmente colocado (si todo va bien, = Xt*u y Yt*u)
+  return {days,u,needPri:P.needPri||0,needNon:P.needNon||0,gotPri:gp,gotNon:gn,
+    shortPri:Math.max(0,Math.round((P.needPri||0)-gp)),shortNon:Math.max(0,Math.round((P.needNon||0)-gn)),capPri:a0*u,capNon:b0*u,capAll:c0*u,placedAll:p===0&&q===0}}
+/*PLAN-ENGINE-END*/
+// ===== v3.67 · adaptador a la app + pantalla: «📅 Mis días libres y límites» y «🗓️ Plan para cumplir» (Juan 23-11) =====
+//  Datos (en ajustes, se guardan y se sincronizan como el resto):  settings.planDays = [{id, d1, d2, mode:'off'|'until'|'from'|'between', a:'HH:MM', b:'HH:MM'}]   y   settings.planMax (horas por dia; en blanco = 10).
+let planScope='w',planUi={mode:'off'},planMemo=new Map();
+const PLAN_WD=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'],PLAN_MO=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function planDate(k,wm){const d=new Date(k+'T12:00:00');return PLAN_WD[d.getDay()]+' '+d.getDate()+(wm?' '+PLAN_MO[d.getMonth()]:'')}
+function planDur(m){m=Math.round(m);const h=Math.floor(m/60),r=m%60;return h&&r?h+' h '+String(r).padStart(2,'0')+' min':h?h+' h':r+' min'}
+function planHM(m){m=Math.round(m);const x=((m%1440)+1440)%1440;return String(Math.floor(x/60)).padStart(2,'0')+':'+String(x%60).padStart(2,'0')}
+function planTimeMin(s){const m=String(s||'').match(/^(\d{1,2}):(\d{2})$/);if(!m)return null;const v=(+m[1])*60+(+m[2]);return (+m[2])<60&&v<=1440?v:null}
+function planEntries(){const a=db.settings&&db.settings.planDays;return Array.isArray(a)?a.filter(e=>e&&/^[\w-]{1,24}$/.test(String(e.id))&&/^\d{4}-\d{2}-\d{2}$/.test(e.d1)&&/^\d{4}-\d{2}-\d{2}$/.test(e.d2)&&e.d2>=e.d1&&/^(off|until|from|between)$/.test(e.mode)):[]}
+function planCfg(){const s=db.settings||{};let v=Number(String(s.planMax==null?'':s.planMax).replace(',','.'));const set=v>0;if(!set)v=10;return {max:Math.max(1,Math.min(24,v)),set}}
+function planRule(k,list){let off=false,lo=0,hi=1440;
+  for(const e of list){if(k<e.d1||k>e.d2)continue;
+    if(e.mode==='off'){off=true;continue}
+    const a=planTimeMin(e.a),b=planTimeMin(e.b);
+    if(e.mode==='until'&&a!=null)hi=Math.min(hi,a);
+    else if(e.mode==='from'&&a!=null)lo=Math.max(lo,a);
+    else if(e.mode==='between'&&a!=null&&b!=null){lo=Math.max(lo,a);hi=Math.min(hi,b)}}
+  return {off:off||hi<=lo,lo,hi}}
+function planWall(x,d0){return (x.getFullYear()!==d0.getFullYear()||x.getMonth()!==d0.getMonth()||x.getDate()!==d0.getDate()?1440:0)+x.getHours()*60+x.getMinutes()}
+// el dia: ventana permitida (segun los dias libres / limites) y tramos prioritarios, en minutos desde las 00:00 de ese dia (lo que pasa de 1440 ya es el dia siguiente)
+function planDayInfo(k,list,nowLo){
+  const d0=new Date(k+'T12:00:00');
+  const wins=priorityWindowsForDate(k).map(w=>[planWall(w[0],d0),planWall(w[1],d0)]);
+  const r=planRule(k,list);
+  if(r.off)return {k,win:null,wins};
+  let lo=r.lo,hi=r.hi;
+  if(hi>=1440){const sp=Math.max(0,...wins.map(w=>w[1]-1440));   // un tramo que acaba pasada la medianoche solo vale si el dia siguiente tampoco lo impide
+    if(sp>0){const n=new Date(d0);n.setDate(n.getDate()+1);const r2=planRule(dateKey(n),list);if(!r2.off&&r2.lo<=0)hi=1440+Math.min(sp,r2.hi)}}
+  if(nowLo!=null)lo=Math.max(lo,nowLo);
+  return {k,win:[lo,hi],wins}}
+function planDays(scope){const t=today(),end=scope==='w'?dateKey(weekBounds(0)[1]):dateKey(monthBounds(0)[1]);const out=[];const d=new Date(t+'T12:00:00');for(let i=0;i<40;i++){const k=dateKey(d);if(k>end)break;out.push(k);d.setDate(d.getDate()+1)}return out}
+function planNeeds(scope){
+  if(scope==='w'){const w=weeklyHours(0),r=goalRemain(w.pri,w.total);return {ok:!!r.goals.split,pri:r.remainPri,non:r.remainNon}}
+  const m=monthlyHours(0),r=goalRemainM(m.pri,m.total);return {ok:!!r.goals.split,pri:r.remainPri,non:r.remainNon}}
+// el plan: lo que falta (semana o mes) repartido desde hoy (desde la hora actual) hasta el final del periodo
+function planBuild(scope,over){over=over||{};
+  const need=planNeeds(scope);if(!need.ok)return {ok:false};
+  const list=over.list||planEntries(),t=today(),now=new Date(),nowMin=Math.ceil((now.getHours()*60+now.getMinutes())/PLAN_U)*PLAN_U;
+  const maxM=Math.round((over.maxH||planCfg().max)*60);
+  const days=planDays(scope).map(k=>{const i=planDayInfo(k,list,k===t?nowMin:null);const done=k===t?Math.round(totalMinutesForDay(k)):0;return {k,win:i.win,wins:i.wins,room:Math.max(0,maxM-done)}});
+  const key=JSON.stringify([days,need.pri,need.non]);
+  let r=planMemo.get(key);
+  if(!r){r=planEngine({u:PLAN_U,needPri:need.pri,needNon:need.non,days});planMemo.set(key,r);if(planMemo.size>12)planMemo.delete(planMemo.keys().next().value)}
+  return Object.assign({ok:true,scope,need,maxH:maxM/60},r)}
+function planModeText(e){return e.mode==='off'?'🚫 Libre (todo el día)':e.mode==='until'?'⏰ Solo hasta las '+e.a:e.mode==='from'?'⏱️ Solo desde las '+e.a:'↔️ Solo entre las '+e.a+' y las '+e.b}
+function planEntryDates(e){return e.d1===e.d2?planDate(e.d1,true):'Del '+planDate(e.d1,true).toLowerCase()+' al '+planDate(e.d2,true).toLowerCase()}
+function planTag(k){const r=planRule(k,planEntries());if(r.off)return '';const p=[];if(r.hi<1440)p.push('hasta las '+planHM(r.hi));if(r.lo>0)p.push('desde las '+planHM(r.lo));return p.length?' · '+p.join(' ').replace(/ desde/,' y desde'):''}
+// «lo que mas te ayudaria»: se repite el plan quitando cada limite (o subiendo el maximo) y se mira cuanto falta
+function planSuggest(scope,base){
+  const left0=base.shortPri+base.shortNon;if(left0<=0)return [];
+  const out=[],list=planEntries(),t=today();
+  const mk=(txt,r)=>{const gp=base.shortPri-r.shortPri,gn=base.shortNon-r.shortNon,g=gp+gn;if(g<=0)return;
+    const parts=[];if(gp>0)parts.push('+'+planDur(gp)+' prioritarias');if(gn>0)parts.push('+'+planDur(gn)+' no prioritarias');
+    const left=r.shortPri+r.shortNon;out.push({txt,sub:parts.join(' y ')+' → '+(left<=0?'llegas ✅':'aun así faltarían '+planDur(left)),left,g})};
+  for(const e of list){if(e.d2<t)continue;const r=planBuild(scope,{list:list.filter(x=>x!==e)});
+    mk(e.mode==='off'?'Trabajar '+(e.d1===e.d2?'el ':'')+planEntryDates(e).toLowerCase():'Quitar el límite de '+planEntryDates(e).toLowerCase()+' ('+planModeText(e).replace(/^\S+\s/,'').toLowerCase()+')',r)}
+  const mx=planCfg().max;if(mx<24)mk('Subir el máximo de horas por día de '+String(mx).replace('.',',')+' h a '+String(mx+1).replace('.',',')+' h',planBuild(scope,{maxH:mx+1}));
+  out.sort((a,b)=>a.left-b.left||b.g-a.g);return out.slice(0,3)}
+// texto corto de lo de hoy: franjas juntas («17:00–23:00»)
+function planTodayText(d){if(!d)return '';if(d.off)return 'Hoy: libre';
+  const p=d.pri.concat(d.non).sort((a,b)=>a[0]-b[0]).map(x=>[x[0],x[1]]);const m=[];for(const x of p){const l=m[m.length-1];if(l&&x[0]<=l[1])l[1]=Math.max(l[1],x[1]);else m.push(x)}
+  if(!m.length)return 'Hoy: sin turno';const s=m.map(x=>planHM(x[0])+'–'+planHM(x[1]));return 'Hoy: '+(s.length>1?s.slice(0,-1).join(', ')+' y '+s[s.length-1]:s[0])}
+// una linea bajo las barras de los resumenes (solo semana y mes en curso)
+function planLineHtml(scope){
+  if((scope==='w'?controlWeek:controlMonth)!==0)return '';
+  const r=planBuild(scope);if(!r.ok||r.need.pri+r.need.non<=0)return '';
+  const ok=r.shortPri+r.shortNon<=0,t0=r.days[0]&&r.days[0].k===today()?r.days[0]:null,hoy=planTodayText(t0);
+  return `<div class="planline ${ok?'ok':'no'}" data-planline="${scope}" role="button" tabindex="0" onclick="planGo('${scope}')"><b>🗓️ Plan: ${ok?(planEntries().length?'con tus días libres y límites, llegas':'llegas a las metas'):'así NO llegas, faltan '+planDur(r.shortPri+r.shortNon)}</b><small>${hoy}${hoy?' · ':''}<u>ver el plan completo ›</u></small></div>`}
+function planSecHtml(){
+  planUi.mode='off';
+  const t=today(),list=planEntries().filter(e=>e.d2>=t).sort((a,b)=>a.d1<b.d1?-1:a.d1>b.d1?1:a.id<b.id?-1:1);
+  const rows=list.map(e=>`<div class="pl-card"><div class="pl-tx"><div class="t">${planEntryDates(e)}</div><div class="s">${planModeText(e)}</div></div><button type="button" class="pl-del" aria-label="Quitar este día" onclick="planDel('${e.id}')">🗑️</button></div>`).join('');
+  const c=planCfg(),pill=(m,tx,on)=>`<button type="button" class="pl-pill${on?' on':''}" data-m="${m}" aria-pressed="${on?'true':'false'}" onclick="planMode('${m}')">${tx}</button>`;
+  return `<div class="gl-sub">📅 Mis días libres y límites</div>
+  <div class="gl-note">Apunta los días que NO vas a trabajar o en los que tienes un límite de hora. Valen solo para esas fechas y se borran solos cuando pasan.</div>
+  ${rows||'<div class="gl-note" id="planNone">Todavía no has apuntado ningún día.</div>'}
+  <div class="pl-form"><div class="pl-ft">＋ Añadir un día o varios</div>
+   <label class="gl-lab" for="planD1">Desde el día</label><input class="gl-in pl-in" id="planD1" type="date" value="${t}" min="${t}">
+   <label class="gl-lab" for="planD2">Hasta el día (si es uno solo, déjalo igual)</label><input class="gl-in pl-in" id="planD2" type="date" value="${t}" min="${t}">
+   <label class="gl-lab">Qué pasa esos días</label>
+   <div class="pl-pills" id="planModes">${pill('off','🚫 Libre',1)}${pill('until','⏰ Solo hasta')}</div>
+   <div class="pl-pills" style="margin-top:8px">${pill('from','⏱️ Solo desde')}${pill('between','↔️ Entre horas')}</div>
+   <div id="planTa" style="display:none"><label class="gl-lab" for="planTaI" id="planTaL">Hasta las</label><input class="gl-in pl-in" id="planTaI" type="time"></div>
+   <div id="planTb" style="display:none"><label class="gl-lab" for="planTbI">Hasta las</label><input class="gl-in pl-in" id="planTbI" type="time"></div>
+   <div class="pl-err" id="planErr" role="alert"></div>
+   <button type="button" class="gl-btn" id="planAddBtn" onclick="planAdd()">＋ Añadir</button></div>
+  <label class="gl-lab" for="planMax" style="margin-top:14px">Máximo de horas por día</label><input class="gl-in" id="planMax" type="number" inputmode="decimal" min="1" max="24" step=".5" value="${c.set?String(c.max):''}" placeholder="10" onchange="planSetMax()">
+  <div class="gl-note">El plan nunca te pone más horas que esto en un solo día. En blanco = 10 h.</div>`}
+function planBoxHtml(){
+  if(!ctlOpen.meta)return '';
+  const sc=planScope,r=planBuild(sc);
+  const head=`<div class="gl-sub">🗓️ Plan para cumplir</div><div class="pl-pills" id="planScope"><button type="button" class="pl-pill${sc==='w'?' on':''}" onclick="planScopeSet('w')">Esta semana</button><button type="button" class="pl-pill${sc==='m'?' on':''}" onclick="planScopeSet('m')">Este mes</button></div>`;
+  if(!r.ok)return head+`<div class="gl-note">Pon las horas prioritarias y no prioritarias ${sc==='w'?'de la semana':'del mes'} (más arriba) y pulsa Guardar para ver el plan.</div>`;
+  if(r.need.pri+r.need.non<=0)return head+`<div class="pl-oky">✅ Ya cumpliste las metas ${sc==='w'?'de esta semana':'de este mes'}.</div>`;
+  const ok=r.shortPri+r.shortNon<=0,peak=Math.max(0,...r.days.map(d=>d.totalMin));
+  const sum=`<div class="goalbox pl-sum${ok?'':' no'}"><div class="goalrow pri"><div class="top"><span>🟢 Prioritarias</span><em>faltan ${planDur(r.need.pri)}</em></div></div><div class="goalrow non"><div class="top"><span>🔴 No prioritarias</span><em>faltan ${planDur(r.need.non)}</em></div></div>
+   <div class="pl-v ${ok?'ok':'no'}">${ok?'✅ Con '+(planEntries().length?'tus días libres y límites':'este plan')+', LLEGAS':'⚠️ Así NO llegas: te faltan '+[r.shortPri>0?planDur(r.shortPri)+' prioritarias':'',r.shortNon>0?planDur(r.shortNon)+' no prioritarias':''].filter(Boolean).join(' y ')}</div>
+   <div class="pl-vs">${ok?'Plan':'Lo máximo que te cabe'}: 🟢 ${planDur(r.gotPri)} de ${planDur(r.need.pri)} · 🔴 ${planDur(r.gotNon)} de ${planDur(r.need.non)} · día más cargado: ${planDur(peak)} (tu tope: ${planDur(r.maxH*60)})</div></div>`;
+  let sg='';if(!ok){const l=planSuggest(sc,r);if(l.length)sg=`<div class="pl-h">💡 Lo que más te ayudaría</div>`+l.map(x=>`<div class="pl-card"><div class="pl-tx"><div class="t">${x.txt}</div><div class="s">${x.sub}</div></div></div>`).join('')}
+  const days=r.days.map(d=>{const lab=planDate(d.k,sc==='m')+(d.k===today()?' · hoy':'')+planTag(d.k);
+    if(d.off)return `<div class="pl-free"><span>${lab}</span><span>🚫 Libre</span></div>`;
+    const pcs=d.pri.map(p=>({p,t:'p'})).concat(d.non.map(p=>({p,t:'n'}))).sort((a,b)=>a.p[0]-b.p[0]);
+    if(!pcs.length)return `<div class="pl-free"><span>${lab}</span><span>sin turno</span></div>`;
+    return `<div class="pl-card pl-day"><div class="h"><span>${lab}</span><span>${planDur(d.totalMin)}</span></div>${pcs.map(x=>`<div class="pl-r"><i class="pl-dot ${x.t}"></i>${planHM(x.p[0])} – ${planHM(x.p[1])} <small>· ${planDur(x.p[1]-x.p[0])} ${x.t==='p'?'prioritarias':'no prioritarias'}</small></div>`).join('')}</div>`}).join('');
+  return head+sum+sg+(ok?'':'<div class="pl-h">El plan con lo que SÍ cabe</div>')+days}
+function planRefresh(all){const s=document.getElementById('planSec');if(all&&s)s.innerHTML=planSecHtml();const b=document.getElementById('planBox');if(b)b.innerHTML=planBoxHtml();
+  document.querySelectorAll('[data-planline]').forEach(el=>{const h=planLineHtml(el.getAttribute('data-planline'));if(h){const t=document.createElement('div');t.innerHTML=h;el.replaceWith(t.firstElementChild)}else el.remove()})}
+function planMode(m){planUi.mode=m;document.querySelectorAll('#planSec .pl-pill[data-m]').forEach(b=>{const on=b.dataset.m===m;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on?'true':'false')});
+  const a=document.getElementById('planTa'),b=document.getElementById('planTb'),l=document.getElementById('planTaL'),l2=document.querySelector('label[for=planTbI]');
+  if(a)a.style.display=m==='off'?'none':'';if(b)b.style.display=m==='between'?'':'none';if(l)l.textContent=m==='until'?'Hasta las':'Desde las';if(l2)l2.textContent='Hasta las'}
+function planAdd(){
+  const g=id=>{const e=document.getElementById(id);return e?String(e.value||''):''},err=t=>{const e=document.getElementById('planErr');if(e)e.textContent=t;return false};
+  const d1=g('planD1'),d2=g('planD2')||d1,m=planUi.mode,a=g('planTaI'),b=g('planTbI');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d1))return err('Elige el día (o el primer día).');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d2)||d2<d1)return err('El último día no puede ser antes que el primero.');
+  if(d2<today())return err('Esa fecha ya pasó.');
+  if(m!=='off'&&planTimeMin(a)==null)return err('Pon la hora.');
+  if(m==='between'&&(planTimeMin(b)==null||planTimeMin(b)<=planTimeMin(a)))return err('La hora final tiene que ser después de la inicial.');
+  const arr=planEntries().filter(e=>e.d2>=today());
+  if(arr.length>=60)return err('Hay demasiados días apuntados. Borra alguno.');
+  arr.push({id:'p'+Date.now().toString(36)+Math.floor(Math.random()*1296).toString(36),d1,d2,mode:m,a:m==='off'?'':a,b:m==='between'?b:''});
+  db.settings.planDays=arr;save();planRefresh(true)}
+function planDel(id){db.settings.planDays=planEntries().filter(e=>e.id!==id&&e.d2>=today());save();planRefresh(true)}
+function planSetMax(){const e=document.getElementById('planMax');if(!e)return;const v=Number(String(e.value||'').replace(',','.'));
+  if(v>0)db.settings.planMax=Math.max(1,Math.min(24,Math.round(v*4)/4));else delete db.settings.planMax;
+  save();e.value=planCfg().set?String(planCfg().max):'';planRefresh(false)}
+function planScopeSet(s){planScope=s==='m'?'m':'w';planRefresh(false)}
+function planGo(s){planScope=s==='m'?'m':'w';goToGoals();setTimeout(()=>{const b=document.getElementById('planBox');if(b){try{b.scrollIntoView({behavior:'smooth',block:'start'})}catch(e){b.scrollIntoView()}}},260)}
 function goalsPanelHtml(){const s=db.settings,g=goalsCfg(),names={1:'Lunes',2:'Martes',3:'Miércoles',4:'Jueves',5:'Viernes',6:'Sábado',0:'Domingo'},pri=s.priority||{};
   const val=v=>v>0?String(v):'';
   const rows=[1,2,3,4,5,6,0].map(d=>`<label class="gl-lab" for="sch${d}">${names[d]}</label><input class="gl-in" id="sch${d}" value="${((pri[d]||[]).join(', ')).replace(/"/g,'&quot;')}" placeholder="07:00-10:00, 17:00-20:00">`).join('');
@@ -1530,7 +1771,8 @@ function goalsPanelHtml(){const s=db.settings,g=goalsCfg(),names={1:'Lunes',2:'M
   <div class="gl-note">Con estas metas, el resumen mensual enseña las dos barras. Si las dejas en blanco, el mes no lleva barras.</div>
   <div class="gl-sub">Horario prioritario de cada día</div>
   <div class="gl-note">Separa varios tramos con comas. Si acaba pasada la medianoche, se escribe por ejemplo 17:00-02:00.</div>${rows}
-  <button class="gl-btn" onclick="saveGoals()">✓ Guardar</button>${window.__goalsOk?'<div class="gl-ok" id="glOk">✓ Guardado</div>':''}`}
+  <button class="gl-btn" onclick="saveGoals()">✓ Guardar</button>${window.__goalsOk?'<div class="gl-ok" id="glOk">✓ Guardado</div>':''}
+  <div id="planSec">${planSecHtml()}</div><div id="planBox">${planBoxHtml()}</div>`}
 function goalsPreview(){const el=(id)=>{const e=document.querySelector('#'+id);return e?goalNum(String(e.value).replace(',','.')):0},p=el('goalPri'),n=el('goalNon'),t=document.querySelector('#goalTot');
   if(t)t.textContent=p+n>0?goalTxt(p+n):goalTxt((db.settings.goal||0))+' (el de antes)';
   {const em=(id)=>{const e=document.querySelector('#'+id);return e?goalNumM(String(e.value).replace(',','.')):0},pm=em('goalPriM'),nm_=em('goalNonM'),tm=document.querySelector('#goalTotM');if(tm)tm.textContent=pm+nm_>0?goalTxt(pm+nm_):'sin meta'}}
@@ -2090,7 +2332,7 @@ function renderFaq(){document.querySelector('#content').innerHTML=`<section clas
  <div class="subpage-row"><span class="sicon">4</span><div><b>¿Qué pasa si corrijo una facturación manual?</b><small style="display:block;color:#64748b;margin-top:3px">Los totales se recalculan teniendo en cuenta los datos registrados. Revisa el día y los importes antes de guardar.</small></div></div>
  <div class="subpage-row"><span class="sicon">5</span><div><b>¿Cómo registro o corrijo mi horario?</b><small style="display:block;color:#64748b;margin-top:3px">En Control Horario inicia la jornada al empezar y finalízala al terminar. Puedes usar las fechas para consultar y corregir días anteriores.</small></div></div>
  <div class="subpage-row"><span class="sicon">6</span><div><b>¿Cómo añado gasolina de otro día?</b><small style="display:block;color:#64748b;margin-top:3px">En Control Horario selecciona la fecha correspondiente, introduce el importe y añade el gasto.</small></div></div>
- <div class="subpage-row"><span class="sicon">7</span><div><b>¿Cómo cambio mi comisión o los parámetros de Bolt?</b><small style="display:block;color:#64748b;margin-top:3px">En Ajustes → Configuración de la app puedes modificar tu comisión personal y los parámetros disponibles de Bolt.</small></div></div>
+ <div class="subpage-row"><span class="sicon">7</span><div><b>¿Cómo cambio mi comisión o los parámetros de Bolt?</b><small style="display:block;color:#64748b;margin-top:3px">En Ajustes → Nóminas y comisiones puedes modificar tu comisión personal y la comisión y la tasa de aeropuerto de Bolt.</small></div></div>
  <div class="subpage-row"><span class="sicon">8</span><div><b>¿Cómo genero un informe?</b><small style="display:block;color:#64748b;margin-top:3px">En Informe selecciona el periodo que quieras y genera el resumen.</small></div></div>
  <div class="subpage-row"><span class="sicon">💬</span><div><b>¿Y si no encuentro la respuesta?</b><small style="display:block;color:#64748b;margin-top:3px">En Envíanos un mensaje puedes preguntarle a Jenny. Si no consigue resolver tu duda, podrás continuar con el mismo sistema de consulta y soporte.</small></div></div>
  </div></section>`}
@@ -2117,7 +2359,7 @@ function renderWriteQuestion(origin){document.querySelector('#content').innerHTM
 function answerUserQuery(){const q=(document.querySelector('#autoQuery').value||'').trim();if(!q){alert('Escribe una consulta.');return}const n=q.toLowerCase();let type=null;if(/viaje|bolt|uber|cabify|privado|trayecto/.test(n))type='viajes';else if(/factur|importe|cobro|efectivo|tarjeta/.test(n))type='facturacion';else if(/horario|jornada|hora|trabaj/.test(n))type='horario';else if(/gasolina|combustible|repost/.test(n))type='gasolina';else if(/informe|reporte|resumen mensual/.test(n))type='informe';if(type){showAutoAnswer(type);return}db.supportSent=db.supportSent||[];db.supportSent.unshift({id:Date.now(),subject:'Consulta del conductor',body:q,date:new Date().toISOString(),status:'pendiente'});save();document.querySelector('#content').innerHTML=`<section class="panel futuristic"><div class="settings-head"><button class="back" onclick="renderSupportMessages()">←</button><div class="section-title" style="margin:0">Consulta guardada</div></div><div class="help-hero"><h2>📨 La hemos guardado</h2><p>Esta consulta no coincide con una de las ayudas automáticas sobre registro de datos. Queda guardada para enviarla al equipo de soporte cuando esté disponible.</p></div></section>`}
 function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 function renderSettings(){
- document.querySelector('#content').innerHTML=`<section class="panel futuristic"><div class="section-title t-top">Ajustes</div><div class="note" style="margin-bottom:12px">Aquí puedes gestionar tu cuenta y las configuraciones de la aplicación.</div><div class="settings-menu"><button class="settings-option account" onclick="settingsFrom=1;renderAccount()"><span class="ico">👤</span><span><b>Cuenta</b><small>Correo o móvil, cerrar sesión y eliminar cuenta</small></span><span style="margin-left:auto;font-size:24px;color:#7b8794">›</span></button><button class="settings-option appsettings" onclick="settingsFrom=1;renderAppSettings()"><span class="ico">⚙</span><span><b>Configuración de la app</b><small>Comisiones, horarios, Bolt, gasolina y nómina</small></span><span style="margin-left:auto;font-size:24px;color:#7b8794">›</span></button></div></section>`
+ document.querySelector('#content').innerHTML=`<section class="panel futuristic"><div class="section-title t-top">Ajustes</div><div class="note" style="margin-bottom:12px">Aquí puedes gestionar tu cuenta y las configuraciones de la aplicación.</div><div class="settings-menu"><button class="settings-option account" onclick="settingsFrom=1;renderAccount()"><span class="ico">👤</span><span><b>Cuenta</b><small>Correo o móvil, cerrar sesión y eliminar cuenta</small></span><span style="margin-left:auto;font-size:24px;color:#7b8794">›</span></button><button class="settings-option appsettings" onclick="settingsFrom=1;renderAppSettings()"><span class="ico">⚙</span><span><b>Nóminas y comisiones</b><small>Tu nómina y la comisión de Bolt</small></span><span style="margin-left:auto;font-size:24px;color:#7b8794">›</span></button></div></section>`
 }
 function renderAccount(){
  const profile=(()=>{try{return JSON.parse(localStorage.getItem(AUTH_KEY)||'null')}catch(e){return null}})();
@@ -2128,7 +2370,8 @@ function renderAppSettings(){
  const names={1:'Lunes',2:'Martes',3:'Miércoles',4:'Jueves',5:'Viernes',6:'Sábado',0:'Domingo'};
  const days=[1,2,3,4,5,6,0];
  /*v3.65: los horarios prioritarios ahora se editan en Control horario*/
- document.querySelector('#content').innerHTML=`<section class="panel futuristic"><div class="settings-head"><button class="back" onclick="backToGeneralMenu()">←</button><div class="section-title" style="margin:0">Configuración de la app</div></div>
+ document.querySelector('#content').innerHTML=`<section class="panel futuristic"><div class="settings-head"><button class="back" onclick="backToGeneralMenu()">←</button><div class="section-title" style="margin:0">Nóminas y comisiones</div></div>
+ <div class="st-blk"><div class="section-title">💼 Nómina</div>
  <label>Perfil de cobro de nómina</label><select id="payrollProfile" style="margin:6px 0 10px" oninput="previewPayrollSettings()" onchange="previewPayrollSettings()"><option value="allPayroll" ${db.settings.payrollProfile==='allPayroll'?'selected':''}>Todo en nómina</option><option value="basePayrollVariableCash" ${db.settings.payrollProfile==='basePayrollVariableCash'?'selected':''}>Nómina + comisión en efectivo</option><option value="variableFixedCash" ${db.settings.payrollProfile==='variableFixedCash'?'selected':''}>Nómina variable + efectivo fijo</option><option value="weeklyMonthly" ${db.settings.payrollProfile==='weeklyMonthly'?'selected':''}>Nómina mensual semanal</option></select>
  <label>Ajustes manuales — compensaciones (€ netos de Bolt, antes de calcular tu 45 %)</label><input id="payrollCompensation" type="number" min="0" step="0.01" value="${Number((db.settings.payrollCompensations||{})[monthKeyFromOffset(0)]||0)}" style="margin:6px 0 10px" oninput="previewPayrollSettings()" onchange="previewPayrollSettings()"><div class="note">Introduce aquí compensaciones abonadas aparte, por ejemplo cancelaciones. No las añadas si ya están incluidas en la facturación registrada.</div>
  <label>Salario base mensual (€)</label><input id="salaryBase" type="number" min="0" step="0.01" value="${Number(db.settings.salaryBase??1425).toFixed(2)}" style="margin:6px 0 10px" oninput="previewPayrollSettings()" onchange="previewPayrollSettings()">
@@ -2139,10 +2382,11 @@ function renderAppSettings(){
  <!--v3.65-->
  <label>Efectivo fijo para perfil «Nómina variable + efectivo fijo» (€)</label><input id="cashPayroll" type="number" min="0" step="0.01" value="${Number(db.settings.cashPayroll??2000).toFixed(2)}" style="margin:6px 0 10px" oninput="previewPayrollSettings()" onchange="previewPayrollSettings()">
  <label>IRPF / Impuesto (%)</label><input id="irpf" type="number" min="0" max="100" step="0.01" value="${Number(db.settings.irpf??14.5).toFixed(2)}" style="margin:6px 0 10px" oninput="previewPayrollSettings()" onchange="previewPayrollSettings()"><div class="note" style="margin-bottom:10px">Este porcentaje se utiliza únicamente en el cálculo de nómina mensual.</div><section class="panel" style="margin:10px 0;background:rgba(20,40,65,.45)"><div class="section-title">Vista previa salarial de este mes</div><div id="payrollSettingsPreview" class="note">Cargando cálculo…</div></section>
- <div class="section-title" style="margin-top:14px">Bolt</div>
+ </div>
+ <div class="st-blk"><div class="section-title">🚖 Comisión y tasa de aeropuerto de Bolt</div>
  <label>Comisión de Bolt (%)</label><input id="boltComm" type="number" min="0" max="100" step="0.1" value="${db.settings.boltCommission}" style="margin:6px 0 10px">
  <label>Tasa aeroportuaria de Bolt (€)</label><input id="airportFee" type="number" min="0" step="0.01" value="${db.settings.airportFee.toFixed(2)}" style="margin:6px 0 10px">
- <div class="gl-link">⏱️ <b>Metas semanales y horarios prioritarios</b><br>Ahora están en <b>Control horario → Resumen semanal → ⏱️ Metas y horarios prioritarios</b>.<button type="button" class="action" style="width:100%;margin-top:10px" onclick="goToGoals()">Ir a Control horario ›</button></div>
+ </div>
  <button class="action" style="width:100%;margin-top:12px;font-size:14px" onclick="saveSettings()">✓ Confirmar y guardar</button>
  <p style="font-size:12px;color:#64748b">Valores iniciales de Bolt: 25 % de comisión y 2,57 € de tasa aeroportuaria. Puedes cambiarlos cuando quieras.</p><button class="secondary" style="width:100%;margin-top:10px" onclick="makeLocalBackup();alert('Copia de seguridad local creada.')">Crear copia de seguridad</button></section>`; previewPayrollSettings();
 }
@@ -2804,10 +3048,10 @@ const J_KB=[
 ['tasa','📊','Mi tasa de finalización','tasa,finalizacion,aceptacion,cancelacion,cancelar,bolt,calidad,servicio,limite,ajustes,semana,mes','En Ajustes → Tasa de finalización ves tu cuenta propia, de lunes a domingo y por meses: viajes hechos ÷ ofertas que cuentan. Toda oferta que lee la app suma a Recibidas; si trae el cartel «Fuera del radio / no te afectará» suma también a Con aviso y no cuenta (si la aceptas con ✓, pasa a contar). Las reservas (etiqueta «Reservado») con la recogida a más de 2 km se tratan igual aunque no traigan el cartel; a 2 km o menos cuentan como una oferta normal. Sin cartel y sin ✓ baja tu tasa. ✓ y la haces: sube. ✓ y luego la borras de la lista: es una cancelación y baja; si el cliente cancela en pocos minutos (los eliges en la página) no penaliza. Cada día se puede corregir con − + ✎ y puedes cargar días pasados. Avisos: naranja al bajar de 90 % y rojo por debajo de 85 % (se cambian). Es una estimación tuya: Bolt no enseña su tasa interna. Los datos se quedan en el móvil. La barra ✗ / ✓ de abajo de la app ya no sale de fábrica (si la echas de menos: Ajustes de Bolt → General → «Barra ✗ / ✓ de abajo de la app»; trae «Dejarla / Hacerla» con lo que pasa con tu tasa). En el aviso del neto de Bolt sale debajo una lengüeta «Más datos» con los botones ✕ «No la hice» y ✓ «La acepté»: los puedes pulsar ahí (hasta 90 segundos después) y cuentan en tu tasa aunque el Portal esté cerrado; si la oferta ya se fue, los botones quedan 15 segundos. «Más datos» abre las líneas sencillas (viaje, recogida, bruto y comisión, si es una reserva) y «Cálculo completo» todas las de siempre. Si prefieres el aviso entero como antes: Ajustes de Bolt → General → «Cartel plegado».'],
 ['grabar','🎥','Grabar vídeo del viaje','grabar,grabacion,video,camara,dashcam,interior,audio,microfono','Arriba, en la frase del día de Calculadora, hay un botón pequeño con una cámara. Púlsalo, elige 15 o 30 minutos y con o sin audio. Graba el interior del coche en Full HD y el vídeo se queda solo en tu móvil: no se sube a internet ni gasta datos. Al acabar no sale ningún aviso en la pantalla: la cámara pasa a poner «Listo». Cuando te venga bien, púlsala y eliges Guardar (queda en la Galería, en Películas, carpeta Portal del Conductor) o Eliminar. Unos 30 minutos ocupan alrededor de 1,4 GB, así que mira que tengas sitio. Mientras graba, Android enseña un aviso y un punto verde: es normal y no se puede quitar. Si llevas pasajeros y grabas con audio, avísalos con un cartel visible en el coche.'],
 ['freenow','💗','Free Now y Pide Taxi','free now^4,freenow^4,pide taxi^4,pidetaxi^4','En Calculadora tienes los botones Free Now (rosa) y Pide Taxi (amarillo) en la segunda fila, junto a Aeropuerto y Cancelaciones. Escribe el importe y púlsalo: se guarda el importe entero, sin comisión de la app, y suma a tu facturación, al informe y a la nómina. También puedes elegirlos como aplicación prioritaria en Control, cargar sus importes a mano en Facturación y apuntar sus cancelaciones.'],
-['tema','🎨','Tema claro, oscuro o automático','tema claro^4,tema oscuro^4,tema automatico^4,cambiar el tema^4,el tema^3,modo oscuro^4,modo claro^4,modo noche^4,modo dia^3,fondo oscuro^3,fondo claro^3,pantalla oscura^3,pantalla clara^3,oscuro^3,oscura^3','En Ajustes → Tema eliges cómo se ve la app: Automático (claro de día y oscuro de noche, según el sol en Madrid; cambia solo), Claro u Oscuro fijo. Afecta a Calculadora, Control, Facturación e Informe; Ajustes, el menú y Madrid hoy son siempre oscuros. Se guarda en este aparato.'],
+['tema','🎨','Tema claro, oscuro o automático','tema claro^4,tema oscuro^4,tema automatico^4,cambiar el tema^4,el tema^3,modo oscuro^4,modo claro^4,modo noche^4,modo dia^3,fondo oscuro^3,fondo claro^3,pantalla oscura^3,pantalla clara^3,oscuro^3,oscura^3','En Ajustes → Tema eliges cómo se ve la app: Automático (claro de día y oscuro de noche, según el sol en Madrid; cambia solo), Claro u Oscuro fijo. Afecta a Calculadora, Control, Facturación e Informe; Ajustes, el menú y Eventos Madrid hoy son siempre oscuros. Se guarda en este aparato.'],
 ['appprio','🎯','Aplicación prioritaria','app prioritaria^4,aplicacion prioritaria^4,ahora trabajo con^4,horas prioritarias^4,otras apps^3,prioritaria^3','En Control, «Aplicación prioritaria» elige tu app principal: Bolt, Uber, Cabify, Free Now o Pide Taxi. Sus horas y kilómetros salen en el bloque «Solo …» y las del resto en «Otras apps». Con «Ahora trabajo con» marcas con cuál empiezas la jornada. Todo lo prioritario toma el color de esa app (verde, negro, morado, rosa o amarillo). Al pulsar «Otras apps» te sale una lista para elegir cuál (Uber, Cabify…): esas apps solo cuentan horas y km por separado, no tienen horas prioritarias. Toca el círculo «Otras apps» para ver el desglose por app y «Todas juntas».'],
 ['sos','🆘','Botón SOS y contactos de confianza','sos^6,socorro^6,emergencia^5,ayuda urgente^4,112^5,contactos de confianza^6,contacto de confianza^5,alarma^4,boton rojo^5,aviso de emergencia^4,peligro^3,me han atacado^3,whatsapp^2','Pulsa el botón rojo SOS (arriba a la izquierda). Se abre la pantalla roja de ayuda y empieza una cuenta atrás de 3 segundos: si no pulsas Cancelar, se avisa a tus contactos de confianza que tienen la app (y han aceptado), con tu ubicación. Ahí mismo tienes «Llamar al 112» (se abre el marcador y tú pulsas llamar) y «Otras formas de avisar» (SMS, WhatsApp o Compartir), donde el envío lo haces tú. Contactos y mensaje: Ajustes → SOS y contactos de confianza (hasta 8). El botón «Probar» enseña la pantalla sin enviar nada.'],
-['madridhoy','🌤️','Madrid hoy: tiempo, eventos, deportes y vuelos','madrid hoy^4,ifema^4,ticketmaster^4,eventos^3,evento^3,feria^3,ferias^3,concierto^3,lluvia^3,pestanas^3,tiempo^2,movistar arena^5,wizink^5,arena^3,palacio de deportes^3,fabrik^5,discoteca^3,humanes^4','En el menú de las tres rayitas, Madrid hoy tiene cinco pestañas: Hoy, Mañana y Semana (el tiempo y los eventos de Ticketmaster, las ferias y espectáculos de IFEMA, los conciertos y partidos del Movistar Arena —antes WiZink Center— y las fiestas de Fabrik (Humanes de Madrid), para saber dónde puede haber más movimiento), Deportes (partidos y clasificaciones) y Vuelos (llegadas a Barajas por hora y terminal). Los del Movistar Arena y Fabrik salen de sus webs oficiales: lo cancelado o aplazado del Arena no aparece, y si un día no sale hora, es que aún no está confirmada (la de Fabrik no la publica: solo sale la fecha, y no sé si se cancela). Las ferias de IFEMA no traen horario: se supone que abren a las 10:00 (la hora sale con ~) y en el detalle puedes elegir 8, 9 o 10 horas de duración.'],
+['madridhoy','🌤️','Eventos Madrid hoy: tiempo, eventos, deportes y vuelos','madrid hoy^4,ifema^4,ticketmaster^4,eventos^3,evento^3,feria^3,ferias^3,concierto^3,lluvia^3,pestanas^3,tiempo^2,movistar arena^5,wizink^5,arena^3,palacio de deportes^3,fabrik^5,discoteca^3,humanes^4,matadero^5,autocine^5,lenovo garage^4,cultura^2','En el menú de las tres rayitas, Eventos Madrid hoy tiene cinco pestañas: Hoy, Mañana y Semana (el tiempo y los eventos de Ticketmaster, las ferias y espectáculos de IFEMA, los conciertos y partidos del Movistar Arena —antes WiZink Center— y las fiestas de Fabrik (Humanes de Madrid), las actividades de Matadero Madrid y los conciertos del Autocine Madrid (The Lenovo Garage, que salen por Ticketmaster), para saber dónde puede haber más movimiento), Deportes (partidos y clasificaciones) y Vuelos (llegadas a Barajas por hora y terminal). Los del Movistar Arena, Fabrik y Matadero salen de sus webs oficiales: lo cancelado o aplazado del Arena no aparece, y si un día no sale hora, es que aún no está confirmada (la de Fabrik y la de Matadero no la publican: solo sale la fecha, y no sé si se cancela). Las ferias de IFEMA no traen horario: se supone que abren a las 10:00 (la hora sale con ~) y en el detalle puedes elegir 8, 9 o 10 horas de duración.'],
 ['contacto','🧑','Hablar con una persona','telegram,persona,humano,soporte,contactar,hablar con alguien,tecnico','Claro. Pulsa el botón de Telegram y se abre el chat con soporte (@'+PORTAL_TG+').']
 ];
 const J_OPEN=['¡Claro! 😊','Te lo explico fácil 👇','Buena pregunta 👍','Vale, mira:','Sin problema 😉','Eso es sencillo:'];
@@ -2838,7 +3082,7 @@ function renderSendSupport(){jPanel('Pregúntale a Jenny','helpBack()','<div cla
 function renderWriteQuestion(){jPanel('Escribir mi pregunta','renderSendSupport()','<div class="help-hero"><h2>¿Qué necesitas?</h2><p>Escríbelo como lo dirías hablando. Por ejemplo: «se me olvidó iniciar la jornada» o «cómo apunto una propina».</p></div><textarea id="autoQuery" rows="6" placeholder="Escribe aquí tu pregunta…" style="width:100%;margin-top:6px;border-radius:14px;padding:12px;box-sizing:border-box"></textarea><button class="action" style="width:100%;margin-top:10px" onclick="answerUserQuery()">😊 Preguntar a Jenny</button>')}
 function renderAutoHelp(){jPanel('Preguntas rápidas','renderSendSupport()','<div class="subpage-list">'+['viajes','freenow','aeropuerto','compensaciones','pago','corregir','jornada','gasolina','km','lector','pdf','tema','nocuadra'].map(id=>{const e=jEntry(id);return jRow(e[1],e[2],'','showAutoAnswer(\''+id+'\')')}).join('')+'</div>')}
 function renderFaq(){jPanel('Preguntas frecuentes','helpBack()','<div class="subpage-list">'+J_KB.filter(e=>e[0]!=='contacto').map(e=>'<details class="subpage-row" style="display:block"><summary style="cursor:pointer;list-style:none"><span class="sicon" style="display:inline-grid;margin-right:8px">'+e[1]+'</span><b>'+e[2]+'</b></summary><small style="display:block;color:#64748b;margin:8px 0 2px;line-height:1.45">'+e[4]+'</small></details>').join('')+'</div>')}
-function renderHelpCarga(){const S=[['🧮','Calculadora','Escribe el importe y pulsa la plataforma (Bolt, Uber, Cabify, Privados, Free Now o Pide Taxi). Para aeropuerto, usa el botón verde de Aeropuerto. Si te cancelan un viaje, pulsa Cancelaciones, escribe el importe y toca la app: se guarda al instante. Con «Importe automático» la app lee el precio de la otra ventana. Elige tarjeta o efectivo cuando te lo pregunte. En Últimos viajes puedes añadir propina (🎁), editar (✏️) o borrar (🗑) cada viaje.'],['🧾','Facturación','Diario, Semanal y Mensual, con totales por plataforma y facturación manual. Las cancelaciones se suman al día y a la app que elijas; en Semanal, las compensaciones sueltas y la nómina. En Mensual, cada mes cerrado tiene un botón para cambiar su nómina con los ajustes de ahora (porcentaje, mínimo, propinas).'],['◉','Control','Iniciar y finalizar jornada, corregir horas de días anteriores, apuntar gasolina y kilómetros (con GPS automático o a mano). Aquí eliges tu aplicación prioritaria (Bolt, Uber, Cabify, Free Now o Pide Taxi). Abajo, «Tramos del día»: añade un tramo a mano, edítalo o elige su app (📲).'],['📍','GPS y lector de pantalla','El odómetro GPS cuenta los kilómetros con la jornada iniciada. El lector y la burbuja necesitan activar Driver Hub 360 en Accesibilidad de Android.'],['📊','Informe','Elige el periodo, genera el informe y compártelo en PDF o imagen.'],['⚙️','Ajustes','Tema (claro, oscuro o automático), comisión, tasa de aeropuerto, objetivos, horarios prioritarios, burbuja, GPS, copia de seguridad y Rentabilidad de viajes (aviso de si compensa cada oferta).'],['🌤️','Madrid hoy','En el menú de las tres rayitas, con cinco pestañas: Hoy, Mañana y Semana (el tiempo y los eventos de Ticketmaster, IFEMA, Movistar Arena y Fabrik, para saber dónde puede haber más movimiento), Deportes (partidos y clasificaciones) y Vuelos (cuántos vuelos llegan a Barajas en cada hora y a qué terminal).'],['🆘','Botón SOS','El botón rojo de arriba a la izquierda: cuenta atrás de 3 segundos y avisa a tus contactos de confianza con tu ubicación (puedes cancelar). También sale «Llamar al 112» y SMS, WhatsApp o Compartir. Se configura en Ajustes → SOS y contactos de confianza.'],['👤','Cuenta','Inicia sesión para guardar tus datos en la nube y recuperarlos si cambias de móvil.']];jPanel('Ayuda con cargar datos','helpBack()','<div class="help-hero"><h2>Dónde se carga cada cosa</h2><p>Un repaso rápido por pantallas. Si te queda alguna duda, pregúntale a Jenny.</p></div><div class="subpage-list">'+S.map(s=>'<div class="subpage-row"><span class="sicon">'+s[0]+'</span><div><b>'+s[1]+'</b><small style="display:block;color:#64748b;margin-top:3px;line-height:1.45">'+s[2]+'</small></div></div>').join('')+'</div>')}
+function renderHelpCarga(){const S=[['🧮','Calculadora','Escribe el importe y pulsa la plataforma (Bolt, Uber, Cabify, Privados, Free Now o Pide Taxi). Para aeropuerto, usa el botón verde de Aeropuerto. Si te cancelan un viaje, pulsa Cancelaciones, escribe el importe y toca la app: se guarda al instante. Con «Importe automático» la app lee el precio de la otra ventana. Elige tarjeta o efectivo cuando te lo pregunte. En Últimos viajes puedes añadir propina (🎁), editar (✏️) o borrar (🗑) cada viaje.'],['🧾','Facturación','Diario, Semanal y Mensual, con totales por plataforma y facturación manual. Las cancelaciones se suman al día y a la app que elijas; en Semanal, las compensaciones sueltas y la nómina. En Mensual, cada mes cerrado tiene un botón para cambiar su nómina con los ajustes de ahora (porcentaje, mínimo, propinas).'],['◉','Control','Iniciar y finalizar jornada, corregir horas de días anteriores, apuntar gasolina y kilómetros (con GPS automático o a mano). Aquí eliges tu aplicación prioritaria (Bolt, Uber, Cabify, Free Now o Pide Taxi). Abajo, «Tramos del día»: añade un tramo a mano, edítalo o elige su app (📲).'],['📍','GPS y lector de pantalla','El odómetro GPS cuenta los kilómetros con la jornada iniciada. El lector y la burbuja necesitan activar Driver Hub 360 en Accesibilidad de Android.'],['📊','Informe','Elige el periodo, genera el informe y compártelo en PDF o imagen.'],['⚙️','Ajustes','Tema (claro, oscuro o automático), comisión, tasa de aeropuerto, objetivos, horarios prioritarios, burbuja, GPS, copia de seguridad y Rentabilidad de viajes (aviso de si compensa cada oferta).'],['🌤️','Eventos Madrid hoy','En el menú de las tres rayitas, con cinco pestañas: Hoy, Mañana y Semana (el tiempo y los eventos de Ticketmaster (también el Autocine Madrid), IFEMA, Movistar Arena, Fabrik y Matadero Madrid, para saber dónde puede haber más movimiento), Deportes (partidos y clasificaciones) y Vuelos (cuántos vuelos llegan a Barajas en cada hora y a qué terminal).'],['🆘','Botón SOS','El botón rojo de arriba a la izquierda: cuenta atrás de 3 segundos y avisa a tus contactos de confianza con tu ubicación (puedes cancelar). También sale «Llamar al 112» y SMS, WhatsApp o Compartir. Se configura en Ajustes → SOS y contactos de confianza.'],['👤','Cuenta','Inicia sesión para guardar tus datos en la nube y recuperarlos si cambias de móvil.']];jPanel('Ayuda con cargar datos','helpBack()','<div class="help-hero"><h2>Dónde se carga cada cosa</h2><p>Un repaso rápido por pantallas. Si te queda alguna duda, pregúntale a Jenny.</p></div><div class="subpage-list">'+S.map(s=>'<div class="subpage-row"><span class="sicon">'+s[0]+'</span><div><b>'+s[1]+'</b><small style="display:block;color:#64748b;margin-top:3px;line-height:1.45">'+s[2]+'</small></div></div>').join('')+'</div>')}
 /* PDF e imagen del informe */
 function reportCanvas(light){const out=document.querySelector('#reportOut');if(!out||!out.dataset.ready){alert('Primero genera el informe.');return null}const clean=x=>String(x||'').replace(/[\u{1F300}-\u{1FAFF}\u2600-\u27BF]/gu,'').replace(/\s+/g,' ').trim();const period=clean((out.querySelector('.metric b')||{}).innerText),plats=[...out.querySelectorAll('.platform-summary .ps')].map(e=>[clean(e.childNodes[0].textContent),clean((e.querySelector('b')||{}).innerText)]),rows=[...out.querySelectorAll('table tr')].map(tr=>[...tr.children].map(c=>clean(c.innerText))).filter(r=>r.length>=2&&r[0]);const W=1080,P=56,RH=84,H=260+(plats.length?190*Math.ceil(plats.length/3):0)+rows.length*RH+150,cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d'),C=light?{bg:'#ffffff',row:'#f1f5f9',txt:'#0f172a',mut:'#475569',acc:'#1d4ed8'}:{bg:'#07111f',row:'#0e2038',txt:'#ffffff',mut:'#9fb4c8',acc:'#5fe6ff'};g.fillStyle=C.bg;g.fillRect(0,0,W,H);const hg=g.createLinearGradient(0,0,W,0);hg.addColorStop(0,'#0a3d9c');hg.addColorStop(1,'#0b6fd6');g.fillStyle=hg;g.fillRect(0,0,W,210);g.fillStyle='#fff';g.font='bold 54px sans-serif';g.textBaseline='alphabetic';g.fillText('Super Portal del Conductor',P,92);g.font='36px sans-serif';g.fillStyle='#dff3ff';g.fillText('Informe · '+period,P,152);let y=250;const fit=(t,mx,font)=>{g.font=font;while(g.measureText(t).width>mx&&t.length>3)t=t.slice(0,-2);return t};if(plats.length){const per=3,cw=(W-2*P-(per-1)*16)/per,col={Bolt:'#00b85c',Uber:'#1f2937',Cabify:'#7c3aed',Privados:'#2563eb','Free Now':'#d6046f','Pide Taxi':'#ffbf00'};plats.forEach((p,i)=>{const x=P+(i%per)*(cw+16),yy=y+Math.floor(i/per)*190;g.fillStyle=col[p[0]]||'#2563eb';g.beginPath();g.roundRect?g.roundRect(x,yy,cw,150,22):g.rect(x,yy,cw,150);g.fill();g.fillStyle=p[0]==='Pide Taxi'?'#2b2100':'#fff';g.font='bold 30px sans-serif';g.textAlign='center';g.fillText(p[0],x+cw/2,yy+54);g.font='bold 40px sans-serif';g.fillText(fit(p[1],cw-16,'bold 40px sans-serif'),x+cw/2,yy+114);g.textAlign='left'});y+=190*Math.ceil(plats.length/per)}rows.forEach((r,i)=>{if(i%2===0){g.fillStyle=C.row;g.fillRect(P-16,y,W-2*P+32,RH-6)}g.fillStyle=C.mut;g.textAlign='left';g.fillText(fit(r[0],W-2*P-300,'30px sans-serif'),P,y+52);g.fillStyle=C.txt;g.textAlign='right';g.font='bold 34px sans-serif';g.fillText(r[r.length-1],W-P,y+52);g.textAlign='left';y+=RH});g.fillStyle=C.mut;g.font='26px sans-serif';g.fillText('Generado el '+new Date().toLocaleDateString('es-ES')+' · Portal del Conductor',P,H-56);return cv}
 function jpegToPdf(jb,w,h){const pw=595,ph=Math.round(595*h/w),enc=new TextEncoder(),parts=[],offs=[];let off=0;const push=x=>{const b=typeof x==='string'?enc.encode(x):x;parts.push(b);off+=b.length};push('%PDF-1.4\n');offs[1]=off;push('1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n');offs[2]=off;push('2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n');offs[3]=off;push('3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 '+pw+' '+ph+']/Resources<</XObject<</Im0 4 0 R>>>>/Contents 5 0 R>>endobj\n');offs[4]=off;push('4 0 obj<</Type/XObject/Subtype/Image/Width '+w+'/Height '+h+'/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length '+jb.length+'>>stream\n');push(jb);push('\nendstream endobj\n');const cs='q '+pw+' 0 0 '+ph+' 0 0 cm /Im0 Do Q';offs[5]=off;push('5 0 obj<</Length '+cs.length+'>>stream\n'+cs+'\nendstream endobj\n');const xo=off;let x='xref\n0 6\n0000000000 65535 f \n';for(let i=1;i<=5;i++)x+=String(offs[i]).padStart(10,'0')+' 00000 n \n';push(x+'trailer<</Size 6/Root 1 0 R>>\nstartxref\n'+xo+'\n%%EOF');const all=new Uint8Array(off);let p=0;parts.forEach(b=>{all.set(b,p);p+=b.length});return all}
@@ -2851,7 +3095,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.66';
+const APP_VERSION='v3.67';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -2864,17 +3108,17 @@ function showInfoDetail(type){const T='✈ Abrir Telegram (@'+PORTAL_TG+')',tg='
 if(type==='sincronizacion')return renderSyncInfo();
 if(type==='actualizar')return infoPage('↻ Versión y actualizaciones',['Tienes instalada la versión '+APP_VERSION+'. La ves también arriba del todo, en Información.','Esta app se instala desde un archivo, no desde una tienda. Cuando hay una versión nueva te llega el archivo y lo instalas encima de la actual: no hace falta desinstalar y no pierdes tus datos.','Si te falta la última versión o algo no funciona tras actualizar, escribe a soporte.'],tg);
 if(type==='privacidad')return infoPage('🔐 Privacidad y datos',['Tus datos son tuyos. Se usan solo para que la app funcione: calcular tu facturación, tus horas, tu gasolina y tus kilómetros.','El GPS solo suma los metros recorridos mientras tienes la jornada iniciada. No guarda tus rutas ni tus posiciones.','El lector de pantalla solo busca el importe del viaje y si se paga con tarjeta o efectivo. No guarda ni envía nada más de lo que ves en pantalla. Si activas Rentabilidad de viajes, también lee la distancia y el tiempo de la oferta para avisarte; no se guarda ni se envía (en tu móvil solo se guarda el último texto de oferta leído, para poder revisarlo). Para leer las ofertas de Uber, que esconde esa información al lector normal, la app hace capturas de la zona de Uber y las lee en el momento dentro del móvil; las capturas no se guardan ni se envían.','La cámara y el micrófono solo se usan cuando tú pulsas Grabar vídeo. El vídeo se guarda en tu móvil: no se sube a internet ni a la nube, y puedes borrarlo cuando quieras.','Tus datos no se venden ni se comparten con nadie.']);
-if(type==='funciona')return infoPage('📖 Cómo funciona Portal del Conductor',['Calculadora: apunta tus viajes de Bolt, Uber, Cabify, Privados, Free Now y Pide Taxi (también con Importe automático) y tus cancelaciones; desde Últimos viajes puedes añadir propina, editar o borrar cada viaje.','Facturación: tus ingresos por día, semana y mes, con la facturación manual por plataforma, compensaciones y nómina.','Control: tu jornada, horas, gasolina y kilómetros (con GPS automático) y tu aplicación prioritaria.','Informe: resumen por periodos que puedes guardar o compartir en PDF o imagen.','Ajustes: comisión, tasa de aeropuerto, objetivos, burbuja, GPS, Tema (claro, oscuro o automático) y Rentabilidad de viajes (te avisa si una oferta compensa).','Madrid hoy (menú de las tres rayitas): el tiempo y los eventos del día de Ticketmaster, IFEMA, Movistar Arena y Fabrik, los partidos (Deportes) y las llegadas de vuelos a Barajas por hora y terminal (Vuelos).','Botón SOS (rojo, arriba a la izquierda): cuenta atrás de 3 segundos y aviso a tus contactos de confianza con tu ubicación; también llamar al 112. Se configura en Ajustes.'],'<button class="action" style="width:100%" onclick="renderHelpCarga()">📥 Ver la guía completa</button>');
+if(type==='funciona')return infoPage('📖 Cómo funciona Portal del Conductor',['Calculadora: apunta tus viajes de Bolt, Uber, Cabify, Privados, Free Now y Pide Taxi (también con Importe automático) y tus cancelaciones; desde Últimos viajes puedes añadir propina, editar o borrar cada viaje.','Facturación: tus ingresos por día, semana y mes, con la facturación manual por plataforma, compensaciones y nómina.','Control: tu jornada, horas, gasolina y kilómetros (con GPS automático) y tu aplicación prioritaria.','Informe: resumen por periodos que puedes guardar o compartir en PDF o imagen.','Ajustes: comisión, tasa de aeropuerto, objetivos, burbuja, GPS, Tema (claro, oscuro o automático) y Rentabilidad de viajes (te avisa si una oferta compensa).','Eventos Madrid hoy (menú de las tres rayitas): el tiempo y los eventos del día de Ticketmaster (también el Autocine Madrid), IFEMA, Movistar Arena, Fabrik y Matadero Madrid, los partidos (Deportes) y las llegadas de vuelos a Barajas por hora y terminal (Vuelos).','Botón SOS (rojo, arriba a la izquierda): cuenta atrás de 3 segundos y aviso a tus contactos de confianza con tu ubicación; también llamar al 112. Se configura en Ajustes.'],'<button class="action" style="width:100%" onclick="renderHelpCarga()">📥 Ver la guía completa</button>');
 if(type==='soporte')return infoPage('🛠️ Ayuda y soporte',['En Ayuda tienes una guía para cargar datos, preguntas frecuentes y a Jenny, que responde al momento a dudas sobre la app.','Si Jenny no sabe algo, te lo dice y puedes escribir a una persona por Telegram.'],'<button class="action" style="width:100%" onclick="renderHelp()">🛟 Ir a Ayuda</button><button class="secondary" style="width:100%;margin-top:10px" onclick="openTelegramSupport(\'\')">'+T+'</button>');
 if(type==='condiciones')return infoPage('📄 Condiciones de uso',['Portal del Conductor es una herramienta de organización personal para conductores. Es gratuita y se ofrece tal cual, sin garantía de disponibilidad.','Las cifras las introduces tú o las lee la app de tu pantalla: revísalas siempre. La app no es asesoría fiscal ni laboral, y no sustituye a tu gestor.','Portal del Conductor no tiene relación con Bolt, Uber, Cabify, Free Now ni Pide Taxi. Sus nombres pertenecen a sus propietarios y se usan solo para identificar las plataformas.','Cuida tu cuenta y tu contraseña: eres responsable de lo que se haga con ellas.']);
 if(type==='privacidadLegal')return infoPage('🔒 Política de privacidad',['Responsable: Portal del Conductor. Contacto: Telegram @'+PORTAL_TG+'.','Datos que se guardan: tu cuenta (correo o teléfono), tus viajes, horas, gasolina, kilómetros, ajustes y la configuración de la app.','Para qué: solo para prestarte el servicio de la app. No se usan para publicidad ni se venden.','Dónde: en tu móvil y, si inicias sesión, en la nube, en los servidores del proveedor Supabase. El administrador de la app puede acceder técnicamente a estos datos para mantener el servicio.','Permisos: la ubicación solo suma kilómetros; el servicio de accesibilidad solo se usa para leer el importe, la forma de pago y, si activas Rentabilidad de viajes, la distancia y el tiempo de las ofertas. Para las ofertas de Uber puede hacer capturas de pantalla que procesa al momento dentro del móvil; no se guardan ni se envían. No se guarda ni se envía nada más.','Cuánto tiempo: mientras tengas cuenta. Puedes pedir una copia o el borrado de tus datos escribiendo por Telegram, y puedes guardar una copia tú mismo desde Datos y sincronización.','Tus derechos: acceso, rectificación, supresión, oposición, limitación y portabilidad. Escríbenos y te respondemos.','Este texto puede actualizarse; la versión vigente es la que ves aquí.'],tg)}
 function renderInfo(){const R=(i,t,s,f)=>'<button class="subpage-row" onclick="'+f+'"><span class="sicon">'+i+'</span><div style="flex:1"><b>'+t+'</b><small style="display:block;color:#64748b;margin-top:3px">'+s+'</small></div><span>›</span></button>';jPanel('Información','backToGeneralMenu()','<div class="info-center"><div class="info-logo">🚗</div><div class="info-version"><b>Super Portal del Conductor</b><br>Versión de la app: '+APP_VERSION+'</div></div><div class="subpage-list">'+R('↻','Versión y actualizaciones','Qué versión tienes y cómo actualizar.',"showInfoDetail('actualizar')")+R('🔐','Privacidad y datos','Qué se guarda y qué no.',"showInfoDetail('privacidad')")+R('☁️','Datos y sincronización','Última sincronización y copia de tus datos.',"showInfoDetail('sincronizacion')")+R('📖','Cómo funciona Portal del Conductor','Un repaso a todos los apartados.',"showInfoDetail('funciona')")+R('🛠️','Ayuda y soporte','Jenny, preguntas frecuentes y Telegram.',"showInfoDetail('soporte')")+R('📄','Condiciones de uso','Reglas básicas de uso de la app.',"showInfoDetail('condiciones')")+R('🔒','Política de privacidad','Cómo se tratan tus datos.',"showInfoDetail('privacidadLegal')")+'</div><div class="info-footer"><b>Super Portal del Conductor</b><br><span>Organiza. Controla. Factura.</span><br><small>© 2026 Portal del Conductor</small></div>')}
 /* editar viajes desde Calculadora */
 function closeCalcEdit(){const o=document.getElementById('calcEditModal');if(o)o.remove()}
-function editCalcTrip(id){const t=db.trips.find(x=>String(x.id)===String(id));if(!t)return;closeCalcEdit();const cur=t.platform==='Bolt'&&t.airport?'BoltAirport':t.platform,opts=[['Bolt','Bolt'],['BoltAirport','Bolt · Aeropuerto ✈'],['Uber','Uber'],['Cabify','Cabify'],['Privados','Privados'],['Free Now','Free Now'],['Pide Taxi','Pide Taxi']].map(([v,l])=>'<option value="'+v+'"'+(cur===v?' selected':'')+'>'+l+'</option>').join(''),pay='<option value=""'+(t.payment!=='cash'&&t.payment!=='card'?' selected':'')+'>Sin indicar</option><option value="cash"'+(t.payment==='cash'?' selected':'')+'>💵 Efectivo</option><option value="card"'+(t.payment==='card'?' selected':'')+'>💳 Tarjeta</option>',ov=document.createElement('div');ov.id='calcEditModal';ov.style.cssText='position:fixed;inset:0;background:rgba(2,8,20,.75);z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding:12px;box-sizing:border-box';ov.innerHTML='<div style="width:100%;max-width:520px;background:linear-gradient(160deg,#0d2a52,#071a33);border:2px solid #3fc8ff;border-radius:22px;padding:16px;color:#fff;box-shadow:0 0 24px #1e9bff66;box-sizing:border-box"><div style="font-weight:900;font-size:19px">✏️ Editar viaje</div><div style="color:#9fb4c8;font-size:13px;margin:4px 0 12px">La fecha ('+fmtDate(t.date)+') y la hora ('+(t.time||'—')+') se mantienen.</div><label style="font-size:13px;color:#cfe3f5">Plataforma</label><select id="ceP" class="input" style="width:100%;margin:4px 0 10px">'+opts+'</select><label style="font-size:13px;color:#cfe3f5">Importe del viaje (€)</label><input id="ceA" class="input" type="number" inputmode="decimal" min="0.01" step=".01" value="'+(Number(t.orig)||0)+'" style="width:100%;margin:4px 0 10px;box-sizing:border-box"><label style="font-size:13px;color:#cfe3f5">Forma de pago</label><select id="ceM" class="input" style="width:100%;margin:4px 0 4px">'+pay+'</select><div class="row" style="margin-top:14px;gap:8px"><button class="action" style="flex:1" onclick="saveCalcTripEdit(\''+t.id+'\')">Guardar cambios</button><button class="back" style="flex:1" onclick="closeCalcEdit()">Cancelar</button></div></div>';document.body.appendChild(ov)}
-function saveCalcTripEdit(id){const t=db.trips.find(x=>String(x.id)===String(id));if(!t)return closeCalcEdit();const amount=Number(String((document.getElementById('ceA')||{}).value||'').replace(',','.'));let platform=(document.getElementById('ceP')||{}).value,airport=false;if(platform==='BoltAirport'){platform='Bolt';airport=true}const pay=(document.getElementById('ceM')||{}).value;if(!Number.isFinite(amount)||amount<=0){alert('Introduce un importe válido mayor que cero.');return}if(!PLAT6.includes(platform)){alert('Revisa la plataforma.');return}t.platform=platform;t.airport=airport;t.orig=Number(amount.toFixed(2));t.net=net(platform,t.orig,airport);if(pay==='cash'||pay==='card')t.payment=pay;closeCalcEdit();save();renderCalc()}
+function editCalcTrip(id){const t=db.trips.find(x=>String(x.id)===String(id));if(!t)return;closeCalcEdit();const cur=t.platform==='Bolt'&&t.airport?'BoltAirport':t.platform,opts=[['Bolt','Bolt'],['BoltAirport','Bolt · Aeropuerto ✈'],['Uber','Uber'],['Cabify','Cabify'],['Privados','Privados'],['Free Now','Free Now'],['Pide Taxi','Pide Taxi']].map(([v,l])=>'<option value="'+v+'"'+(cur===v?' selected':'')+'>'+l+'</option>').join(''),pay='<option value=""'+(t.payment!=='cash'&&t.payment!=='card'?' selected':'')+'>Sin indicar</option><option value="cash"'+(t.payment==='cash'?' selected':'')+'>💵 Efectivo</option><option value="card"'+(t.payment==='card'?' selected':'')+'>💳 Tarjeta</option>',ov=document.createElement('div');ov.id='calcEditModal';ov.style.cssText='position:fixed;inset:0;background:rgba(2,8,20,.75);z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding:12px;box-sizing:border-box';ov.innerHTML='<div style="width:100%;max-width:520px;background:linear-gradient(160deg,#0d2a52,#071a33);border:2px solid #3fc8ff;border-radius:22px;padding:16px;color:#fff;box-shadow:0 0 24px #1e9bff66;box-sizing:border-box"><div style="font-weight:900;font-size:19px">✏️ Editar viaje</div><div style="color:#9fb4c8;font-size:13px;margin:4px 0 12px">La fecha ('+fmtDate(t.date)+') se mantiene. Aquí también puedes cambiar las horas.</div><label style="font-size:13px;color:#cfe3f5">Plataforma</label><select id="ceP" class="input" style="width:100%;margin:4px 0 10px">'+opts+'</select><label style="font-size:13px;color:#cfe3f5">Importe del viaje (€)</label><input id="ceA" class="input" type="number" inputmode="decimal" min="0.01" step=".01" value="'+(Number(t.orig)||0)+'" style="width:100%;margin:4px 0 10px;box-sizing:border-box"><label style="font-size:13px;color:#cfe3f5">Forma de pago</label><select id="ceM" class="input" style="width:100%;margin:4px 0 4px">'+pay+'</select><div style="display:flex;gap:10px;margin:10px 0 0"><div style="flex:1;min-width:0"><label style="font-size:13px;color:#cfe3f5">Hora de aceptación</label><input id="ceS" class="input" type="time" value="'+hmNorm(t.start)+'" style="width:100%;margin:4px 0 0;box-sizing:border-box"></div><div style="flex:1;min-width:0"><label style="font-size:13px;color:#cfe3f5">Hora de finalización</label><input id="ceE" class="input" type="time" value="'+hmNorm(t.time)+'" style="width:100%;margin:4px 0 0;box-sizing:border-box"></div></div><div style="color:#9fb4c8;font-size:12px;margin:6px 0 0">La de aceptación es cuando aceptaste el viaje (vacía si no la sabes). La lista se ordena sola por la hora de finalización.</div><div class="row" style="margin-top:14px;gap:8px"><button class="action" style="flex:1" onclick="saveCalcTripEdit(\''+t.id+'\')">Guardar cambios</button><button class="back" style="flex:1" onclick="closeCalcEdit()">Cancelar</button></div></div>';document.body.appendChild(ov)}
+function saveCalcTripEdit(id){const t=db.trips.find(x=>String(x.id)===String(id));if(!t)return closeCalcEdit();const amount=Number(String((document.getElementById('ceA')||{}).value||'').replace(',','.'));let platform=(document.getElementById('ceP')||{}).value,airport=false;if(platform==='BoltAirport'){platform='Bolt';airport=true}const pay=(document.getElementById('ceM')||{}).value;if(!Number.isFinite(amount)||amount<=0){alert('Introduce un importe válido mayor que cero.');return}if(!PLAT6.includes(platform)){alert('Revisa la plataforma.');return}const sEl=document.getElementById('ceS'),eEl=document.getElementById('ceE'),sv=sEl?String(sEl.value||'').trim():'',ev=eEl?String(eEl.value||'').trim():'';if((sv&&!hmNorm(sv))||(ev&&!hmNorm(ev))){alert('Revisa las horas.');return}const sN=sv?hmNorm(sv):'',eN=ev?hmNorm(ev):hmNorm(t.time);if(sN&&eN&&hmMin(sN)>hmMin(eN)){alert('La hora de aceptación no puede ser después de la de finalización.');return}t.platform=platform;t.airport=airport;if(sEl){if(sN)t.start=sN;else delete t.start}if(eN)t.time=eN;t.orig=Number(amount.toFixed(2));t.net=net(platform,t.orig,airport);if(pay==='cash'||pay==='card')t.payment=pay;closeCalcEdit();save();renderCalc()}
 /* respuestas de Jenny al día con los cambios */
-(function(){const set=(id,a)=>{const e=jEntry(id);if(e)e[4]=a};(function(){const e=jEntry('corregir');if(e)e[3]+=',edito^4,editar^4,modificar^4,cambiar un viaje^5,lapiz^4'})();set('propinas','En Calculadora, en Últimos viajes, pulsa el 🎁 del viaje y escribe lo que te dieron. Las propinas se cuentan aparte y no pagan comisión.');set('corregir','En Calculadora, en Últimos viajes, pulsa el lápiz ✏️ del viaje para cambiar la plataforma, el importe o la forma de pago. Con la papelera 🗑 lo borras. Los totales se recalculan solos.');set('otrodia','Usa las flechas de fecha de Calculadora o de Facturación para ir al día que quieras. Para corregir un viaje de otro día, ve a ese día en Calculadora y edítalo en Últimos viajes.');set('pdf','Genera el informe y usa «Guardar PDF» para dejarlo en la carpeta Descargas de tu móvil, o «Compartir PDF» o «Compartir imagen» para mandarlo por WhatsApp o correo.');set('copia','Con tu cuenta tus datos ya están a salvo en la nube. Además, en Información → Datos y sincronización puedes pulsar «Guardar copia de mis datos» y se guarda un archivo en tu móvil.')})();
+(function(){const set=(id,a)=>{const e=jEntry(id);if(e)e[4]=a};(function(){const e=jEntry('corregir');if(e)e[3]+=',edito^4,editar^4,modificar^4,cambiar un viaje^5,lapiz^4'})();set('propinas','En Calculadora, en Últimos viajes, pulsa el 🎁 del viaje y escribe lo que te dieron. Las propinas se cuentan aparte y no pagan comisión.');set('corregir','En Calculadora, en Últimos viajes, pulsa el lápiz ✏️ del viaje para cambiar la plataforma, el importe, la forma de pago o las horas (la de aceptación y la de finalización: la lista se ordena sola por la de finalización). Con la papelera 🗑 lo borras. Los totales se recalculan solos.');set('otrodia','Usa las flechas de fecha de Calculadora o de Facturación para ir al día que quieras. Para corregir un viaje de otro día, ve a ese día en Calculadora y edítalo en Últimos viajes.');set('pdf','Genera el informe y usa «Guardar PDF» para dejarlo en la carpeta Descargas de tu móvil, o «Compartir PDF» o «Compartir imagen» para mandarlo por WhatsApp o correo.');set('copia','Con tu cuenta tus datos ya están a salvo en la nube. Además, en Información → Datos y sincronización puedes pulsar «Guardar copia de mis datos» y se guarda un archivo en tu móvil.')})();
 
 /* totales grandes: se reducen solo si no caben */
 function fitMetrics(){document.querySelectorAll('.results .metric>b').forEach(b=>{b.style.removeProperty('font-size');let fs=parseFloat(getComputedStyle(b).fontSize);let n=0;while(b.scrollWidth>b.clientWidth&&fs>13){fs-=1;n++;b.style.setProperty('font-size',fs+'px','important')}if(n&&fs>13)b.style.setProperty('font-size',(fs-1)+'px','important')})}
@@ -4048,7 +4292,7 @@ window.commission=function(k){
    Dos caminos, sin ninguna clave dentro de la app:
    1) la función «deportes» de tu Supabase (opcional): Football-Data con caché compartida; es la única que da Tablas y Equipos (y la Euroliga).
    2) si esa función no está o falla, la app lee directamente la web pública de ESPN (LaLiga y Champions, hoy y mañana), como se hace con IFEMA.
-   Los partidos en estadios de Madrid también salen en «Madrid hoy». Si todo falla, no pasa nada: la pantalla lo explica y lo demás sigue igual. */
+   Los partidos en estadios de Madrid también salen en «Eventos Madrid hoy». Si todo falla, no pasa nada: la pantalla lo explica y lo demás sigue igual. */
 (function(){
 'use strict';
 var K_SP='pdc_sports_v1',K_SPP='pdc_sports_prefs_v1',RETRY=1800000,COOL=30000,TMO=12000,WAIT=6000,MAXAGE=43200000,NOFN=43200000;
@@ -4341,13 +4585,13 @@ function tick(){
 window.spSub=function(t){S.sub=t;redraw();need(false)};
 window.spComp=function(c){S.comp=c;redraw();need(false)};
 window.spMadrid=function(){var p=prefs();p.madrid=p.madrid===false;jset(K_SPP,p);redraw()};
-/* atajo (ayuda, avisos): abre «Madrid hoy» en su pestaña Deportes */
+/* atajo (ayuda, avisos): abre «Eventos Madrid hoy» en su pestaña Deportes */
 window.renderDeportes=function(){
   if(typeof window.renderMadridHoy==='function')window.renderMadridHoy();
   if(typeof window.infTab==='function')window.infTab('deportes');
 };
 
-/* ---------- enganche con «Madrid hoy» (solo si la función responde; si no, no cambia nada) ---------- */
+/* ---------- enganche con «Eventos Madrid hoy» (solo si la función responde; si no, no cambia nada) ---------- */
 var KW=['bernabeu','metropolitano','vallecas','movistar arena'];
 function nv(s){return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace('wizink','movistar arena')}
 function kw(v){v=nv(v);for(var i=0;i<KW.length;i++)if(v.indexOf(KW[i])>=0)return KW[i];return ''}
@@ -4372,7 +4616,7 @@ window.PDC331={
     if(prefs().madrid===false)return Promise.resolve([]);
     var c=cache();
     if(c.fail&&Date.now()-c.fail.t<RETRY&&!fresh(c.m))return Promise.resolve(oldEvents());   // sin reintentos seguidos si no responde
-    // «Madrid hoy» espera como mucho 6 s; si Supabase tarda, sigue con lo guardado y la descarga termina por su cuenta
+    // «Eventos Madrid hoy» espera como mucho 6 s; si Supabase tarda, sigue con lo guardado y la descarga termina por su cuenta
     return new Promise(function(res){
       var done=false,tm=setTimeout(function(){if(!done){done=true;res(oldEvents())}},WAIT);
       load('m','m',false).then(function(e){if(!done){done=true;clearTimeout(tm);res(toEvents(e.data))}},function(){if(!done){done=true;clearTimeout(tm);res(oldEvents())}});
@@ -4391,23 +4635,23 @@ window.PDC331={
   on:function(){var c=cache();return prefs().madrid!==false&&!!(c.m&&c.m.data&&Date.now()-c.m.t<MAXAGE)},
   statusHtml:function(){
     var c=cache(),p=prefs();
-    if(p.madrid===false)return '<br>'+h('Deportes: los partidos en Madrid hoy están apagados (Madrid hoy → Deportes).');
+    if(p.madrid===false)return '<br>'+h('Deportes: los partidos en Eventos Madrid hoy están apagados (Eventos Madrid hoy → Deportes).');
     if(c.m&&c.m.data&&Date.now()-c.m.t<MAXAGE){
       var n=toEvents(c.m.data).length;
       return '<br>'+h('Deportes: '+(n?n+(n===1?' partido':' partidos')+' en estadios de Madrid los próximos días ('+(c.m.data.src==='ESPN'?'ESPN':'Football-Data')+')':'no hay partidos en estadios de Madrid los próximos días')+(c.m.stale?' · datos guardados':'')+'.');
     }
-    return '';      // si no hay datos o la función no responde, «Madrid hoy» no dice nada (el motivo se ve en Deportes)
+    return '';      // si no hay datos o la función no responde, «Eventos Madrid hoy» no dice nada (el motivo se ve en Deportes)
   }
 };
 /* ayuda de Jenny: una entrada nueva, antes de «contacto» (si no hay lista de ayuda, no hace nada) */
 try{
   if(typeof J_KB!=='undefined'&&!J_KB.some(function(e){return e[0]==='deportes'})){
     var ic=J_KB.findIndex(function(e){return e[0]==='contacto'});
-    J_KB.splice(ic<0?J_KB.length:ic,0,['deportes','⚽','Deportes: partidos y clasificaciones','deportes^5,futbol^5,partidos^4,partido^3,clasificacion^5,tabla de liga^5,laliga^6,champions^6,baloncesto^4,euroliga^6,marcador^4,resultados^3,football data^6','Madrid hoy → pestaña Deportes: los partidos de LaLiga y Champions de hoy y mañana, las clasificaciones y los equipos, con la hora de España. Si tienes la función de Supabase usa Football-Data (con retraso); si no, lee directamente la web pública de ESPN (casi en directo, pero no es una fuente oficial y puede cambiar). Los partidos que se juegan en estadios de Madrid (Bernabéu, Metropolitano, Vallecas) también salen en «Madrid hoy» con su salida estimada; se pueden apagar con el botón de abajo de la pestaña Deportes. Tablas, Equipos y baloncesto necesitan la función de Supabase (opcional): si Deportes dice que falta algo, mira los pasos del paquete. Copa del Rey, Europa League y Segunda no están en las fuentes gratuitas.']);
+    J_KB.splice(ic<0?J_KB.length:ic,0,['deportes','⚽','Deportes: partidos y clasificaciones','deportes^5,futbol^5,partidos^4,partido^3,clasificacion^5,tabla de liga^5,laliga^6,champions^6,baloncesto^4,euroliga^6,marcador^4,resultados^3,football data^6','Eventos Madrid hoy → pestaña Deportes: los partidos de LaLiga y Champions de hoy y mañana, las clasificaciones y los equipos, con la hora de España. Si tienes la función de Supabase usa Football-Data (con retraso); si no, lee directamente la web pública de ESPN (casi en directo, pero no es una fuente oficial y puede cambiar). Los partidos que se juegan en estadios de Madrid (Bernabéu, Metropolitano, Vallecas) también salen en «Eventos Madrid hoy» con su salida estimada; se pueden apagar con el botón de abajo de la pestaña Deportes. Tablas, Equipos y baloncesto necesitan la función de Supabase (opcional): si Deportes dice que falta algo, mira los pasos del paquete. Copa del Rey, Europa League y Segunda no están en las fuentes gratuitas.']);
   }
 }catch(e){}
 })();
-/* ---------- v3.59 · «Vuelos» (pestaña de Madrid hoy): llegadas de hoy a Madrid-Barajas, por hora y por terminal ----------
+/* ---------- v3.59 · «Vuelos» (pestaña de Eventos Madrid hoy): llegadas de hoy a Madrid-Barajas, por hora y por terminal ----------
    Los datos vienen de la función «vuelos» de Supabase (que lee la web de información de vuelos de Aena y guarda una copia compartida que renueva cada pocos minutos). La app solo la consulta y lo dibuja;
    si la función no responde, enseña lo último guardado y dice por qué. Se cuentan vuelos, no pasajeros. */
 (function(){
@@ -4606,7 +4850,7 @@ window.PDC359={
   on:function(){return good(cache())},
   _s:S
 };
-/* atajo (ayuda, avisos): abre «Madrid hoy» en su pestaña Vuelos */
+/* atajo (ayuda, avisos): abre «Eventos Madrid hoy» en su pestaña Vuelos */
 window.renderVuelos=function(){
   if(typeof window.renderMadridHoy==='function')window.renderMadridHoy();
   if(typeof window.infTab==='function')window.infTab('vuelos');
@@ -4615,7 +4859,7 @@ window.renderVuelos=function(){
 try{
   if(typeof J_KB!=='undefined'&&!J_KB.some(function(e){return e[0]==='vuelos'})){
     var ic=J_KB.findIndex(function(e){return e[0]==='contacto'});
-    J_KB.splice(ic<0?J_KB.length:ic,0,['vuelos','✈️','Vuelos: llegadas a Barajas por hora y terminal','vuelos^6,aeropuerto^5,barajas^6,llegadas^5,terminal^5,t1^4,t2^4,t4^4,aviones^4,aena^4,hora punta^5,información de vuelos^4','Madrid hoy → pestaña Vuelos: cuántos vuelos llegan a Madrid-Barajas en cada hora de hoy y a qué terminal (T1, T2 y T4; T4S cuenta como T4), la hora con más llegadas y la lista de las próximas llegadas con su estado (aterrizado, a tiempo o retrasado). Se cuentan vuelos, no pasajeros. Los datos salen de la web de información de vuelos de Aena y se renuevan cada pocos minutos (la hora y la terminal pueden cambiar a última hora): si no se pueden actualizar, te enseña lo último guardado. Si falta algo en Supabase, el aviso de la pestaña dice qué es.']);
+    J_KB.splice(ic<0?J_KB.length:ic,0,['vuelos','✈️','Vuelos: llegadas a Barajas por hora y terminal','vuelos^6,aeropuerto^5,barajas^6,llegadas^5,terminal^5,t1^4,t2^4,t4^4,aviones^4,aena^4,hora punta^5,información de vuelos^4','Eventos Madrid hoy → pestaña Vuelos: cuántos vuelos llegan a Madrid-Barajas en cada hora de hoy y a qué terminal (T1, T2 y T4; T4S cuenta como T4), la hora con más llegadas y la lista de las próximas llegadas con su estado (aterrizado, a tiempo o retrasado). Se cuentan vuelos, no pasajeros. Los datos salen de la web de información de vuelos de Aena y se renuevan cada pocos minutos (la hora y la terminal pueden cambiar a última hora): si no se pueden actualizar, te enseña lo último guardado. Si falta algo en Supabase, el aviso de la pestaña dice qué es.']);
   }
 }catch(e){}
 })();
@@ -7460,7 +7704,7 @@ function lastLine(){const a=hist();if(!a.length)return 'Todavía no has medido.'
   return 'Última medida: '+p2(d.getDate())+'/'+p2(d.getMonth()+1)+' '+p2(d.getHours())+':'+p2(d.getMinutes())+' · procesador '+x.bench+' ms · pantalla más lenta '+x.paintMax+' ms'+(x.lite?' (Modo ligero)':'')}
 function addPerfCard(){
   const head=document.querySelector('#content .settings-head .section-title');
-  if(!head||!/Configuraci/.test(head.textContent)||document.getElementById('perfCard'))return;
+  if(!head||!/N[óo]minas y comisiones/.test(head.textContent)||document.getElementById('perfCard'))return;
   const panel=head.closest('section')||document.querySelector('#content');
   const c=document.createElement('details');c.id='perfCard';c.className='note rt-sec';c.style.cssText='margin:14px 0 10px';
   c.innerHTML='<summary style="cursor:pointer;font-weight:800">⚡ Velocidad de la app</summary>'
@@ -7484,7 +7728,7 @@ if(typeof _ras==='function')window.renderAppSettings=function(){
 </script>
 <!--v316-begin-->
 <style id="v316-style">
-/* v3.16 · Madrid hoy · estilo «iPhone» (modo oscuro): título grande, tarjetas agrupadas, selector segmentado, azul de sistema.
+/* v3.16 · Eventos Madrid hoy · estilo «iPhone» (modo oscuro): título grande, tarjetas agrupadas, selector segmentado, azul de sistema.
    Sin animaciones, sin sombras pesadas ni desenfoques (menos trabajo para la GPU y la batería).
    Letra: Inter (© The Inter Project Authors, licencia SIL OFL 1.1), recortada a caracteres latinos e incluida en la propia app: no se descarga nada. */
 @font-face{font-family:'PDC Inter';font-style:normal;font-weight:400;font-display:swap;src:url(data:font/woff;base64,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) format('woff')}
@@ -7699,7 +7943,7 @@ function parseEv(j){
   return out;
 }
 /*v325-ifema*/
-/* v3.25 · IFEMA en «Madrid hoy». Fechas y nombres de ifema.es/calendario (la web no tiene horario: si es una feria de pocos dias
+/* v3.25 · IFEMA en «Eventos Madrid hoy». Fechas y nombres de ifema.es/calendario (la web no tiene horario: si es una feria de pocos dias
    se supone el horario tipico 10:00; los espectaculos de larga temporada salen sin hora). Si IFEMA falla, siguen los eventos de Ticketmaster. */
 var IF_URLS=['https://www.ifema.es/calendario','https://www.ifema.es/calendario/ferias'],K_IF='pdc_ifema_v1';
 function httpText(url){
@@ -7797,7 +8041,7 @@ function ifStatusHtml(){
   return '<br>'+esc(m);
 }
 /*v361-arena*/
-/* v3.61 · Movistar Arena en «Madrid hoy». Ticketmaster casi no trae los conciertos ni los partidos del recinto, asi que se lee su programacion oficial
+/* v3.61 · Movistar Arena en «Eventos Madrid hoy». Ticketmaster casi no trae los conciertos ni los partidos del recinto, asi que se lee su programacion oficial
    (movistararena.es/programacion: pagina publica que permite robots.txt). Cada ficha trae titulo, fecha o rango («del 19 al 21 de nov.»), hora y, si toca, «Cancelado» o «Aplazado» (esas no salen).
    Si la pagina falla o cambia, siguen las demas fuentes y el pie de la pantalla lo dice. */
 var AR_URL='https://www.movistararena.es/programacion/',K_AR='pdc_arena_v1';
@@ -7960,6 +8204,117 @@ function fabrikEv(){
     return L;
   },function(e){fbSave({t:Date.now(),n:0,err:errTxt(e)});return []});
 }
+/*v367-matadero*/
+/* v3.67 · Matadero Madrid en «Eventos Madrid hoy» (Juan 24-11 03:50). Su programacion (mataderomadrid.org/programacion) es una lista de fichas: categoria, «Fecha», la fecha («martes 24 noviembre 2026»)
+   y el titulo con enlace a /programacion/{nombre}. NO trae hora (sale «Hora por confirmar», como Fabrik). Se lee la pagina 1 y, si aun hay fichas dentro de los 7 dias, las siguientes (?page=1, 2, 3: 4 como mucho).
+   Si la pagina falla o cambia, siguen las demas fuentes y el pie de la pantalla lo dice. (El Autocine Madrid —ahora «The Lenovo Garage»— vende por Ticketmaster: ya llegaba, solo faltaba reconocer el recinto.) */
+var MD_URL='https://www.mataderomadrid.org/programacion',K_MD='pdc_matadero_v1',MD_PAGES=4,MD_SRC='mataderomadrid.org';
+var MD_M={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12};
+/* «martes 24 noviembre 2026», «MARTES 24 NOVIEMBRE 2026», «24 de noviembre de 2026» y tambien sin año */
+var MD_DATE=/(?:(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\.?,?\s+)?\b(\d{1,2})\s+(?:de\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b(?:\s+(?:de\s+)?(\d{4})\b)?/gi;
+/* textos de enlace que NO son un evento (paginador, menus, botones) */
+var MD_BAD=/^(siguiente|anterior|next|previous|pr[oó]xim[oa]s?|primera|[uú]ltima|ir a la.*|p[aá]gina.*|ver m[aá]s|m[aá]s info.*|leer m[aá]s|saltar.*|inicio|programaci[oó]n|buscar|filtrar|[«»‹›<>…\s]+|\d+)$/i;
+function mdSlug(href){
+  var m=/^(?:https?:\/\/(?:www\.)?mataderomadrid\.org)?\/programacion\/([a-z0-9][a-z0-9_\-%.]*)\/?(?:[?#].*)?$/i.exec(String(href||'').trim());
+  return m?m[1].toLowerCase():'';
+}
+function mdYear(m,d,y,today){
+  if(y)return y;
+  var yr=+today.slice(0,4),k=arKey(yr,m,d);
+  return (k&&k<addDays(today,-180))?yr+1:yr;
+}
+/* la pagina → una lista de «fechas» y «titulos» en el orden en que aparecen (el resto de etiquetas se ignoran) */
+function mdTokens(html){
+  var h=String(html).replace(/<(script|style|noscript)\b[\s\S]*?<\/\1>/gi,' ').replace(/<!--[\s\S]*?-->/g,' ');
+  var out=[],re=/<a\b([^>]*)>([\s\S]*?)<\/a>/gi,last=0,m,hr,sl,tx;
+  function txt(s){
+    var t=arTxt(s),r;if(!t)return;
+    MD_DATE.lastIndex=0;
+    while((r=MD_DATE.exec(t)))out.push({dt:[+r[1],arMes(r[2]),r[3]?+r[3]:0]});
+  }
+  while((m=re.exec(h))){
+    txt(h.slice(last,m.index));last=re.lastIndex;
+    hr=/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(m[1]);
+    sl=hr?mdSlug(hr[1]!=null?hr[1]:hr[2]):'';tx=arTxt(m[2]);
+    if(sl&&tx.length>=2&&!MD_BAD.test(tx))out.push({ti:tx.slice(0,90),sl:sl});
+    else txt(m[2]);
+  }
+  txt(h.slice(last));
+  return out;
+}
+/* → [{n,sl,a,b}] (a..b = primer y ultimo dia). Lanza «no he sabido leer la página» si no encuentra ninguna ficha con titulo y fecha. */
+function parseMatadero(html){
+  if(typeof html!=='string')throw new Error('respuesta no válida');
+  var T=mdTokens(html),today=dkey(new Date()),i,nt=0,nd=0,dt=0,td=0,recs=[],pend=[],cur=null;
+  for(i=0;i<T.length;i++){
+    if(T[i].ti!=null)nt++;else nd++;
+    if(i&&T[i-1].dt&&T[i].ti!=null)dt++;                /* fecha seguida de titulo */
+    if(i&&T[i-1].ti!=null&&T[i].dt)td++;                /* titulo seguido de fecha */
+  }
+  if(!nt||!nd)throw new Error('no he sabido leer la página');
+  var A=!(td>dt);                                       /* A: la fecha va antes del titulo (como se ve hoy; en empate, A: unos enlaces del menu antes de la primera ficha no cambian nada); B: el titulo va antes de la fecha */
+  for(i=0;i<T.length;i++){
+    var t=T[i];
+    if(t.dt){if(A)pend.push(t.dt);else if(cur&&cur.ds.length<2)cur.ds.push(t.dt)}
+    else if(A){if(pend.length){recs.push({n:t.ti,sl:t.sl,ds:pend.slice(-2)});pend=[]}}
+    else{cur={n:t.ti,sl:t.sl,ds:[]};recs.push(cur)}
+  }
+  var out=[],seen={};
+  recs.forEach(function(r){
+    var ks=[],j,k;
+    for(j=0;j<r.ds.length;j++){k=arKey(mdYear(r.ds[j][1],r.ds[j][0],r.ds[j][2],today),r.ds[j][1],r.ds[j][0]);if(k&&ks.indexOf(k)<0)ks.push(k)}
+    if(!ks.length)return;
+    ks.sort();
+    var a=ks[0],b=ks[ks.length-1],key=r.sl+'|'+a+'|'+b;          /* una fecha = un dia; dos = de la primera a la ultima */
+    if(seen[key])return;seen[key]=1;out.push({n:r.n,sl:r.sl,a:a,b:b});
+  });
+  if(out.length<2)throw new Error('no he sabido leer la página');      /* una pagina de programacion con menos de 2 fichas no es de fiar (un enlace del menu y una fecha suelta no son un evento) */
+  return out;
+}
+/* de las fichas a eventos de los proximos 7 dias (un rango corto = un evento cada dia; los de mas de 14 dias —exposiciones— no se cuentan) */
+function mdExpand(L){
+  var out=[],seen={},from=dkey(new Date()),i,j,r,d,n,x;
+  for(i=0;i<L.length;i++){
+    r=L[i];
+    for(n=0,x=r.a;x<r.b&&n<400;n++)x=addDays(x,1);
+    if(n>14)continue;
+    for(j=0;j<7;j++){
+      d=addDays(from,j);if(d<r.a||d>r.b)continue;
+      if(seen[r.sl+'|'+d])continue;seen[r.sl+'|'+d]=1;
+      out.push({id:'md'+ifSlug(r.sl)+d,n:r.n,d:d,t:'',v:'Matadero Madrid',c:'Madrid',k:'other',g:'Cultura',src:MD_SRC});
+    }
+  }
+  out.sort(function(p,q){return p.d<q.d?-1:p.d>q.d?1:p.n<q.n?-1:p.n>q.n?1:0});
+  return out;
+}
+function mergeMatadero(list,md){return mergeAt(list,md,/matadero/i)}
+function mdSave(o){try{localStorage.setItem(K_MD,JSON.stringify(o))}catch(e){}}
+function mdGet(){try{return JSON.parse(localStorage.getItem(K_MD)||'null')}catch(e){return null}}
+function mdStatusHtml(){
+  var s=mdGet();if(!s)return '';
+  var m=s.err?'Matadero Madrid: no he podido leer mataderomadrid.org ('+s.err+').':(s.n>0?'Matadero Madrid: '+s.n+(s.n===1?' evento leído':' eventos leídos')+' en mataderomadrid.org para estos días (solo la fecha: la web no publica la hora).':'Matadero Madrid: no hay eventos en mataderomadrid.org para estos días.');
+  return '<br>'+esc(m);
+}
+/* nunca rechaza: si falla, devuelve [] y deja el motivo para el pie. La 1.ª pagina decide; si una siguiente falla se queda con lo leido. */
+function mataderoEv(){
+  var to=addDays(dkey(new Date()),6),all=[];
+  function page(i){
+    return httpText(MD_URL+(i?'?page='+i:'')).then(function(x){
+      var L;
+      try{L=parseMatadero(x)}catch(e){if(i===0)throw e;return all}
+      all=all.concat(L);
+      var mx='';L.forEach(function(q){if(q.a>mx)mx=q.a});
+      if(i+1<MD_PAGES&&L.length>=5&&mx<=to)return page(i+1).then(null,function(){return all});
+      return all;
+    });
+  }
+  return page(0).then(function(L){
+    var E=mdExpand(L);mdSave({t:Date.now(),n:E.length,err:''});return E;
+  },function(e){
+    var m=(e&&e.message)||'';
+    mdSave({t:Date.now(),n:0,err:/respuesta/.test(m)?'respuesta no válida':(/no he sabido/.test(m)?'no he sabido leer la página':errTxt(e))});return [];
+  });
+}
 function spEv(){try{return window.PDC331?window.PDC331.madridEvents().then(function(l){return l||[]},function(){return []}):Promise.resolve([])}catch(e){return Promise.resolve([])}}
 function spOn(){try{return !!(window.PDC331&&window.PDC331.on())}catch(e){return false}}
 function spStat(){try{return window.PDC331?window.PDC331.statusHtml():''}catch(e){return ''}}
@@ -7978,18 +8333,19 @@ function evAll(){
     ifSave({t:Date.now(),n:Object.keys(names).length,err:ranges.length?'':err});
     return L;
   },function(){return []});
-  var arp=arenaEv(),fbp=fabrikEv();
-  return Promise.all([tm,ifp,spp,arp,fbp]).then(function(a){
+  var arp=arenaEv(),fbp=fabrikEv(),mdp=mataderoEv();
+  return Promise.all([tm,ifp,spp,arp,fbp,mdp]).then(function(a){
     var m=mergeIf(a[0],a[1]);
     try{if(a[2].length)m=window.PDC331.merge(m,a[2])}catch(e){}
     try{if(a[3].length)m=mergeArena(m,a[3])}catch(e){}
     try{if(a[4].length)m=mergeFabrik(m,a[4])}catch(e){}
+    try{if(a[5].length)m=mergeMatadero(m,a[5])}catch(e){}
     return m;
   });
 }
 var V3=/movistar arena|wizink|fabrik|metropolitano|c[ií]vitas|bernab[eé]u|vistalegre|las ventas|caja m[aá]gica|ifema|ciudad del f[uú]tbol|iberdrola music|mad cool/i;
-var V2=/riviera|auditorio nacional|teatro real|estadio de vallecas|sala but|mon live|teatro barcel[oó]|la cubierta|dcode|matadero/i;
-var BAR=[[/movistar arena|wizink/i,'Salamanca'],[/fabrik/i,'Humanes de Madrid'],[/metropolitano|c[ií]vitas/i,'San Blas'],[/bernab[eé]u/i,'Chamartín'],[/vistalegre/i,'Carabanchel'],[/las ventas/i,'Salamanca'],[/caja m[aá]gica/i,'Usera'],[/ifema/i,'Barajas'],[/auditorio nacional/i,'Chamartín'],[/estadio de vallecas/i,'Puente de Vallecas']];
+var V2=/riviera|auditorio nacional|teatro real|estadio de vallecas|sala but|mon live|teatro barcel[oó]|la cubierta|dcode|matadero|autocine|lenovo garage/i;
+var BAR=[[/movistar arena|wizink/i,'Salamanca'],[/fabrik/i,'Humanes de Madrid'],[/metropolitano|c[ií]vitas/i,'San Blas'],[/bernab[eé]u/i,'Chamartín'],[/vistalegre/i,'Carabanchel'],[/las ventas/i,'Salamanca'],[/caja m[aá]gica/i,'Usera'],[/ifema/i,'Barajas'],[/matadero/i,'Arganzuela'],[/auditorio nacional/i,'Chamartín'],[/estadio de vallecas/i,'Puente de Vallecas']];
 function tierOf(v){return V3.test(v||'')?3:V2.test(v||'')?2:0}
 function barrio(v){for(var i=0;i<BAR.length;i++)if(BAR[i][0].test(v||''))return BAR[i][1];return ''}
 function placeTxt(ev){var b=barrio(ev.v),s=ev.v||'Lugar por confirmar';if(b)s+=' · '+b;else if(ev.c&&!/^madrid$/i.test(ev.c))s+=' · '+ev.c;return s}
@@ -8002,6 +8358,7 @@ function calc(ev,map,p){
   if(r.tier===3){r.score+=2;f.push(['up','Sube','Recinto grande','Sale mucha gente a la vez por el mismo sitio.'])}
   else if(r.tier===2){r.score+=1;f.push(['up','Sube','Recinto mediano','Sale bastante gente a la vez, menos que en un estadio o un pabellón.'])}
   else f.push(['','Neutro','Recinto pequeño o desconocido','No está en mi lista de recintos grandes: cuento con poca gente.']);
+  if(ev.src===MD_SRC){r.score+=1;f.push(['up','Sube','Programación de Matadero','Centro cultural con varias salas (cine, teatro, música, danza) y mucho público a la vez. La web no publica la hora: confírmala ese día.'])}
   if(ev.t){
     var s=toMin(ev.t);r.s=s;r.a=s+dur-spread;r.b=s+dur+spread;r.win=[r.a,r.b];
     r.pop=popMax(map,ev.d,r.a,r.b);
@@ -8026,12 +8383,12 @@ function barsHtml(n){
 /* ---------- descarga con caché ---------- */
 function pageOpen(){return !!document.getElementById('infRoot')}
 function job(name,f,today){
-  return f().then(function(data){var c=cache();c[name]={t:Date.now(),data:data};if(name==='ev'){c.ev.from=today;c.ev.src='ar1'}jset(K_CACHE,c);return true},function(e){S.err[name]=errTxt(e);return false});
+  return f().then(function(data){var c=cache();c[name]={t:Date.now(),data:data};if(name==='ev'){c.ev.from=today;c.ev.src='md1'}jset(K_CACHE,c);return true},function(e){S.err[name]=errTxt(e);return false});
 }
 function refresh(force){
   var c=cache(),now=Date.now(),today=dkey(new Date());
   var needWx=force||!c.wx||now-c.wx.t>TTL_WX;
-  var needEv=force||!c.ev||now-c.ev.t>TTL_EV||c.ev.from!==today||c.ev.src!=='ar1';
+  var needEv=force||!c.ev||now-c.ev.t>TTL_EV||c.ev.from!==today||c.ev.src!=='md1';
   if(!needWx&&!needEv)return Promise.resolve('fresh');
   if(navigator.onLine===false)return Promise.resolve('offline');
   if(inflight)return inflight;
@@ -8098,7 +8455,7 @@ function dayEvents(c,k,p,map,all){
 function viewList(){
   var c=cache(),p=prefs(),today=dkey(new Date()),map=hmap(c.wx&&c.wx.data),o='';
   var t0=oldest(c);
-  o+='<div class="inf-nav"><button class="inf-bk" onclick="backToGeneralMenu()">'+CHEV+'<span>Menú</span></button><button class="inf-ref" aria-label="Actualizar" onclick="infRefresh()"'+(S.busy?' disabled':'')+'>'+REF+'</button></div><h1 class="inf-title">Madrid hoy</h1>';
+  o+='<div class="inf-nav"><button class="inf-bk" onclick="backToGeneralMenu()">'+CHEV+'<span>Menú</span></button><button class="inf-ref" aria-label="Actualizar" onclick="infRefresh()"'+(S.busy?' disabled':'')+'>'+REF+'</button></div><h1 class="inf-title">Eventos Madrid hoy</h1>';
   var d=new Date();
   o+='<div class="inf-upd">'+(S.busy?'Actualizando…':(t0!=null?'Actualizado a las '+z(new Date(t0).getHours())+':'+z(new Date(t0).getMinutes())+' · '+ago(t0):'Aún sin datos'))+' · '+DOW[d.getDay()]+' '+d.getDate()+' de '+MES[d.getMonth()]+'</div>';
   if(navigator.onLine===false)o+='<div class="inf-note inf-warn">Sin conexión. Te enseño lo último que guardé; cuando vuelva la cobertura, pulsa ↻.</div>';
@@ -8137,18 +8494,18 @@ function viewList(){
   }
   if(hidden>0&&!S.small)o+='<button class="inf-btn" onclick="infSmall(true)">Mostrar también '+hidden+(hidden===1?' evento pequeño':' eventos pequeños')+'</button>';
   if(S.small)o+='<button class="inf-btn" onclick="infSmall(false)">Ocultar los eventos pequeños</button>';
-  o+='<div class="inf-foot">Son estimaciones de posibles oportunidades, no garantías de que haya viajes. La hora de salida es la de inicio más una duración que supongo (se puede cambiar en cada evento). Datos de eventos: Ticketmaster, IFEMA (ifema.es), Movistar Arena (movistararena.es) y Fabrik (fabrikmadrid.com). Datos del tiempo: Open-Meteo.com.'+ifStatusHtml()+arStatusHtml()+fbStatusHtml()+spStat()+'</div>';
+  o+='<div class="inf-foot">Son estimaciones de posibles oportunidades, no garantías de que haya viajes. La hora de salida es la de inicio más una duración que supongo (se puede cambiar en cada evento). Datos de eventos: Ticketmaster (también el Autocine Madrid), IFEMA (ifema.es), Movistar Arena (movistararena.es), Fabrik (fabrikmadrid.com) y Matadero Madrid (mataderomadrid.org). Datos del tiempo: Open-Meteo.com.'+ifStatusHtml()+arStatusHtml()+fbStatusHtml()+mdStatusHtml()+spStat()+'</div>';
   return '<section class="inf" id="infRoot">'+o+'</section>';
 }
 function findEv(id){var L=(cache().ev&&cache().ev.data)||[];for(var i=0;i<L.length;i++)if(L[i].id===id)return L[i];return null}
 function viewDetail(){
   var c=cache(),p=prefs(),map=hmap(c.wx&&c.wx.data),ev=findEv(S.det);
-  var back='<div class="inf-nav"><button class="inf-bk" onclick="infBack()">'+CHEV+'<span>Madrid hoy</span></button></div>';
+  var back='<div class="inf-nav"><button class="inf-bk" onclick="infBack()">'+CHEV+'<span>Eventos Madrid hoy</span></button></div>';
   if(!ev)return '<section class="inf" id="infRoot">'+back+'<div class="inf-note">Este evento ya no está en los datos guardados.</div></section>';
   var r=calc(ev,map,p),o=back;
   var dt=ev.d.split('-');
   o+='<h1 class="inf-title inf-t2">'+esc(ev.n)+'</h1><div class="inf-sub" style="margin-top:4px">'+esc(placeTxt(ev))+' · '+(+dt[2])+' de '+MES[+dt[1]-1]+'</div>';
-  o+='<div class="inf-card" style="margin-top:12px"><div class="inf-lbl">Dato de la fuente</div><div class="inf-big">'+(ev.k==='fair'&&ev.t?'~':'')+(ev.t||'Por confirmar')+'</div><div class="inf-sub">'+(ev.k==='fair'?(ev.t?'Hora supuesta (feria: apertura típica) · IFEMA no publica horario · según el calendario de ifema.es':'Espectáculo de temporada · sin hora en el calendario de ifema.es'):(ev.src==='fabrikmadrid.com'?'Solo la fecha · según fabrikmadrid.com (la web no publica la hora: confírmala ese día)':'Hora de inicio · según '+(ev.src||'Ticketmaster')+(ev.src?' (hora de España)':'')))+(cache().ev?' · consultado a las '+z(new Date(cache().ev.t).getHours())+':'+z(new Date(cache().ev.t).getMinutes()):'')+'</div></div>';
+  o+='<div class="inf-card" style="margin-top:12px"><div class="inf-lbl">Dato de la fuente</div><div class="inf-big">'+(ev.k==='fair'&&ev.t?'~':'')+(ev.t||'Por confirmar')+'</div><div class="inf-sub">'+(ev.k==='fair'?(ev.t?'Hora supuesta (feria: apertura típica) · IFEMA no publica horario · según el calendario de ifema.es':'Espectáculo de temporada · sin hora en el calendario de ifema.es'):((ev.src==='fabrikmadrid.com'||ev.src===MD_SRC)?'Solo la fecha · según '+ev.src+' (la web no publica la hora: confírmala ese día)':'Hora de inicio · según '+(ev.src||'Ticketmaster')+(ev.src?' (hora de España)':'')))+(cache().ev?' · consultado a las '+z(new Date(cache().ev.t).getHours())+':'+z(new Date(cache().ev.t).getMinutes()):'')+'</div></div>';
   o+='<div class="inf-card" style="border-color:#168bff"><div class="inf-lbl" style="color:#8fb8ff">Mi estimación</div>';
   if(r.win){
     o+='<div class="inf-sub" style="margin-top:6px">Salida de la gente</div><div class="inf-big">'+hm(r.a)+' – '+hm(r.b)+'</div>';
@@ -8210,7 +8567,7 @@ function showNotice(lines){
   lines.forEach(function(l){h+='<div class="ln"><b>'+esc(l.t)+'</b><span>'+esc(l.a)+'<small>'+esc(l.b)+'</small></span></div>'});
   var d=document.createElement('div');d.id='infNotice';d.className='inf-notice';d.setAttribute('role','dialog');d.setAttribute('aria-label','Esta noche en Madrid');
   d.innerHTML='<div class="box"><h3>Esta noche en Madrid</h3><div class="sub">Aviso de hoy · estimaciones, no garantías</div>'+h+
-    '<div class="acts"><button class="pri" onclick="infNoticeGo()">Ver Madrid hoy</button><button onclick="infNoticeClose()">Cerrar</button><button class="lnk" onclick="infNoticeOff()">No volver a avisar</button></div></div>';
+    '<div class="acts"><button class="pri" onclick="infNoticeGo()">Ver Eventos Madrid hoy</button><button onclick="infNoticeClose()">Cerrar</button><button class="lnk" onclick="infNoticeOff()">No volver a avisar</button></div></div>';
   document.body.appendChild(d);
 }
 /* v3.50: apunta como fue la ultima comprobacion (se ve en Ajustes > Notificaciones) */
@@ -8258,7 +8615,7 @@ if(typeof rn0==='function'){
       var l=document.querySelector('#content .subpage-list');
       if(l){
         var row=document.createElement('div');row.className='subpage-row';
-        row.innerHTML='<span class="sicon">🌦️</span><div style="flex:1"><b>Aviso de «Madrid hoy»</b><small style="display:block;color:#64748b;margin-top:3px">Cada vez que abres la app o vuelves a ella, te dice si hay eventos grandes y lluvia esta noche. Usa lo guardado y solo descarga si está caducado.</small><small id="notifInfoLast" style="display:block;color:#64748b;margin-top:3px">'+lastTxt()+'</small></div><button id="notifInfo" class="switch '+(prefs().notice?'on':'')+'" onclick="infNoticeToggle(this)"></button>';
+        row.innerHTML='<span class="sicon">🌦️</span><div style="flex:1"><b>Aviso de «Eventos Madrid hoy»</b><small style="display:block;color:#64748b;margin-top:3px">Cada vez que abres la app o vuelves a ella, te dice si hay eventos grandes y lluvia esta noche. Usa lo guardado y solo descarga si está caducado.</small><small id="notifInfoLast" style="display:block;color:#64748b;margin-top:3px">'+lastTxt()+'</small></div><button id="notifInfo" class="switch '+(prefs().notice?'on':'')+'" onclick="infNoticeToggle(this)"></button>';
         l.appendChild(row);
       }
     }catch(e){}
@@ -8379,6 +8736,41 @@ html body.lt #content .gl-lab,html body.lt #content .gl-sub,html body.lt #conten
 html body.lt #content .gl-note{color:#46607a!important}
 html body.lt #content .gl-in{background:#fff!important;color:#0b2540!important;border-color:#8db8e8!important}
 html body.lt #content .gl-link{background:rgba(255,255,255,.88)!important;border-color:#5fa0e8!important}html body.lt #content .gl-link b{color:#0b63c9!important}
+/* v3.67 · días libres, límites y plan para cumplir */
+.pl-card{display:flex;align-items:center;gap:10px;margin:8px 0;padding:10px 12px;border-radius:14px;border:1px solid rgba(140,200,255,.4);background:rgba(255,255,255,.05)}
+.pl-card.pl-day{display:block}
+.pl-tx{flex:1;min-width:0}.pl-card .t{font:800 14px system-ui,sans-serif;color:#eaf6ff}.pl-card .s{font:700 13px system-ui,sans-serif;color:#9fb4c8;margin-top:2px}
+.pl-del{flex:0 0 auto;width:40px;height:40px;border-radius:12px;border:1px solid rgba(255,107,129,.5);background:rgba(255,107,129,.12);font-size:18px;line-height:1;padding:0;cursor:pointer}
+.pl-form{margin-top:12px;padding:12px;border-radius:16px;border:1px solid rgba(140,200,255,.38);background:linear-gradient(135deg,rgba(255,255,255,.09),rgba(255,255,255,.02))}
+.pl-ft{font:800 14px system-ui,sans-serif;color:#fff;margin-bottom:2px}
+.pl-in{color-scheme:dark;min-height:46px}
+.pl-pills{display:flex;gap:8px;margin:6px 0 0}.pl-pill{flex:1;padding:11px 6px;border-radius:12px;border:1px solid rgba(140,200,255,.4);background:rgba(255,255,255,.04);color:#cfe6ff;font:800 13px system-ui,sans-serif;text-align:center;cursor:pointer}
+.pl-pill.on{border-color:#2ee59d;background:rgba(46,229,157,.16);color:#eaffe9}
+.pl-err{margin-top:8px;font:800 13px system-ui,sans-serif;color:#ffb3bf}
+.pl-sum{margin-top:10px}.pl-sum.no{border-color:rgba(255,107,129,.6)}
+.pl-v{font:800 15px system-ui,sans-serif;margin-top:4px}.pl-v.ok{color:#2ee59d}.pl-v.no{color:#ffb3bf}
+.pl-vs{font:700 12.5px/1.4 system-ui,sans-serif;color:#9fb4c8;margin-top:3px}
+.pl-h{margin:12px 0 2px;font:800 14px system-ui,sans-serif;color:#fff}
+.pl-oky{margin:10px 0;padding:12px;border-radius:14px;border:1px solid rgba(46,229,157,.55);background:rgba(46,229,157,.12);font:800 14px system-ui,sans-serif;color:#2ee59d}
+.pl-day .h{display:flex;justify-content:space-between;gap:8px;font:800 14px system-ui,sans-serif;color:#fff;margin-bottom:4px}.pl-day .h span:last-child{color:#9fb4c8;font-size:13px}
+.pl-r{font:800 14px system-ui,sans-serif;color:#eaf6ff;margin:3px 0}.pl-r small{color:#9fb4c8;font-weight:700;font-size:13px}
+.pl-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}.pl-dot.p{background:#2ee59d}.pl-dot.n{background:#ff6b81}
+.pl-free{display:flex;justify-content:space-between;gap:8px;margin:8px 0;padding:10px 12px;border-radius:14px;border:1px dashed rgba(140,200,255,.45);background:rgba(255,255,255,.03);font:800 14px system-ui,sans-serif;color:#9fb4c8}
+.planline{display:block;margin:0 0 8px;padding:11px 13px;border-radius:14px;border:1px solid rgba(46,229,157,.55);background:rgba(46,229,157,.12);font:800 14px system-ui,sans-serif;color:#eaf6ff;cursor:pointer}
+.planline.no{border-color:rgba(255,107,129,.6);background:rgba(255,107,129,.1)}
+.planline b{display:block}.planline small{display:block;margin-top:3px;font:700 12.5px/1.4 system-ui,sans-serif;color:#9fb4c8}
+html body.lt #content .pl-card,html body.lt #content .pl-free{background:rgba(255,255,255,.88)!important;border-color:#8db8e8!important}
+html body.lt #content .pl-card .t,html body.lt #content .pl-day .h,html body.lt #content .pl-r,html body.lt #content .pl-ft,html body.lt #content .pl-h{color:#0b2540!important}
+html body.lt #content .pl-card .s,html body.lt #content .pl-r small,html body.lt #content .pl-vs,html body.lt #content .pl-day .h span:last-child,html body.lt #content .pl-free{color:#46607a!important}
+html body.lt #content .pl-form{background:rgba(255,255,255,.88)!important;border-color:#fff!important}
+html body.lt #content .pl-in{color-scheme:light}
+html body.lt #content .pl-pill{background:#fff!important;color:#0b2540!important;border-color:#8db8e8!important}
+html body.lt #content .pl-pill.on{background:#d9f8ea!important;color:#0a6b46!important;border-color:#18c987!important}
+html body.lt #content .pl-v.ok,html body.lt #content .pl-oky{color:#0a8f5c!important}html body.lt #content .pl-v.no,html body.lt #content .pl-err{color:#c4203d!important}
+html body.lt #content .planline{background:rgba(255,255,255,.88)!important;color:#0b2540!important}html body.lt #content .planline small{color:#46607a!important}
+html body.lt #content .pl-del{background:#ffe9ed!important;border-color:#e58a98!important}
+.triplist .trip>.tt2{grid-column:2 / -1!important;grid-row:2!important;font-size:10px!important;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 0 0 2px;margin-top:-3px;line-height:1.2}
+.st-blk{margin:14px 0;padding:6px 12px 4px;border:1px solid rgba(140,200,255,.28);border-radius:18px;background:rgba(20,40,65,.28)}.st-blk>.section-title{margin:6px 0 10px}
 .wk{width:100%;border-collapse:separate!important;border-spacing:0 5px!important}
 .wk th{padding:8px 2px!important;font-size:11px!important;font-weight:900!important;text-align:center!important;background:transparent!important;border:0!important;border-bottom:2px solid #7fb8ff!important;color:#cfe6ff!important}
 .wk th:first-child,.wk td:first-child{text-align:left!important;padding-left:8px!important}
@@ -10486,8 +10878,11 @@ function calc(w){
   const num=Math.max(0,finIn+finX);
   const accX=Math.max(0,t.yx-t.gx);
   let den=baseIn+accX;den=Math.max(den,num);
-  return {t,baseIn,finIn,finX,num,den,rate:den>0?num/den*100:null,rej:den-num,recv:t.o,
+  const R={t,baseIn,finIn,finX,num,den,rate:den>0?num/den*100:null,rej:den-num,recv:t.o,
     nxShow:Math.max(0,t.nx-accX),nxAcc:accX,free:t.gin+t.gx,acc:t.yin+t.yx,c1:t.c1in+t.c1x,c2:t.c2in+t.c2x};
+  R.canc=Math.min(R.rej,Math.max(0,R.c1+R.c2));      /* v3.67 · cancelados: los que aceptaste y se cancelaron (tu o el pasajero, con penalizacion) */
+  R.rejOnly=R.rej-R.canc;                              /* v3.67 · rechazados: las ofertas que no hiciste y no fueron cancelaciones (rej = rechazados + cancelados) */
+  return R;
 }
 const r1=v=>Math.round(v*10)/10;
 const MINB=20;      // con menos de 20 ofertas que cuentan la cifra salta demasiado (1 oferta = 0 % o 100 %): se enseña pero sin color de aviso
@@ -10653,9 +11048,9 @@ function onDelete(t){
 /* ---------------- ajustes de números y límites ---------------- */
 const int=(v,mx)=>{const n=Math.round(Number(String(v==null?'':v).replace(',','.')));return fin(n)&&n>=0?Math.min(n,mx||9999):0};
 /** lo que se ve de un día y cómo se corrige: f = finalizados, x = rechazados/cancelados, n = ofertas con aviso sin aceptar */
-function dayVals(k){const c=calc(peek(k)||zero());return {f:c.num,x:c.rej,n:c.nxShow}}
+function dayVals(k){const c=calc(peek(k)||zero());return {f:c.num,x:c.rejOnly,c:c.canc,n:c.nxShow}}
 function bump(k,which,delta){
-  delta=Math.round(Number(delta));if(!fin(delta)||!delta||!/^[fxn]$/.test(which))return false;
+  delta=Math.round(Number(delta));if(!fin(delta)||!delta||!/^[fxcn]$/.test(which))return false;
   const cur=dayVals(k)[which];
   if(cur+delta<0)delta=-cur;
   if(!delta)return false;
@@ -10663,6 +11058,17 @@ function bump(k,which,delta){
   const add=(f,v)=>{m[f]=(m[f]||0)+v};
   if(which==='f'){add('o',delta);add('yin',delta)}
   else if(which==='x'){add('o',delta)}
+  else if(which==='c'){
+    if(delta>0){add('o',delta);add('yin',delta);add('c1in',delta)}          /* un cancelado mas = una oferta aceptada y cancelada por ti */
+    else{                                                                    /* quitar uno = borrar ese viaje cancelado (primero los de dentro del radio, luego los «con aviso») */
+      let q=-delta;const tt=tot(d);
+      for(const z of [['c1in','yin',0],['c2in','yin',0],['c1x','yx',1],['c2x','yx',1]]){
+        const n=Math.min(q,Math.max(0,tt[z[0]]));if(!n)continue;
+        add(z[0],-n);add(z[1],-n);add('o',-n);if(z[2])add('nx',-n);q-=n;
+        if(!q)break;
+      }
+    }
+  }
   else{add('o',delta);add('nx',delta)}
   if(KS.every(f=>!m[f]))d.m=null;
   save();changed();return true;
@@ -11026,7 +11432,8 @@ function weekHtml(){
     +'<div><i style="background:var(--y)"></i><em>Con aviso'+(c.nxAcc?'<small>'+c.nxAcc+(c.nxAcc===1?' la acepté: ya cuenta':' las acepté: ya cuentan')+'</small>':'')+'</em><b>'+c.nxShow+'</b></div>'
     +'<div><i style="background:var(--b)"></i><em>Cuentan</em><b>'+c.den+'</b></div>'
     +'<div><i style="background:var(--g)"></i><em>Finalizados</em><b>'+c.num+'</b></div>'
-    +'<div><i style="background:var(--r)"></i><em>Rechaz./Cancel.</em><b>'+c.rej+'</b></div>'
+    +'<div><i style="background:var(--r)"></i><em>Rechazados</em><b>'+c.rejOnly+'</b></div>'
+    +'<div><i style="background:var(--o)"></i><em>Cancelados</em><b>'+c.canc+'</b></div>'
     +(c.free?'<div><i style="background:var(--mut)"></i><em>Sin penalización</em><b>'+c.free+'</b></div>':'')
     +'</div></div>';
   const bo=l.bolt[mon]||0;
@@ -11043,9 +11450,9 @@ function weekHtml(){
   });
   h+='</div>';
   const dv=dayVals(pg.day),dn=cap(WD[wdi(pg.day)])+' '+dshort(pg.day);
-  h+=dayRow(pg.day,'f','✓','g','Finalizados',dv.f,dn)+dayRow(pg.day,'x','✗','r','Rechazados / Cancelados',dv.x,'')+dayRow(pg.day,'n','!','y','Ofertas con aviso (sin aceptar)',dv.n,'');
+  h+=dayRow(pg.day,'f','✓','g','Finalizados',dv.f,dn)+dayRow(pg.day,'x','✗','r','Rechazados',dv.x,'')+dayRow(pg.day,'c','⊘','o','Cancelados',dv.c,'')+dayRow(pg.day,'n','!','y','Ofertas',dv.n,'con aviso, sin aceptar');
   const dc=calc(peek(pg.day)||zero());
-  h+='<div class="rp-note">«Cuentan» se calcula sola: finalizados + rechazados/cancelados ('+dc.num+' + '+dc.rej+' = '+dc.den+')</div>';
+  h+='<div class="rp-note">«Cuentan» se calcula sola: finalizados + rechazados + cancelados ('+dc.num+' + '+dc.rejOnly+' + '+dc.canc+' = '+dc.den+')</div>';
   return h;
 }
 function monthHtml(){
@@ -11056,7 +11463,8 @@ function monthHtml(){
   h+='<div class="rp-main">'+ringHtml(c,z,'Mes')+'<div class="rp-kv">'
     +'<div><i style="background:var(--g)"></i><em>Finalizados</em><b>'+c.num+'</b></div>'
     +'<div><i style="background:var(--b)"></i><em>Cuentan</em><b>'+c.den+'</b></div>'
-    +'<div><i style="background:var(--r)"></i><em>Rechaz./Cancel.</em><b>'+c.rej+'</b></div></div></div></div>';
+    +'<div><i style="background:var(--r)"></i><em>Rechazados</em><b>'+c.rejOnly+'</b></div>'
+    +'<div><i style="background:var(--o)"></i><em>Cancelados</em><b>'+c.canc+'</b></div></div></div></div>';
   h+='<h2>Semana por semana</h2>';
   const groups=[];let cur=null;
   for(const k of keys){const m=monOf(k);if(!cur||cur.m!==m){cur={m,keys:[]};groups.push(cur)}cur.keys.push(k)}
@@ -11983,7 +12391,7 @@ html body.lt #content .airport-row>.plat2.pidetaxi .plat2-ico{color:#ffd23a!impo
 html body.lt #content .platform-name.freenow{background:linear-gradient(135deg,#f23a92,#d6046f)!important;color:#fff!important}
 html body.lt #content .platform-name.pidetaxi{background:linear-gradient(135deg,#ffe266,#ffbf00)!important;color:#2b2100!important}
 html body.lt #content .ps.freenow,html body.lt #content .airport-row>.plat2.freenow{text-shadow:0 1px 2px rgba(80,0,40,.45)}
-/* Madrid hoy: la hora con «~» de IFEMA se salia de su hueco y pisaba el titulo: letra algo mas pequena y hueco en «em» (crece con el tamano de letra del movil) para que nunca pise el titulo */
+/* Eventos Madrid hoy: la hora con «~» de IFEMA se salia de su hueco y pisaba el titulo: letra algo mas pequena y hueco en «em» (crece con el tamano de letra del movil) para que nunca pise el titulo */
 html body .inf .inf-row .t{flex:none;width:auto;min-width:3.6em;font-size:15px;white-space:nowrap}
 html body .inf .inf-time b{font-size:20px;white-space:nowrap}
 /* app prioritaria: rosa o amarillo en Control */
@@ -12006,7 +12414,7 @@ html body .theme-seg button{display:flex;flex-direction:column;align-items:cente
 html body .theme-seg button span{max-width:100%;text-align:center;overflow-wrap:anywhere}
 html body .theme-seg button.on{background:linear-gradient(145deg,#4db3ff,#0a84ff);border-color:#0a84ff;color:#fff}
 </style>
-<style id="v331-style">/* v3.31 · Deportes (mismo estilo que Madrid hoy) */
+<style id="v331-style">/* v3.31 · Deportes (mismo estilo que Eventos Madrid hoy) */
 .inf .sp-row{cursor:default}
 .inf .sp-row .l{min-width:64px;font-size:13px;font-weight:600}
 .inf .sp-sc{font-feature-settings:'tnum';color:#fff;font-weight:700;margin-left:2px}
@@ -12024,7 +12432,7 @@ html body .theme-seg button.on{background:linear-gradient(145deg,#4db3ff,#0a84ff
 .inf .sp-tab td:nth-child(2){text-align:left;font-weight:600;word-break:break-word}
 .inf .sp-tab tr.mad td{color:#6cb6ff}
 </style>
-<style id="v359-style">/* v3.59 · pestaña «Vuelos» de Madrid hoy (mismo estilo oscuro «iPhone» que el resto de Madrid hoy) */
+<style id="v359-style">/* v3.59 · pestaña «Vuelos» de Eventos Madrid hoy (mismo estilo oscuro «iPhone» que el resto de Eventos Madrid hoy) */
 .inf .inf-tabs:not(.sp-sub) button{font-size:13px;padding:0 2px;min-width:0}
 @media (max-width:359px){.inf .inf-tabs:not(.sp-sub) button{font-size:12px;letter-spacing:-.02em}}
 .inf .vl-top{display:flex;flex-direction:column;gap:12px}
