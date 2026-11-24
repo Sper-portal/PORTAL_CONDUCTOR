@@ -1341,7 +1341,7 @@ try{if(window.visualViewport)window.visualViewport.addEventListener('resize',fun
 /* v3.27 · Tema claro / oscuro (Ajustes). «Automatico»: claro de dia y oscuro de noche segun la salida y la puesta del sol en Madrid (se calcula en el movil, sin internet ni GPS);
    «Claro» y «Oscuro» lo dejan fijo. Se guarda en este aparato (pdc_theme). Solo afecta a Calculadora, Control, Facturacion e Informe: Ajustes, el menu y Eventos Madrid hoy ya eran oscuros. */
 var K_TH='pdc_theme',LT_WANT=false;
-function themeMode(){var m=null;try{m=localStorage.getItem(K_TH)}catch(e){}return m==='light'||m==='dark'?m:'auto'}
+function themeMode(){var m=null;try{m=localStorage.getItem(K_TH)}catch(e){}return m==='light'||m==='dark'||m==='pastel'?m:'auto'}
 function sunTimes(d){
   var rad=Math.PI/180,lat=40.4168,lon=-3.7038,y=d.getFullYear(),mo=d.getMonth(),da=d.getDate(),base=Date.UTC(y,mo,da);
   var N=Math.floor((base-Date.UTC(y,0,0))/864e5);
@@ -1361,21 +1361,22 @@ function sunTimes(d){
   return a==null||b==null?null:{rise:new Date(a),set:new Date(b)};
 }
 function themeIsNight(){var n=new Date(),t=sunTimes(n);if(!t)return false;return n<t.rise||n>=t.set}
-function themeLight(){var m=themeMode();return m==='light'?true:m==='dark'?false:!themeIsNight()}
-function ltSet(on){LT_WANT=!!on;try{document.body.classList.toggle('lt',LT_WANT&&themeLight())}catch(e){}}
+function themeLight(){var m=themeMode();return m==='light'||m==='pastel'?true:m==='dark'?false:!themeIsNight()}
+function ltSet(on){LT_WANT=!!on;try{document.body.classList.toggle('lt',LT_WANT&&themeLight());document.body.classList.toggle('pastel',themeMode()==='pastel')}catch(e){}}
 function themeApply(){ltSet(LT_WANT);try{themeCardFill()}catch(e){}}
-function themeSet(m){try{localStorage.setItem(K_TH,m==='light'||m==='dark'?m:'auto')}catch(e){}themeApply()}
+function themeSet(m){try{localStorage.setItem(K_TH,m==='light'||m==='dark'||m==='pastel'?m:'auto')}catch(e){}themeApply()}
 function themeHm(d){return d.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})}
 function themeNote(){
   var m=themeMode();
   if(m==='light')return 'Siempre claro (Calculadora, Control, Facturación e Informe).';
   if(m==='dark')return 'Siempre oscuro.';
+  if(m==='pastel')return 'Pastel (cremita): colores suaves con relieve, en Calculadora, Control, Facturación e Informe; Ajustes, el menú y Eventos Madrid hoy, en azul noche suave.';
   var t=sunTimes(new Date());
   return 'Cambia solo: claro de día y oscuro de noche, según el sol en Madrid'+(t?' (hoy sale a las '+themeHm(t.rise)+' y se pone a las '+themeHm(t.set)+')':'')+'. Ahora: '+(themeLight()?'claro':'oscuro')+'.';
 }
 /*v330-tema*/
 // v3.30 · «Tema» es una fila de Ajustes con flechita (›), como Cuenta y Configuración de la app; dentro se elige Automático, Claro u Oscuro.
-function themeRowText(){var m=themeMode();return m==='light'?'Siempre claro':m==='dark'?'Siempre oscuro':'Automático · claro de día y oscuro de noche'}
+function themeRowText(){var m=themeMode();return m==='light'?'Siempre claro':m==='dark'?'Siempre oscuro':m==='pastel'?'Pastel (cremita) · colores suaves con relieve':'Automático · claro de día y oscuro de noche'}
 function themeCardFill(){
   var m=themeMode();
   document.querySelectorAll('#themeOpts .tm-opt').forEach(function(b){var on=b.getAttribute('data-m')===m;b.classList.toggle('on',on);b.setAttribute('aria-checked',on?'true':'false')});
@@ -1391,10 +1392,11 @@ function themeCardAdd(){
 function renderTema(){
   ltSet(false);
   var o=function(m,ic,t,s){return '<button type="button" class="settings-option tm-opt" role="radio" data-m="'+m+'" onclick="themeSet(\''+m+'\')"><span class="ico">'+ic+'</span><span><b>'+t+'</b><small>'+s+'</small></span><span class="tm-ck">✓</span></button>'};
-  jPanel('Tema',"show('settings')",'<div class="note" style="margin-bottom:12px">Elige cómo se ven Calculadora, Control, Facturación e Informe. Ajustes, el menú y Eventos Madrid hoy son siempre oscuros.</div><div class="tm-list" id="themeOpts" role="radiogroup" aria-label="Tema">'
+  jPanel('Tema',"show('settings')",'<div class="note" style="margin-bottom:12px">Elige cómo se ven Calculadora, Control, Facturación e Informe. Ajustes, el menú y Eventos Madrid hoy son siempre oscuros (con «Pastel», en un azul noche suave).</div><div class="tm-list" id="themeOpts" role="radiogroup" aria-label="Tema">'
     +o('auto','🌗','Automático','Claro de día y oscuro de noche, según el sol en Madrid')
     +o('light','☀️','Claro','Siempre claro')
     +o('dark','🌙','Oscuro','Siempre oscuro')
+    +o('pastel','🍦','Pastel','Cremita: colores suaves, esquinas redondas y relieve')
     +'</div><div class="note" id="themeNote" style="margin-top:12px"></div>');
   themeCardFill();
 }
@@ -3103,7 +3105,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.68';
+const APP_VERSION='v3.69';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -13161,4 +13163,92 @@ html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.contr
 html.pdc-lite body:not(.lt):not(#za):not(#zb):not(#zc) #content div.metric.control-metric.control-gray.cg-oth.tap{box-shadow:inset 0 2px 0 rgba(255,255,255,.14),inset 0 -3px 0 rgba(0,0,0,.4)!important}
 /* menu lateral: el boton SOS (fijo arriba a la izquierda) ya no tapa el titulo «MI CUENTA» */
 html body:not(#za):not(#zb):not(#zc) #sideDrawer .drawer-list{padding-top:max(12px,calc(var(--sos-t,69px) - 40px))!important}
+</style>
+<style id="pdc-pastel">
+/* v3.69 · tema Pastel (cremita): base Claro + colores suaves. Se activa con body.pastel (Ajustes → Tema → Pastel). Normal: relieve suave; Modo ligero: relieve nítido sin desenfoque. */
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) ,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) .app{background:linear-gradient(180deg,#5f8fca 0%,#8db3df 34%,#cbdcee 100%)!important}
+html body.pastel:not(.lt):not(#za):not(#zb):not(#zc):not(#zd) ,html body.pastel:not(.lt):not(#za):not(#zb):not(#zc):not(#zd) .app{background:linear-gradient(180deg,#1f3558 0%,#294673 48%,#35568a 100%)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content .panel,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) .panel{background:rgba(255,255,255,.58)!important;border-color:rgba(255,255,255,.75)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.platform.bolt,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.airport,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.bolt{background:linear-gradient(160deg,#a9e0c9,#66bfa0)!important;color:#123a2c!important;text-shadow:none!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.platform.bolt *,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.airport *,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.bolt *{color:#123a2c!important;text-shadow:none!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.platform.bolt,html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.airport,html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.bolt{box-shadow:inset 0 7px 10px rgba(255,255,255,.55),inset 0 -9px 12px rgba(0,0,0,.10),0 9px 14px rgba(40,70,110,.26)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.platform.bolt,html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.airport,html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.bolt{box-shadow:inset 0 3px 0 rgba(255,255,255,.55),inset 0 -4px 0 rgba(0,0,0,.12)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.platform.uber,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.uber{background:linear-gradient(160deg,#6f7585,#3a3e49)!important;color:#ffffff!important;text-shadow:none!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.platform.uber *,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.uber *{color:#ffffff!important;text-shadow:none!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.platform.uber,html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.uber{box-shadow:inset 0 7px 10px rgba(255,255,255,.55),inset 0 -9px 12px rgba(0,0,0,.10),0 9px 14px rgba(40,70,110,.26)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.platform.uber,html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.uber{box-shadow:inset 0 3px 0 rgba(255,255,255,.55),inset 0 -4px 0 rgba(0,0,0,.12)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.platform.cabify,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.cabify{background:linear-gradient(160deg,#c9b8f3,#9983dc)!important;color:#2a2150!important;text-shadow:none!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.platform.cabify *,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.cabify *{color:#2a2150!important;text-shadow:none!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.platform.cabify,html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.cabify{box-shadow:inset 0 7px 10px rgba(255,255,255,.55),inset 0 -9px 12px rgba(0,0,0,.10),0 9px 14px rgba(40,70,110,.26)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.platform.cabify,html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.cabify{box-shadow:inset 0 3px 0 rgba(255,255,255,.55),inset 0 -4px 0 rgba(0,0,0,.12)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.platform.private,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.private{background:linear-gradient(160deg,#9bd1f5,#58a9e5)!important;color:#14304f!important;text-shadow:none!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.platform.private *,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.private *{color:#14304f!important;text-shadow:none!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.platform.private,html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.private{box-shadow:inset 0 7px 10px rgba(255,255,255,.55),inset 0 -9px 12px rgba(0,0,0,.10),0 9px 14px rgba(40,70,110,.26)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.platform.private,html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.private{box-shadow:inset 0 3px 0 rgba(255,255,255,.55),inset 0 -4px 0 rgba(0,0,0,.12)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.plat2.freenow,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.freenow{background:linear-gradient(160deg,#f7b0c8,#e57ba0)!important;color:#4a1630!important;text-shadow:none!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.plat2.freenow *,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.freenow *{color:#4a1630!important;text-shadow:none!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.plat2.freenow,html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.freenow{box-shadow:inset 0 7px 10px rgba(255,255,255,.55),inset 0 -9px 12px rgba(0,0,0,.10),0 9px 14px rgba(40,70,110,.26)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.plat2.freenow,html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.freenow{box-shadow:inset 0 3px 0 rgba(255,255,255,.55),inset 0 -4px 0 rgba(0,0,0,.12)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.plat2.pidetaxi,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.pidetaxi{background:linear-gradient(160deg,#f8d674,#e6b23a)!important;color:#4a3508!important;text-shadow:none!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.plat2.pidetaxi *,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.pidetaxi *{color:#4a3508!important;text-shadow:none!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.plat2.pidetaxi,html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.pidetaxi{box-shadow:inset 0 7px 10px rgba(255,255,255,.55),inset 0 -9px 12px rgba(0,0,0,.10),0 9px 14px rgba(40,70,110,.26)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.plat2.pidetaxi,html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.ps.pidetaxi{box-shadow:inset 0 3px 0 rgba(255,255,255,.55),inset 0 -4px 0 rgba(0,0,0,.12)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.cancel-btn{background:linear-gradient(160deg,#f7a99d,#e37264)!important;color:#4a1a15!important;text-shadow:none!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.cancel-btn *{color:#4a1a15!important;text-shadow:none!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.cancel-btn{box-shadow:inset 0 7px 10px rgba(255,255,255,.55),inset 0 -9px 12px rgba(0,0,0,.10),0 9px 14px rgba(40,70,110,.26)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.cancel-btn{box-shadow:inset 0 3px 0 rgba(255,255,255,.55),inset 0 -4px 0 rgba(0,0,0,.12)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.camera-capture{background:linear-gradient(160deg,#9bd1f5,#58a9e5)!important;color:#14304f!important;text-shadow:none!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.camera-capture *{color:#14304f!important;text-shadow:none!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.camera-capture{box-shadow:inset 0 7px 10px rgba(255,255,255,.55),inset 0 -9px 12px rgba(0,0,0,.10),0 9px 14px rgba(40,70,110,.26)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.camera-capture{box-shadow:inset 0 3px 0 rgba(255,255,255,.55),inset 0 -4px 0 rgba(0,0,0,.12)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content .platform > :first-child,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content .airport .ico,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content .plat2 .ico{background:rgba(255,255,255,.55)!important;border-color:rgba(255,255,255,.9)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.action,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.toggle,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.action.cmp-full{background:linear-gradient(160deg,#9bd1f5,#58a9e5)!important;color:#14304f!important;text-shadow:none!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.action *,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.toggle *,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.action.cmp-full *{color:#14304f!important;text-shadow:none!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.action,html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.toggle,html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.action.cmp-full{box-shadow:inset 0 7px 10px rgba(255,255,255,.55),inset 0 -9px 12px rgba(0,0,0,.10),0 9px 14px rgba(40,70,110,.26)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.action,html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.toggle,html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.action.cmp-full{box-shadow:inset 0 3px 0 rgba(255,255,255,.55),inset 0 -4px 0 rgba(0,0,0,.12)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.gl-btn{background:linear-gradient(160deg,#9bd1f5,#a9e0c9)!important;color:#14304f!important;text-shadow:none!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.gl-btn *{color:#14304f!important;text-shadow:none!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.gl-btn{box-shadow:inset 0 7px 10px rgba(255,255,255,.55),inset 0 -9px 12px rgba(0,0,0,.10),0 9px 14px rgba(40,70,110,.26)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content button.gl-btn{box-shadow:inset 0 3px 0 rgba(255,255,255,.55),inset 0 -4px 0 rgba(0,0,0,.12)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.sg>button.on,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.sg>button.on{background:linear-gradient(160deg,#a9e0c9,#66bfa0)!important;color:#123a2c!important;text-shadow:none!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.sg>button.on *,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.sg>button.on *{color:#123a2c!important;text-shadow:none!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.sg>button.on,html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.sg>button.on{box-shadow:inset 0 4px 6px rgba(255,255,255,.55),inset 0 -5px 8px rgba(0,0,0,.10),0 5px 9px rgba(40,70,110,.22)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.sg>button.on,html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.sg>button.on{box-shadow:inset 0 3px 0 rgba(255,255,255,.55),inset 0 -4px 0 rgba(0,0,0,.12)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.period-tabs>button.active,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.cmp-tabs>button.on,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.rp-tabs>button.on{background:linear-gradient(160deg,#9bd1f5,#58a9e5)!important;color:#14304f!important;text-shadow:none!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.period-tabs>button.active *,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.cmp-tabs>button.on *,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.rp-tabs>button.on *{color:#14304f!important;text-shadow:none!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.period-tabs>button.active,html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.cmp-tabs>button.on,html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.rp-tabs>button.on{box-shadow:inset 0 4px 6px rgba(255,255,255,.55),inset 0 -5px 8px rgba(0,0,0,.10),0 5px 9px rgba(40,70,110,.22)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.period-tabs>button.active,html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.cmp-tabs>button.on,html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.rp-tabs>button.on{box-shadow:inset 0 3px 0 rgba(255,255,255,.55),inset 0 -4px 0 rgba(0,0,0,.12)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) nav.neon-nav>button.navbtn.active{background:linear-gradient(160deg,#9bd1f5,#58a9e5)!important;color:#14304f!important;text-shadow:none!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) nav.neon-nav>button.navbtn.active *{color:#14304f!important;text-shadow:none!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) nav.neon-nav>button.navbtn.active{box-shadow:inset 0 4px 6px rgba(255,255,255,.55),inset 0 -5px 8px rgba(0,0,0,.10),0 5px 9px rgba(40,70,110,.22)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) nav.neon-nav>button.navbtn.active{box-shadow:inset 0 3px 0 rgba(255,255,255,.55),inset 0 -4px 0 rgba(0,0,0,.12)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) nav.neon-nav>button.navbtn:not(.active){background:rgba(255,255,255,.55)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) nav.neon-nav>button.navbtn:not(.active) *{color:#3b4e66!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) nav.neon-nav{background:rgba(255,255,255,.35)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content select#prioApp,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content #prioApp{background:linear-gradient(160deg,#a9e0c9,#66bfa0)!important;color:#123a2c!important;border:0!important;text-shadow:none!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content select#prioApp,html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content #prioApp{box-shadow:inset 0 4px 6px rgba(255,255,255,.55),inset 0 -5px 8px rgba(0,0,0,.10),0 5px 9px rgba(40,70,110,.22)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content select#prioApp,html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content #prioApp{box-shadow:inset 0 3px 0 rgba(255,255,255,.55),inset 0 -4px 0 rgba(0,0,0,.12)!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-pri{border:0!important;box-shadow:inset 0 0 0 4px rgb(78,201,164),inset 0 0 0 6px rgba(255,255,255,.7),inset 0 12px 16px rgba(255,255,255,.28),inset 0 -10px 14px rgba(40,70,110,.06),0 0 10px rgba(78,201,164,.45)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-pri{border:0!important;box-shadow:inset 0 0 0 4px rgb(78,201,164),inset 0 0 0 6px rgba(255,255,255,.7)!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-non{border:0!important;box-shadow:inset 0 0 0 4px rgb(240,122,140),inset 0 0 0 6px rgba(255,255,255,.7),inset 0 12px 16px rgba(255,255,255,.28),inset 0 -10px 14px rgba(40,70,110,.06),0 0 10px rgba(240,122,140,.45)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-non{border:0!important;box-shadow:inset 0 0 0 4px rgb(240,122,140),inset 0 0 0 6px rgba(255,255,255,.7)!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-total{border:0!important;box-shadow:inset 0 0 0 4px rgb(90,160,247),inset 0 0 0 6px rgba(255,255,255,.7),inset 0 12px 16px rgba(255,255,255,.28),inset 0 -10px 14px rgba(40,70,110,.06),0 0 10px rgba(90,160,247,.45)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-total{border:0!important;box-shadow:inset 0 0 0 4px rgb(90,160,247),inset 0 0 0 6px rgba(255,255,255,.7)!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-gray{border:0!important;box-shadow:inset 0 0 0 4px rgb(164,182,204),inset 0 0 0 6px rgba(255,255,255,.7),inset 0 12px 16px rgba(255,255,255,.28),inset 0 -10px 14px rgba(40,70,110,.06),0 0 10px rgba(164,182,204,.45)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-gray{border:0!important;box-shadow:inset 0 0 0 4px rgb(164,182,204),inset 0 0 0 6px rgba(255,255,255,.7)!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-gray.cg-tot{border:0!important;box-shadow:inset 0 0 0 4px rgb(164,182,204),inset 0 0 0 6px rgba(255,255,255,.7),inset 0 12px 16px rgba(255,255,255,.28),inset 0 -10px 14px rgba(40,70,110,.06),0 0 10px rgba(164,182,204,.45)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-gray.cg-tot{border:0!important;box-shadow:inset 0 0 0 4px rgb(164,182,204),inset 0 0 0 6px rgba(255,255,255,.7)!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-gray.cg-bolt{border:0!important;box-shadow:inset 0 0 0 4px rgb(78,201,164),inset 0 0 0 6px rgba(255,255,255,.7),inset 0 12px 16px rgba(255,255,255,.28),inset 0 -10px 14px rgba(40,70,110,.06),0 0 10px rgba(78,201,164,.45)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-gray.cg-bolt{border:0!important;box-shadow:inset 0 0 0 4px rgb(78,201,164),inset 0 0 0 6px rgba(255,255,255,.7)!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-gray.cg-oth{border:0!important;box-shadow:inset 0 0 0 4px rgb(88,182,238),inset 0 0 0 6px rgba(255,255,255,.7),inset 0 12px 16px rgba(255,255,255,.28),inset 0 -10px 14px rgba(40,70,110,.06),0 0 10px rgba(88,182,238,.45)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-gray.cg-oth{border:0!important;box-shadow:inset 0 0 0 4px rgb(88,182,238),inset 0 0 0 6px rgba(255,255,255,.7)!important}
+html:not(.pdc-lite) body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-gray.cg-oth.tap{border:0!important;box-shadow:inset 0 0 0 4px rgb(88,182,238),inset 0 0 0 6px rgba(255,255,255,.7),inset 0 12px 16px rgba(255,255,255,.28),inset 0 -10px 14px rgba(40,70,110,.06),0 0 10px rgba(88,182,238,.45)!important}
+html.pdc-lite body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-gray.cg-oth.tap{border:0!important;box-shadow:inset 0 0 0 4px rgb(88,182,238),inset 0 0 0 6px rgba(255,255,255,.7)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-pri,html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-gray.cg-bolt{background:linear-gradient(160deg,#f2fbf7,#d3f0e4)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-non{background:linear-gradient(160deg,#fff4f6,#fbd9df)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) #content div.metric.control-metric.control-total{background:linear-gradient(160deg,#f3f8ff,#d6e7fb)!important}
+html body.lt.pastel:not(#za):not(#zb):not(#zc):not(#zd) nav.neon-nav>button.navbtn{border-color:rgba(255,255,255,.85)!important}
+html body.pastel:not(.lt):not(#za):not(#zb):not(#zc):not(#zd) #content .panel,html body.pastel:not(.lt):not(#za):not(#zb):not(#zc):not(#zd) .panel{background:linear-gradient(180deg,rgba(40,68,112,.86),rgba(30,54,94,.9))!important;border-color:rgba(160,196,240,.38)!important}
+html body.pastel:not(.lt):not(#za):not(#zb):not(#zc):not(#zd) #ratePage{--bg:#233b63;--card:#2d4b7b;--card2:#294673;--ln:#4a6aa0;--trk:#3a5a8c;--bt:#2f5a9a}
+html body.pastel:not(#za):not(#zb):not(#zc):not(#zd) #sideDrawer{background:linear-gradient(180deg,#1f3558,#294673)!important}
 </style>
