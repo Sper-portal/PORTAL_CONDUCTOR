@@ -144,6 +144,19 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:8px 4px;b
 .daily-motivation .motivation-quote{font-size:clamp(14px,3.6vw,18px);font-weight:900;line-height:1.2;text-shadow:0 0 12px #ffc65b22}
 .daily-motivation .motivation-count{display:flex;align-items:center;justify-content:center;gap:5px;padding:0 10px;color:#d6e4f1;font-size:11px;font-weight:900;white-space:nowrap}
 .daily-motivation .motivation-count .dot{width:6px;height:6px;background:#f7c65d;box-shadow:0 0 7px #f7c65d}
+/* v3.71 · tarjeta del impulso más linda: iconos propios en «Cinturón» y «Gracias» (dentro de un círculo dorado) y estrellita en el título */
+.daily-motivation .mv-btn .mv-i{display:flex;align-items:center;justify-content:center;width:23px;height:23px;border-radius:50%;font-size:13px;line-height:1;background:radial-gradient(circle at 35% 28%,#2f5470 0%,#122b3f 72%);border:1px solid #f4c66b99;box-shadow:0 0 9px #f4c66b30,inset 0 1px 0 #ffffff26;--mvc:#1b3a52}
+.daily-motivation .mv-btn .mv-i svg{width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.daily-motivation .mv-btn .mv-i svg .mv-f{fill:currentColor;stroke:none}
+.daily-motivation .mv-btn .mv-i svg .mv-cut{fill:none;stroke:var(--mvc);stroke-width:2.5;stroke-linecap:butt}
+.daily-motivation .mv-btn .mv-n{font-size:10px;font-weight:800;letter-spacing:.2px;text-transform:none}
+.daily-motivation .motivation-label{font-size:12px;font-weight:700;font-style:italic;letter-spacing:1.2px;line-height:1.15;background:linear-gradient(180deg,#fff8dc 0%,#ffd54f 46%,#ff9d1a 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;-webkit-text-stroke:.5px #9a5600;filter:drop-shadow(0 1px 0 #6b3a0099) drop-shadow(0 0 8px #f6c96d66)}
+.daily-motivation .motivation-label::before{content:"";display:inline-block;width:13px;height:13px;margin-right:6px;vertical-align:-1px;-webkit-text-fill-color:initial;background:currentColor;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1c.9 6.3 4.7 10.1 11 11-6.3.9-10.1 4.7-11 11-.9-6.3-4.7-10.1-11-11C7.3 11.1 11.1 7.3 12 1z'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1c.9 6.3 4.7 10.1 11 11-6.3.9-10.1 4.7-11 11-.9-6.3-4.7-10.1-11-11C7.3 11.1 11.1 7.3 12 1z'/%3E%3C/svg%3E") center/contain no-repeat}
+@media(max-width:360px){.daily-motivation .motivation-label{font-size:11px;letter-spacing:.7px}.daily-motivation .motivation-label::before{width:10px;height:10px;margin-right:5px}}
+@media(max-width:335px){.daily-motivation .motivation-label{font-size:10px;letter-spacing:.4px}.daily-motivation .motivation-label::before{width:9px;height:9px;margin-right:4px}}
+@media(max-width:325px){.daily-motivation .motivation-label{font-size:9.5px;letter-spacing:.3px;white-space:nowrap}.daily-motivation .motivation-label::before{display:none}}
+html body.lt #content .motivation-label{background-image:linear-gradient(180deg,#f7b500 0%,#e07b00 52%,#b25300 100%);-webkit-text-stroke:.4px #8a4400;filter:drop-shadow(0 1px 0 #ffffffaa)}
+html body.lt #content .mv-btn .mv-i{background:radial-gradient(circle at 35% 28%,#fffef6 0%,#ffe9a6 78%);border-color:#ffc94d;box-shadow:0 0 8px #f5b73a33,inset 0 1px 0 #fff;--mvc:#ffefb8}
 @media(max-width:360px){.daily-motivation .motivation-icon{flex-basis:48px;font-size:24px}.daily-motivation .motivation-voice{flex-basis:62px}.daily-motivation .motivation-copy{padding:8px}.daily-motivation .motivation-count{padding:0 7px;font-size:10px}}
 </style>
 
@@ -1008,7 +1021,23 @@ const dailyMotivationPhrases=[
    Tocar = el móvil lo dice en voz alta (voz de texto a voz del móvil, volumen de MULTIMEDIA). Mantener pulsado = cambiar el nombre, lo que dice y el idioma de la voz.
    Se guarda en db.settings.voiceBtns (viaja con la cuenta). Primero usa el plugin nativo «Speak»; si no está o falla, la voz del navegador; si tampoco, avisa. */
 var MV_DEF={a:{i:'🔔',n:'Cinturón',t:'Por favor, póngase el cinturón de seguridad.',l:'es-ES'},b:{i:'🙏',n:'Gracias',t:'Gracias por viajar con nosotros.',l:'es-ES'}};
+var MV_SVG={a:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle class="mv-f" cx="12" cy="5.3" r="3.1"/><path class="mv-f" d="M4.6 22v-5.6c0-3.4 2.7-6.1 6.1-6.1h2.6c3.4 0 6.1 2.7 6.1 6.1V22z"/><path class="mv-cut" d="M6.6 9.6l11.2 11.4"/></svg>',b:'<svg viewBox="0 0 24 24" aria-hidden="true"><path class="mv-f" d="M12 20.6c-.3 0-.6-.1-.8-.3C6.2 16.4 3 13.6 3 10.1 3 7.6 5 5.6 7.4 5.6c1.8 0 3.4 1 4.6 2.7 1.2-1.7 2.8-2.7 4.6-2.7 2.4 0 4.4 2 4.4 4.5 0 3.5-3.2 6.3-8.2 10.2-.2.2-.5.3-.8.3z"/></svg>'};
 var MV_LANGS=[['es-ES','Español'],['en-GB','English (UK)'],['en-US','English (US)'],['fr-FR','Français'],['de-DE','Deutsch'],['it-IT','Italiano'],['pt-PT','Português']];
+var MV_PH={a:{es:'Por favor, póngase el cinturón de seguridad.',en:'Please fasten your seat belt.',fr:'Veuillez attacher votre ceinture de sécurité.',de:'Bitte legen Sie Ihren Sicherheitsgurt an.',it:'Per favore, allacci la cintura di sicurezza.',pt:'Por favor, aperte o cinto de segurança.'},b:{es:'Gracias por viajar con nosotros.',en:'Thank you for riding with us.',fr:"Merci d'avoir voyagé avec nous.",de:'Danke, dass Sie mit uns gefahren sind.',it:'Grazie per aver viaggiato con noi.',pt:'Obrigado por viajar connosco.'}};
+function mvPh(k,lang){var p=MV_PH[k]||{};return p[String(lang||'').slice(0,2)]||MV_DEF[k].t}
+function mvIsStd(k,t){t=String(t||'').trim();if(!t)return true;var p=MV_PH[k]||{};for(var x in p){if(p[x]===t)return true}return t===MV_DEF[k].t}
+function mvLangName(l){for(var i=0;i<MV_LANGS.length;i++){if(MV_LANGS[i][0]===l)return MV_LANGS[i][1]}return String(l)}
+function mvFalta(l){return 'Tu móvil no tiene la voz de '+mvLangName(l)+', así que ha hablado con la voz que trae. Instálala en Ajustes de Android → Texto a voz.'}
+var MV_MISS=null;
+function mvWebVoices(){try{var v=window.speechSynthesis&&speechSynthesis.getVoices&&speechSynthesis.getVoices();return v&&v.length?v:null}catch(e){return null}}
+function mvNoVoice(lang){var v=mvWebVoices();if(!v)return false;var p=String(lang).slice(0,2).toLowerCase();return !v.some(function(x){return String(x.lang||'').toLowerCase().replace('_','-').indexOf(p)===0})}
+function mvVoices(){
+  var tags=MV_LANGS.map(function(x){return x[0]}),N=mvNative();
+  if(N&&N.voices)return mvTmo(N.voices({langs:tags.join(',')}),5000).then(function(r){var m=String(r&&r.missing||'');MV_MISS=m?m.split(','):[];return MV_MISS},function(){return null});
+  var v=mvWebVoices();
+  if(v){MV_MISS=tags.filter(function(t){return mvNoVoice(t)});return Promise.resolve(MV_MISS)}
+  return Promise.resolve(null);
+}
 function mvEsc(x){return String(x==null?'':x).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function mvCfg(k){
   var d=MV_DEF[k],s=null;
@@ -1018,7 +1047,7 @@ function mvCfg(k){
 }
 function voiceBtnsHtml(){
   var h='<div class="motivation-voice" role="group" aria-label="Frases con voz para el pasajero">';
-  ['a','b'].forEach(function(k){var c=mvCfg(k);h+='<button type="button" class="mv-btn" data-mv="'+k+'" aria-label="Decir en voz alta: '+mvEsc(c.t)+'. Mantén pulsado para cambiarlo"><span class="mv-i" aria-hidden="true">'+c.i+'</span><span class="mv-n">'+mvEsc(c.n)+'</span></button>'});
+  ['a','b'].forEach(function(k){var c=mvCfg(k);h+='<button type="button" class="mv-btn" data-mv="'+k+'" aria-label="Decir en voz alta: '+mvEsc(c.t)+'. Mantén pulsado para cambiarlo"><span class="mv-i" aria-hidden="true">'+(MV_SVG[k]||c.i)+'</span><span class="mv-n">'+mvEsc(c.n)+'</span></button>'});
   return h+'</div>';
 }
 function mvNative(){try{var C=window.Capacitor;if(!C||!(C.isNativePlatform&&C.isNativePlatform()))return null;return (C.Plugins&&C.Plugins.Speak)||(C.registerPlugin?C.registerPlugin('Speak'):null)}catch(e){return null}}
@@ -1027,11 +1056,11 @@ function mvSpeak(text,lang){
   text=String(text==null?'':text).trim();lang=lang||'es-ES';
   if(!text)return Promise.resolve({ok:false,why:'vacio'});
   var web=function(){
-    try{if(window.speechSynthesis&&window.SpeechSynthesisUtterance){var u=new SpeechSynthesisUtterance(text);u.lang=lang;u.volume=1;try{speechSynthesis.cancel()}catch(e){}speechSynthesis.speak(u);return {ok:true,via:'navegador'}}}catch(e){}
+    try{if(window.speechSynthesis&&window.SpeechSynthesisUtterance){var u=new SpeechSynthesisUtterance(text);u.lang=lang;u.volume=1;try{speechSynthesis.cancel()}catch(e){}speechSynthesis.speak(u);return {ok:true,via:'navegador',falta:mvNoVoice(lang)}}}catch(e){}
     return {ok:false,why:'sin_voz'};
   };
   var N=mvNative();
-  if(N&&N.speak)return mvTmo(N.speak({text:text,lang:lang,volume:1}),7000).then(function(){return {ok:true,via:'movil'}},function(e){var w=web();w.nativo=String(e&&e.message||e);return w});
+  if(N&&N.speak)return mvTmo(N.speak({text:text,lang:lang,volume:1}),7000).then(function(r){return {ok:true,via:'movil',falta:!!(r&&r.fallback)}},function(e){var w=web();w.nativo=String(e&&e.message||e);return w});
   return Promise.resolve(web());
 }
 function mvToast(msg){
@@ -1043,7 +1072,7 @@ function mvSay(k){
   var c=mvCfg(k),b=document.querySelector('.mv-btn[data-mv="'+k+'"]');
   if(b){b.classList.add('say');setTimeout(function(){b.classList.remove('say')},1600)}
   return mvSpeak(c.t,c.l).then(function(r){
-    if(!r.ok)mvToast('No he podido hablar: el móvil no tiene voz instalada. Mira en Ajustes de Android → Texto a voz.');
+    if(!r.ok)mvToast('No he podido hablar: el móvil no tiene voz instalada. Mira en Ajustes de Android → Texto a voz.');else if(r.falta)mvToast(mvFalta(c.l));
     return r;
   });
 }
@@ -1057,19 +1086,31 @@ function mvEdit(k){
   o.innerHTML='<div class="mv-box"><div class="mv-h">'+c.i+' Botón con voz</div>'
    +'<label>Nombre del botón (corto)<input id="mvN" type="text" maxlength="12" autocomplete="off"></label>'
    +'<label>Lo que dice en voz alta<textarea id="mvT" rows="3" maxlength="200"></textarea></label>'
-   +'<label>Idioma de la voz<select id="mvL">'+opts+'</select></label>'
+   +'<label>Idioma (de la voz y de la frase)<select id="mvL">'+opts+'</select></label>'
    +'<div class="mv-row"><button type="button" id="mvTest">▶ Probar</button><button type="button" id="mvRest">Restaurar</button></div>'
+   +'<div class="mv-row"><button type="button" id="mvPh">Frase de ejemplo en este idioma</button></div>'
    +'<div class="mv-row"><button type="button" id="mvCancel">Cancelar</button><button type="button" id="mvSave" class="pri">Guardar</button></div>'
    +'<div class="mv-msg" id="mvMsg"></div></div>';
   document.body.appendChild(o);
   var N=o.querySelector('#mvN'),T=o.querySelector('#mvT'),L=o.querySelector('#mvL'),M=o.querySelector('#mvMsg');
   N.value=c.n;T.value=c.t;L.value=c.l;
+  var mark=function(miss){if(!miss)return;for(var i=0;i<L.options.length;i++){var q=L.options[i],nm=mvLangName(q.value);q.textContent=miss.indexOf(q.value)>=0?nm+' (sin voz en este móvil)':nm}};
+  var tail=function(){return MV_MISS&&MV_MISS.indexOf(L.value)>=0?' Ojo: tu móvil no tiene esa voz (Ajustes de Android → Texto a voz).':''};
+  if(MV_MISS)mark(MV_MISS);
+  mvVoices().then(function(m){if(m&&document.getElementById('mvEdit')===o){mark(m);var t=tail();if(t&&!M.textContent)msg(t.trim())}});
+  L.onchange=function(){
+    var nm=mvLangName(L.value);
+    if(mvIsStd(k,T.value)){T.value=mvPh(k,L.value);msg('Frase puesta en '+nm+'. Puedes cambiarla.'+tail())}
+    else msg('La voz es '+nm+', pero tu frase sigue como la escribiste. Para ver la de ejemplo en '+nm+' pulsa «Frase de ejemplo».'+tail());
+  };
+  o.querySelector('#mvPh').onclick=function(){T.value=mvPh(k,L.value);msg('Frase de ejemplo puesta en '+mvLangName(L.value)+'.'+tail())};
+
   var msg=function(x){M.textContent=x||''};
   o.addEventListener('click',function(e){if(e.target===o)mvClose()});
   o.querySelector('#mvCancel').onclick=mvClose;
   o.querySelector('#mvTest').onclick=function(){
     if(!T.value.trim()){msg('Escribe lo que debe decir.');return}
-    msg('');mvSpeak(T.value,L.value).then(function(r){if(!r.ok)msg('No he podido hablar: el móvil no tiene voz instalada (Ajustes de Android → Texto a voz).')});
+    msg('');mvSpeak(T.value,L.value).then(function(r){if(!r.ok)msg('No he podido hablar: el móvil no tiene voz instalada (Ajustes de Android → Texto a voz).');else if(r.falta)msg(mvFalta(L.value))});
   };
   o.querySelector('#mvRest').onclick=function(){var d=MV_DEF[k];N.value=d.n;T.value=d.t;L.value=d.l;msg('Texto de fábrica puesto. Pulsa Guardar para quedarte con él.')};
   o.querySelector('#mvSave').onclick=function(){
@@ -1093,7 +1134,7 @@ function mvEdit(k){
   document.addEventListener('click',function(e){var b=btn(e);if(!b)return;if(long){long=false;e.preventDefault();e.stopPropagation();return}mvSay(b.getAttribute('data-mv'))},true);
   document.addEventListener('contextmenu',function(e){if(btn(e))e.preventDefault()},true);
 })();
-window.PDCVOICE={cfg:mvCfg,say:mvSay,speak:mvSpeak,edit:mvEdit,close:mvClose,def:MV_DEF,langs:MV_LANGS};
+window.PDCVOICE={cfg:mvCfg,say:mvSay,speak:mvSpeak,edit:mvEdit,close:mvClose,def:MV_DEF,langs:MV_LANGS,ph:MV_PH,phrase:mvPh,voices:mvVoices};
 function dailyMotivationHtml(){
  const now=new Date();
  const dayNumber=Math.floor((Date.UTC(now.getFullYear(),now.getMonth(),now.getDate())-Date.UTC(now.getFullYear(),0,0))/86400000)-1;
@@ -1370,13 +1411,13 @@ function themeNote(){
   var m=themeMode();
   if(m==='light')return 'Siempre claro (Calculadora, Control, Facturación e Informe).';
   if(m==='dark')return 'Siempre oscuro.';
-  if(m==='pastel')return 'Pastel (cremita): colores suaves con relieve, en Calculadora, Control, Facturación e Informe; Ajustes, el menú y Eventos Madrid hoy, en azul noche suave.';
+  if(m==='pastel')return 'Personalizado: colores suaves con relieve, en Calculadora, Control, Facturación e Informe; Ajustes, el menú y Eventos Madrid hoy, en azul noche suave.';
   var t=sunTimes(new Date());
   return 'Cambia solo: claro de día y oscuro de noche, según el sol en Madrid'+(t?' (hoy sale a las '+themeHm(t.rise)+' y se pone a las '+themeHm(t.set)+')':'')+'. Ahora: '+(themeLight()?'claro':'oscuro')+'.';
 }
 /*v330-tema*/
 // v3.30 · «Tema» es una fila de Ajustes con flechita (›), como Cuenta y Configuración de la app; dentro se elige Automático, Claro u Oscuro.
-function themeRowText(){var m=themeMode();return m==='light'?'Siempre claro':m==='dark'?'Siempre oscuro':m==='pastel'?'Pastel (cremita) · colores suaves con relieve':'Automático · claro de día y oscuro de noche'}
+function themeRowText(){var m=themeMode();return m==='light'?'Siempre claro':m==='dark'?'Siempre oscuro':m==='pastel'?'Personalizado · colores suaves con relieve':'Automático · claro de día y oscuro de noche'}
 function themeCardFill(){
   var m=themeMode();
   document.querySelectorAll('#themeOpts .tm-opt').forEach(function(b){var on=b.getAttribute('data-m')===m;b.classList.toggle('on',on);b.setAttribute('aria-checked',on?'true':'false')});
@@ -1392,11 +1433,11 @@ function themeCardAdd(){
 function renderTema(){
   ltSet(false);
   var o=function(m,ic,t,s){return '<button type="button" class="settings-option tm-opt" role="radio" data-m="'+m+'" onclick="themeSet(\''+m+'\')"><span class="ico">'+ic+'</span><span><b>'+t+'</b><small>'+s+'</small></span><span class="tm-ck">✓</span></button>'};
-  jPanel('Tema',"show('settings')",'<div class="note" style="margin-bottom:12px">Elige cómo se ven Calculadora, Control, Facturación e Informe. Ajustes, el menú y Eventos Madrid hoy son siempre oscuros (con «Pastel», en un azul noche suave).</div><div class="tm-list" id="themeOpts" role="radiogroup" aria-label="Tema">'
+  jPanel('Tema',"show('settings')",'<div class="note" style="margin-bottom:12px">Elige cómo se ven Calculadora, Control, Facturación e Informe. Ajustes, el menú y Eventos Madrid hoy son siempre oscuros (con «Personalizado», en un azul noche suave).</div><div class="tm-list" id="themeOpts" role="radiogroup" aria-label="Tema">'
     +o('auto','🌗','Automático','Claro de día y oscuro de noche, según el sol en Madrid')
     +o('light','☀️','Claro','Siempre claro')
     +o('dark','🌙','Oscuro','Siempre oscuro')
-    +o('pastel','🍦','Pastel','Cremita: colores suaves, esquinas redondas y relieve')
+    +o('pastel','🎨','Personalizado','Colores suaves, esquinas redondas y relieve')
     +'</div><div class="note" id="themeNote" style="margin-top:12px"></div>');
   themeCardFill();
 }
@@ -3054,7 +3095,7 @@ const J_KB=[
 ['nocuadra','🤔','Los totales no me cuadran','cuadr^4,no coincide^4,diferencia,distinto,falta dinero,sobra','Repasa por orden: 1) que los viajes estén en el día correcto, 2) que el pago (tarjeta o efectivo) sea el real y 3) las compensaciones y propinas. Con las flechas de fecha revisa el día en Facturación.'],
 ['tablet','🖥️','Tablet y pantalla dividida','tablet,pantalla dividida,multiventana,ventana,dos apps','Con pantalla dividida puedes tener Bolt a un lado y Driver Hub 360 al otro. El lector lee el precio de la otra ventana y lo mete en Driver Hub 360.'],
 ['frase','💬','Frase del día','frase,impulso,motivac,cita','Arriba, en Calculadora, tienes cada día una frase distinta. Hay 365, una para cada día del año.'],
-['voz','🔔','Botones con voz para el pasajero','voz^4,audio^3,cinturon^4,gracias^3,pasajero^3,hablar^3,decir^2,altavoz^2,idioma^2,ingles^2,editar^2,boton,frase','A la izquierda de la frase del día hay 2 botones con voz: «Cinturón» dice «Por favor, póngase el cinturón de seguridad» y «Gracias» dice «Gracias por viajar con nosotros». Tócalos y el móvil lo dice en voz alta, con el volumen de multimedia del móvil. Para cambiar el nombre del botón, lo que dice o el idioma de la voz (por ejemplo inglés), mantén pulsado el botón: sale una ventana con «Probar», «Guardar» y «Restaurar». Se guarda en tu cuenta. Si no suena, mira en Ajustes de Android → Texto a voz que haya una voz instalada.'],
+['voz','🔔','Botones con voz para el pasajero','voz^4,audio^3,cinturon^4,gracias^3,pasajero^3,hablar^3,decir^2,altavoz^2,idioma^2,ingles^2,editar^2,boton,frase','A la izquierda de la frase del día hay 2 botones con voz: «Cinturón» dice «Por favor, póngase el cinturón de seguridad» y «Gracias» dice «Gracias por viajar con nosotros». Tócalos y el móvil lo dice en voz alta, con el volumen de multimedia del móvil. Para cambiar el nombre del botón, lo que dice o el idioma (por ejemplo inglés), mantén pulsado el botón: sale una ventana con «Probar», «Guardar» y «Restaurar». Al elegir otro idioma, la frase se pone sola en ese idioma (si no la habías escrito tú; con «Frase de ejemplo» la pones cuando quieras) y la lista te dice qué idiomas no tiene tu móvil. Se guarda en tu cuenta. Si no suena, mira en Ajustes de Android → Texto a voz que haya una voz instalada.'],
 ['tasa','📊','Mi tasa de finalización','tasa,finalizacion,aceptacion,cancelacion,cancelar,bolt,calidad,servicio,limite,ajustes,semana,mes','En Ajustes → Tasa de finalización ves tu cuenta propia, de lunes a domingo y por meses: viajes hechos ÷ ofertas que cuentan. Toda oferta que lee la app suma a Recibidas; si trae el cartel «Fuera del radio / no te afectará» suma también a Con aviso y no cuenta (si la aceptas con ✓, pasa a contar). Las reservas (etiqueta «Reservado») con la recogida a más de 2 km se tratan igual aunque no traigan el cartel; a 2 km o menos cuentan como una oferta normal. Sin cartel y sin ✓ baja tu tasa. ✓ y la haces: sube. ✓ y luego la borras de la lista: es una cancelación y baja; si el cliente cancela en pocos minutos (los eliges en la página) no penaliza. Cada día se puede corregir con − + ✎ y puedes cargar días pasados. Avisos: naranja al bajar de 90 % y rojo por debajo de 85 % (se cambian). Es una estimación tuya: Bolt no enseña su tasa interna. Los datos se quedan en el móvil. La barra ✗ / ✓ de abajo de la app ya no sale de fábrica (si la echas de menos: Ajustes de Bolt → General → «Barra ✗ / ✓ de abajo de la app»; trae «Dejarla / Hacerla» con lo que pasa con tu tasa). En el aviso del neto de Bolt sale debajo una lengüeta «Más datos» con los botones ✕ «No la hice» y ✓ «La acepté»: los puedes pulsar ahí (hasta 90 segundos después) y cuentan en tu tasa aunque Driver Hub 360 esté cerrado; si la oferta ya se fue, los botones quedan 15 segundos. «Más datos» abre las líneas sencillas (viaje, recogida, bruto y comisión, si es una reserva) y «Cálculo completo» todas las de siempre. Si prefieres el aviso entero como antes: Ajustes de Bolt → General → «Cartel plegado».'],
 ['grabar','🎥','Grabar vídeo del viaje','grabar,grabacion,video,camara,dashcam,interior,audio,microfono','Arriba, en la frase del día de Calculadora, hay un botón pequeño con una cámara. Púlsalo, elige 15 o 30 minutos y con o sin audio. Graba el interior del coche en Full HD y el vídeo se queda solo en tu móvil: no se sube a internet ni gasta datos. Al acabar no sale ningún aviso en la pantalla: la cámara pasa a poner «Listo». Cuando te venga bien, púlsala y eliges Guardar (queda en la Galería, en Películas, carpeta Driver Hub 360) o Eliminar. Unos 30 minutos ocupan alrededor de 1,4 GB, así que mira que tengas sitio. Mientras graba, Android enseña un aviso y un punto verde: es normal y no se puede quitar. Si llevas pasajeros y grabas con audio, avísalos con un cartel visible en el coche.'],
 ['freenow','💗','Free Now y Pide Taxi','free now^4,freenow^4,pide taxi^4,pidetaxi^4','En Calculadora tienes los botones Free Now (rosa) y Pide Taxi (amarillo) en la segunda fila, junto a Aeropuerto y Cancelaciones. Escribe el importe y púlsalo: se guarda el importe entero, sin comisión de la app, y suma a tu facturación, al informe y a la nómina. También puedes elegirlos como aplicación prioritaria en Control, cargar sus importes a mano en Facturación y apuntar sus cancelaciones.'],
@@ -3105,7 +3146,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.70';
+const APP_VERSION='v3.71';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -11616,16 +11657,18 @@ setTimeout(tick,800);
 if(window.PDCREC)return;
 var CSS=''
 +'.daily-motivation{position:relative}'
-+'.trec-btn{position:absolute;top:5px;right:6px;z-index:2;display:flex;align-items:center;justify-content:center;gap:5px;min-width:26px;height:22px;padding:0 6px;margin:0;border-radius:11px;border:1px solid #f4c66b88;background:#0b1d2ccc;color:#f6c96d;font:800 11px/1 system-ui,-apple-system,sans-serif;cursor:pointer;-webkit-tap-highlight-color:transparent;box-sizing:border-box}'
++'.trec-btn{position:absolute;top:5px;right:6px;z-index:2;display:flex;align-items:center;justify-content:center;gap:5px;min-width:34px;height:26px;padding:0 5px;margin:0;border-radius:13px;border:1px solid #f4c66bcc;background:#0b1d2ccc;box-shadow:0 0 9px #f4c66b40;color:#f6c96d;font:800 11px/1 system-ui,-apple-system,sans-serif;cursor:pointer;-webkit-tap-highlight-color:transparent;box-sizing:border-box}'
 +'.trec-btn::before{content:"";position:absolute;inset:-9px -7px}'
-+'.trec-btn svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}'
++'.trec-btn svg{width:20px;height:20px;flex:0 0 auto;fill:currentColor;stroke:none;pointer-events:none}'
++'.trec-btn .cam-l{fill:none;stroke:#0b1d2c;stroke-width:1.6}.trec-btn .cam-d{fill:#0b1d2c}'
++'html body.lt #content .trec-btn:not(.rec) .cam-l{stroke:#fff3c4}html body.lt #content .trec-btn:not(.rec) .cam-d{fill:#fff3c4}'
 +'.trec-btn.rec{background:#7a1020e6;border-color:#ff6b7f;color:#fff;font-variant-numeric:tabular-nums}'
 +'.trec-btn .rd{width:8px;height:8px;border-radius:50%;background:#ff3b52;animation:trecp 1.2s ease-in-out infinite}'
 +'.trec-btn.pend{border-color:#ffd25e;color:#ffd25e}'
 +'.trec-btn .trec-l{pointer-events:none;white-space:nowrap}'
 +'.trec-btn.pend::after{content:"";position:absolute;top:-3px;right:-3px;width:9px;height:9px;border-radius:50%;background:#ff3b52}'
 +'@keyframes trecp{0%,100%{opacity:1}50%{opacity:.25}}'
-+'#trecFloat{position:fixed;top:calc(env(safe-area-inset-top,0px) + 6px);right:8px;z-index:99990;height:22px;width:76px}'
++'#trecFloat{position:fixed;top:calc(env(safe-area-inset-top,0px) + 6px);right:8px;z-index:99990;height:26px;width:80px}'
 +'#trecFloat .trec-btn{top:0;right:0}'
 +'html body.lt #content .trec-btn:not(.rec){background:#fff3c4;border-color:#ffd25e;color:#c97a00}'
 +'html body.lt #content .trec-btn.pend{color:#8a5200;border-color:#e0a400}'
@@ -11648,7 +11691,7 @@ var CSS=''
 +'body.lt #trecModal .trec-w{background:#fff6dd;color:#7a5200}'
 +'body.lt #trecModal button.trec-b.sec{color:#334155;border-color:#94a3b8}';
 
-var CAM='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.4"/></svg>';
+var CAM='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.4 4.4C8.7 3.6 9.4 3 10.3 3h3.4c.9 0 1.6.6 1.9 1.4l.4.9h2.6A3.5 3.5 0 0 1 22 8.8v7.7a3.5 3.5 0 0 1-3.5 3.5h-13A3.5 3.5 0 0 1 2 16.5V8.8a3.5 3.5 0 0 1 3.5-3.5h2.5z"/><circle class="cam-d" cx="12" cy="12.7" r="5.2"/><circle class="cam-l" cx="12" cy="12.7" r="3.1"/><circle cx="12" cy="12.7" r="1.2"/><circle class="cam-d" cx="18.6" cy="8.7" r="1.1"/></svg>';
 var VIDEO_BPS=6000000, AUDIO_BPS=96000;
 
 var S={st:'idle',planned:0,remaining:0,at:0,audio:false,pending:null,minutes:30,busy:false,dismissed:-1,errKey:''};
