@@ -3186,7 +3186,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.74';
+const APP_VERSION='v3.75';
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -4062,7 +4062,7 @@ function globalsCfg(){
   return {payrollProfile:s.payrollProfile||'variableFixedCash',commission:s.commission,commissionMode:s.commissionMode,commissionMinimum:s.commissionMinimum,
     salaryBase:Number(s.salaryBase??1425),cashPayroll:Number(s.cashPayroll??2000),irpf:Number(s.irpf??14.5),
     fixedExtraVia:s.fixedExtraVia==='payroll'?'payroll':'cash',fixedMode:s.fixedMode==='inside'?'inside':'extra',underBase:s.underBase==='total'?'total':'base',
-    tipMode:s.tipMode==='pct'?'pct':(s.tipMode==='all'||s.tipsMigrated328?'all':'apart'),tipPct:clampPct(s.tipPct)};
+    tipMode:s.tipMode==='pct'?'pct':(s.tipMode==='all'||s.tipsMigrated328?'all':'apart'),tipPct:clampPct(s.tipPct),payLate:s.payLate?1:0};
 }
 function monthsWithData(){
   const set=new Set();
@@ -4129,7 +4129,7 @@ function breakdown(r){
       :'<div class="note pr-warn">No se llega al mínimo de '+esc(euro(r.minimum))+': solo se cobra la nómina base.</div>';
   }
   h+=row('Remuneración total calculada',euro(r.remuneration),'pr-strong');
-  if(r.lifted)h+='<div class="note pr-warn">La remuneración calculada ('+esc(euro(r.total))+') no llega a la nómina base: se garantiza la base (+'+esc(euro(r.shortfall))+').</div>';
+  if(r.lifted)h+='<div class="note pr-warn">La remuneración calculada ('+esc(euro(r.modelTotal!=null?r.modelTotal:r.total))+') no llega a la nómina base: se garantiza la base (+'+esc(euro(r.shortfall))+').</div>';
   else if(r.shortfall>0)h+='<div class="note pr-warn">La remuneración calculada no llega a la nómina base ('+esc(euro(r.base))+'): la nómina bruta es solo la calculada y no hay efectivo.</div>';
   h+=row('Nómina bruta',euro(r.gross));
   h+=row('Retención de IRPF ('+pc(r.irpfPct)+' % de la nómina bruta)','− '+euro(r.tax));
@@ -4137,7 +4137,7 @@ function breakdown(r){
   h+=row('Comisión en efectivo',euro(r.cashCommission));
   if(r.profile==='variableFixedCash'&&r.fixedMode==='inside'){
     h+=row('Fijo (sale de tu remuneración; '+(r.fixedVia==='payroll'?'va dentro de la nómina bruta':'en efectivo, sin IRPF')+')',euro(r.fixedExtra));
-    if(r.fixedWanted>r.fixedExtra+0.004)h+='<div class="note pr-warn">Tu remuneración ('+esc(euro(r.total))+') no llega al fijo de '+esc(euro(r.fixedWanted))+': todo es fijo y la nómina queda en 0.</div>';
+    if(r.fixedWanted>r.fixedExtra+0.004)h+='<div class="note pr-warn">Tu remuneración ('+esc(euro(r.modelTotal!=null?r.modelTotal:r.total))+') no llega al fijo de '+esc(euro(r.fixedWanted))+': todo es fijo y la nómina queda en 0.</div>';
   }
   else if(r.profile==='variableFixedCash')h+=row('Fijo adicional ('+(r.fixedVia==='payroll'?'incluido en la nómina bruta':'en efectivo, sin IRPF')+')',euro(r.fixedExtra));
   else h+=row('Fijo adicional','—');
@@ -4253,7 +4253,7 @@ window.nomApply=function(){
   const {off,key}=NOMS,s=db.settings;s.payrollByMonth=s.payrollByMonth||{};
   const old=s.payrollByMonth[key];if(!old){nomClose();return}
   const stamp=new Date().toISOString();
-  s.payrollByMonth[key]=Object.assign({},nomNow(),{model:2,frozenAt:old.frozenAt||stamp,changedAt:stamp,previous:nomPlain(old)});
+  s.payrollByMonth[key]=Object.assign({},nomNow(),{model:2,frozenAt:old.frozenAt||stamp,changedAt:stamp,previous:nomPlain(old),payLate:old.payLate?1:0});
   nomClose();
   P.saveNow();renderBilling();
 };
@@ -5086,6 +5086,156 @@ window.saveSettings=function(){
     P.saveNow();
     if($('payrollProfile'))window.renderAppSettings();
   }catch(e){console.warn('v3.14 guardar ajustes',e)}
+  return r;
+};
+
+/* ===================== v3.75 · NOMINA A MES VENCIDO =====================
+   Ajustes → Nómina → «¿Cuándo cobras la parte variable?»:
+     · «El mismo mes» (por defecto, como siempre): nada cambia.
+     · «A mes vencido»: la nómina de un mes = salario base de ESE mes + la diferencia de la facturación del mes PASADO
+       (diferencia = remuneración del mes pasado, con su propia regla y su propio %, menos el salario base de ese mes pasado; nunca negativa).
+   Vale con «Todo en nómina» (la diferencia va en la nómina bruta, con IRPF) y «Nómina + comisión en efectivo» (la diferencia va en efectivo, sin IRPF).
+   Solo cambia la pantalla de nómina (Facturación → Mensual y la vista previa de Ajustes). «Mi comisión» de cada mes, el Informe y la pantalla principal no cambian
+   (siguen siendo lo que ese mes se ha ganado). Los meses ya cerrados se quedan con el modo que tenían. */
+const _prsL=window.payrollSettingsForMonth;
+window.payrollSettingsForMonth=function(offset){
+  const out=_prsL.apply(this,arguments);
+  try{const key=monthKeyFromOffset(offset),snap=db.settings.payrollByMonth&&db.settings.payrollByMonth[key];out.payLate=(snap?snap.payLate:db.settings.payLate)?1:0}catch(e){}
+  return out;
+};
+const LATE_OK=p=>p==='allPayroll'||p==='basePayrollVariableCash';
+P.payLateOn=function(cfg){return !!cfg&&Number(cfg.payLate)===1&&cfg.model!==1&&LATE_OK(cfg.payrollProfile)};
+const monthName=d=>d.toLocaleDateString('es-ES',{month:'long'});
+// remuneración de un mes (antes de repartirla), con la regla y el % DE ESE MES, sea cual sea su perfil
+function accrualOf(x,cfg,manual){
+  return P.payrollCalc({profile:'allPayroll',rule:cfg.commissionMode,pct:cfg.commission,minimum:cfg.commissionMinimum,base:cfg.salaryBase,irpf:cfg.irpf,
+    vehicle:Math.max(0,nm(x.total)-nm(x.tips)),manual:manual,tips:nm(x.tips),tipMode:cfg.tipMode,tipPct:cfg.tipPct});
+}
+P.payrollLate=function(offset,cfgM,opts){
+  opts=opts||{};
+  cfgM=cfgM||payrollSettingsForMonth(offset);
+  const cfgP=opts.cfgPrev||payrollSettingsForMonth(offset-1);
+  const x=periodData('monthly',offset),px=periodData('monthly',offset-1);
+  const kM=monthKeyFromDate(x.start),kP=monthKeyFromDate(px.start);
+  const manP=payrollCompensationForMonth(kP),manM=opts.manualComp!=null?ps(opts.manualComp):payrollCompensationForMonth(kM);
+  const rp=accrualOf(px,cfgP,manP),rc=accrualOf(x,cfgM,manM);
+  const base=c2(ps(cfgM.salaryBase)),baseP=c2(ps(cfgP.salaryBase));
+  const hasPrev=nm(px.total)>0||nm(px.trips)>0||manP>0;
+  const hasCur=nm(x.total)>0||nm(x.trips)>0||manM>0;
+  const short=hasPrev&&rp.total<baseP;
+  const diff=hasPrev?c2(Math.max(0,rp.total-baseP)):0;
+  const profile=cfgM.payrollProfile,irpfPct=clampPct(cfgM.irpf);
+  let gross,cashC;
+  if(profile==='allPayroll'){gross=c2(base+diff);cashC=0}else{gross=base;cashC=diff}
+  const tax=c2(gross*irpfPct/100),net=c2(gross-tax),final=c2(net+cashC);
+  return {late:true,profile,offset,key:kM,prevKey:kP,name:monthName(x.start),prevName:monthName(px.start),nextName:monthName(new Date(x.start.getFullYear(),x.start.getMonth()+1,1,12)),
+    base,baseP,irpfPct,hasPrev,hasCur,short,diff,gross,tax,net,cash:cashC,final,finalWithTips:c2(final+rp.tipsNet),
+    prev:rp,cur:rc,pending:hasCur?c2(Math.max(0,rc.total-base)):0};
+};
+function breakdownLate(L){
+  const m=L.name,p=L.prevName,n=L.nextName,pv=L.prev;
+  let h='<div class="note pr-rule">Perfil: <b>'+esc(PROFILES[L.profile])+'</b> · Cobro: <b>a mes vencido</b><br>Cobras el <b>salario base de '+esc(m)+'</b> y, por tu porcentaje, la <b>diferencia de la facturación de '+esc(p)+'</b>.</div>';
+  h+=row('Salario base de '+esc(m),euro(L.base),'pr-strong');
+  h+='<div class="note pr-rule">Diferencia de <b>'+esc(p)+'</b> (se cobra en '+esc(m)+')</div>';
+  if(!L.hasPrev){
+    h+='<div class="note pr-warn">No hay facturación apuntada en '+esc(p)+': este mes solo sale el salario base.</div>';
+  }else{
+    h+=row('Facturación de '+esc(p)+' (sin propinas)',euro(pv.vehicle));
+    if(pv.manual>0)h+=row('Ajustes manuales de '+esc(p),'+ '+euro(pv.manual));
+    if(pv.tipsBilling>0)h+=row('Propinas sumadas a la facturación','+ '+euro(pv.tipsBilling));
+    h+=pv.rule==='minimum'
+      ?row('Salario base '+euro(pv.base)+' + (facturación − '+euro(pv.minimum)+') × '+pc(pv.pct)+' %',euro(pv.total))
+      :row('Tu '+pc(pv.pct)+' % de la facturación de '+esc(p),euro(pv.total));
+    h+=row('Salario base de '+esc(p)+' (ya cobrado)','− '+euro(L.baseP));
+    h+=row('Diferencia de '+esc(p),euro(L.diff),'pr-strong');
+    if(L.short)h+='<div class="note pr-warn">En '+esc(p)+' tu porcentaje ('+esc(euro(pv.total))+') no llegó al salario base ('+esc(euro(L.baseP))+'): no hay diferencia que cobrar.</div>';
+  }
+  h+=row(L.profile==='allPayroll'?'Nómina bruta (salario base + diferencia)':'Nómina bruta (salario base)',euro(L.gross));
+  h+=row('Retención de IRPF ('+pc(L.irpfPct)+' % de la nómina bruta)','− '+euro(L.tax));
+  h+=row('Nómina neta estimada',euro(L.net));
+  h+=row('Diferencia en efectivo',L.profile==='allPayroll'?'—':euro(L.cash));
+  h+='<div class="payroll-final"><span>Total final estimado para el conductor</span><b>'+euro(L.final)+'</b></div>';
+  if(L.hasPrev&&pv.tips>0){
+    if(pv.tipMode==='all')h+='<div class="note pr-tipsnote">🎁 Las propinas de '+esc(p)+' ('+esc(euro(pv.tips))+') están dentro de la facturación: cuentan para el porcentaje igual que el resto.</div>';
+    else if(pv.tipMode==='pct')h+=row('Propinas de '+esc(p)+' en nómina (solo retención del '+pc(pv.tipPct)+' %, sin IRPF)','+ '+euro(pv.tips),'pr-tips')+row('Retención sobre las propinas ('+pc(pv.tipPct)+' %)','− '+euro(pv.tipsWithheld),'pr-tips')+row('Total con propinas',euro(L.finalWithTips),'pr-tips');
+    else h+=row('Propinas de '+esc(p)+' (100 % tuyas, aparte del cálculo)','+ '+euro(pv.tips),'pr-tips')+row('Total con propinas',euro(L.finalWithTips),'pr-tips');
+  }
+  if(L.hasCur)h+='<div class="note pr-tipsnote">📅 Lo que llevas facturado en '+esc(m)+' ('+esc(euro(L.cur.vehicle))+') deja una diferencia de <b>'+esc(euro(L.pending))+'</b> que se cobrará en '+esc(n)+', con el salario base de '+esc(n)+'.</div>';
+  h+='<div class="note pr-disc">Esto es una <b>estimación</b>, no una nómina legal definitiva: no incluye necesariamente cotizaciones a la Seguridad Social ni otros conceptos que no hayas configurado.</div>';
+  return h;
+}
+P.payrollBreakdownLateHtml=breakdownLate;
+
+/* ---------- Facturación → Mensual ---------- */
+const _dbpL=P.decorateBillingPayroll;
+P.decorateBillingPayroll=function(){
+  let mine=null;
+  try{
+    if(typeof billPeriod!=='undefined'&&billPeriod==='monthly'){
+      const root=document.getElementById('content'),panel=root&&root.querySelector('section.payroll-panel:not(#weeklyPayrollPanel)');
+      if(panel&&!panel.dataset.v314){
+        const cfg=payrollSettingsForMonth(billMonthOffset);
+        if(P.payLateOn(cfg)){
+          panel.dataset.v314='1';panel.dataset.v375='1';mine=panel;
+          panel.innerHTML='<div class="section-title">Cálculo de nómina mensual</div>'+breakdownLate(P.payrollLate(billMonthOffset,cfg));
+        }
+      }
+    }
+  }catch(e){console.warn('v3.75 mes vencido',e)}
+  const r=_dbpL.apply(this,arguments);
+  try{if(mine){const b=mine.querySelector('.nm-box');if(b)b.remove()}}catch(e){}   // «Cambiar esta nómina con los ajustes actuales» compara la cuenta del mismo mes: en un mes vencido no se ofrece
+  return r;
+};
+
+/* ---------- Ajustes → Nómina ---------- */
+function decorateLate(){
+  const pp=$('payrollProfile');if(!pp||$('payLate'))return;
+  const v=db.settings.payLate?1:0;
+  pp.insertAdjacentHTML('afterend',
+    '<label id="payLateLabel">¿Cuándo cobras la parte variable?</label><select id="payLate" style="margin:6px 0 10px" oninput="previewPayrollSettings()" onchange="previewPayrollSettings()">'
+    +'<option value="0"'+(v?'':' selected')+'>El mismo mes (como hasta ahora)</option>'
+    +'<option value="1"'+(v?' selected':'')+'>A mes vencido (la parte variable del mes pasado)</option></select>'
+    +'<div class="note" id="payLateNote" style="margin-bottom:10px"><b>El mismo mes:</b> tu porcentaje de la facturación de este mes entra en la nómina de este mes.<br><b>A mes vencido:</b> en la nómina de este mes cobras tu salario base de este mes y, por tu porcentaje, la <b>diferencia de la facturación del mes pasado</b> (tu porcentaje del mes pasado menos su salario base). Solo con «Todo en nómina» y «Nómina + comisión en efectivo». Los meses ya cerrados no cambian.</div>');
+}
+const _rasL=window.renderAppSettings;
+window.renderAppSettings=function(){
+  const r=_rasL.apply(this,arguments);
+  try{decorateLate();window.previewPayrollSettings()}catch(e){console.warn('v3.75 ajustes',e)}
+  return r;
+};
+const _ppsL=window.previewPayrollSettings;
+window.previewPayrollSettings=function(){
+  const r=_ppsL.apply(this,arguments);
+  try{
+    const sel=$('payLate');if(!sel)return r;
+    const profile=($('payrollProfile')||{}).value||db.settings.payrollProfile||'variableFixedCash',ok=LATE_OK(profile);
+    for(const n of [sel,$('payLateLabel'),$('payLateNote')])if(n)n.classList.toggle('pr-off',!ok);
+    sel.disabled=!ok;
+    const target=$('payrollSettingsPreview');
+    if(ok&&sel.value==='1'&&target){
+      const s=db.settings;
+      const cfg={payrollProfile:profile,salaryBase:readNum('salaryBase',s.salaryBase),cashPayroll:readNum('cashPayroll',s.cashPayroll),irpf:readNum('irpf',s.irpf),
+        commission:readNum('comm',s.commission),commissionMode:($('commMode')||{}).value||s.commissionMode,commissionMinimum:readNum('commMinimum',s.commissionMinimum),
+        tipMode:($('tipMode')||{}).value||s.tipMode,tipPct:readNum('tipPct',s.tipPct),model:2,payLate:1};
+      const prevKey=monthKeyFromOffset(-1),hasSnap=!!(s.payrollByMonth&&s.payrollByMonth[prevKey]);
+      const L=P.payrollLate(0,cfg,{manualComp:Math.max(0,readNum('payrollCompensation',payrollCompensationForMonth(monthKeyFromOffset(0)))),cfgPrev:hasSnap?null:cfg});
+      target.innerHTML=breakdownLate(L);
+    }
+  }catch(e){console.warn('v3.75 vista previa',e)}
+  return r;
+};
+const _ssL=window.saveSettings;
+window.saveSettings=function(){
+  const pl=$('payLate'),v=pl?(pl.value==='1'?1:0):null;
+  const r=_ssL.apply(this,arguments);   // (guarda y «congela» los meses cerrados con el modo de ANTES)
+  try{
+    if(v!=null){
+      const s=db.settings;s.payLate=v;
+      const snap=s.payrollByMonth&&s.payrollByMonth[monthKeyFromOffset(0)];if(snap)snap.payLate=v;
+      P.saveNow();
+      if($('payrollProfile'))window.renderAppSettings();
+    }
+  }catch(e){console.warn('v3.75 guardar modo de cobro',e)}
   return r;
 };
 })();
