@@ -22,6 +22,42 @@ final class TabLogic {
 
     static long seq(SharedPreferences sp) { return sp.getLong("trip_seq", 0L); }
 
+    // ------------------------------------------------------------------ v3.73: Uber y Cabify. Solo la HORA en que aceptas (interna: no sale en \u00ABViajes guardados\u00BB ni toca la tasa de Bolt)
+    /** la oferta de Uber / Cabify que se ve ahora (huella y cuando se leyo la ultima vez); una oferta nueva borra la marca de «ya apuntada» de la anterior */
+    static void seenOther(SharedPreferences sp, String sig, String app, long now) {
+        String old = sp.getString("uo_sig", "");
+        boolean isNew = old == null || !old.equals(sig) || now - sp.getLong("uo_ts", 0L) > VALID_MS;
+        SharedPreferences.Editor ed = sp.edit().putLong("uo_ts", now).putString("uo_app", app == null ? "" : app);
+        if (isNew) ed.putString("uo_sig", sig == null ? "" : sig).remove("uo_done");
+        ed.apply();
+    }
+
+    /** hay una oferta de Uber / Cabify en pantalla (o vista hace menos de 90 s) y los botones estan activos */
+    static boolean otherOn(SharedPreferences sp, long now) {
+        if (!buttons(sp)) return false;
+        String sig = sp.getString("uo_sig", "");
+        long ts = sp.getLong("uo_ts", 0L);
+        return sig != null && sig.length() > 0 && ts > 0 && now - ts >= 0 && now - ts <= VALID_MS;
+    }
+
+    /** la hora de ESTA oferta ya se apunto */
+    static boolean otherDone(SharedPreferences sp) {
+        String s = sp.getString("uo_sig", "");
+        return s != null && s.length() > 0 && s.equals(sp.getString("uo_done", ""));
+    }
+
+    static boolean canAcceptOther(SharedPreferences sp, long now) { return otherOn(sp, now) && !otherDone(sp); }
+
+    /** la ultima oferta leida es de Uber / Cabify (y no de Bolt) */
+    static boolean otherLatest(SharedPreferences sp) { return sp.getLong("uo_ts", 0L) > sp.getLong("trip_ts", 0L); }
+
+    /** \u2713 \u00ABLa acepte\u00BB: apunta la hora (interna). Otra \u2713 mas tarde (otra oferta: la anterior se cancelo) la sustituye. */
+    static boolean markOther(SharedPreferences sp, long now) {
+        if (!canAcceptOther(sp, now)) return false;
+        sp.edit().putString("uo_done", sp.getString("uo_sig", "")).putLong("acc_ts", now).putString("acc_app", sp.getString("uo_app", "")).apply();
+        return true;
+    }
+
     // ------------------------------------------------------------------ v3.63: «Dejarla / Aceptarla» (lo que le pasa a la tasa de finalizacion de la semana)
     /** con menos de 20 ofertas que cuentan la cifra salta demasiado: se enseña sin color de aviso (igual que en el Portal) */
     static final int MIN_BASE = 20;

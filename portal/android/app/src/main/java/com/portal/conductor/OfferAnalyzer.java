@@ -37,6 +37,7 @@ public class OfferAnalyzer {
         public int stH = -1, stK = -1, stP = -1;   // 0 verde, 1 naranja, 2 rojo, -1 sin dato
         // ---- estimacion de Bolt (solo si la oferta no trae precio) ----
         public boolean isBolt, estimated, estWeekend, estMinApplied;   // estWeekend = franja de hora punta ahora
+        public String app = "";   // v3.73: Bolt / Uber / Cabify (de que app viene la oferta; la hora de aceptado de Uber y Cabify se apunta por app)
         public double estGross = -1, estComm = -1, estNet = -1, estMult = 1, estOfferMult = -1;
         public double estNetLo = -1, estNetHi = -1;                     // rango (viajes cortos con demanda); -1 si no hay rango
         public boolean estRange;

@@ -497,6 +497,7 @@ public class ScreenReaderService extends AccessibilityService {
     private LinearLayout tabRate;
     private WindowManager.LayoutParams tabLp;
     private boolean tabShown = false, tabListen = false, tabDemo = false, tabLastEst = false;
+    private boolean tabOther = false;        // v3.73: la lengueta es de una oferta de Uber / Cabify (solo ✓ «La acepté», que apunta la hora por dentro)
     private int tabLevel = 0;                // 0 plegado \u00B7 1 \u00ABMas datos\u00BB (4 lineas: viaje, recogida, bruto y comision, reserva) \u00B7 2 \u00ABCalculo completo\u00BB (todas las lineas de siempre)
     private TextView aSum, tabCalc;          // aSum: las lineas sencillas (dentro del cartel); tabCalc: boton \u00ABCalculo completo\u00BB
     private LinearLayout tabMoreRow;
@@ -829,6 +830,7 @@ public class ScreenReaderService extends AccessibilityService {
             }
         }
         OfferAnalyzer.Result r = OfferAnalyzer.analyze(lines, rentParams(), true);
+        r.app = "Uber";   // v3.73: la lectura por imagen es solo de Uber
         long now = System.currentTimeMillis();
         setOcrState(lines.size() + " lineas leidas por imagen" + (r.offer ? " - oferta reconocida" : (r.acceptSeen ? " - veo el boton Aceptar pero no entendi la oferta" : ""))
             + (r.ocrFix.length() > 0 ? " - corregido: " + r.ocrFix : "") + " (" + ms + " ms)");
@@ -878,6 +880,7 @@ public class ScreenReaderService extends AccessibilityService {
                     sp.edit().putString("snap_" + pkg, ta.length() + " textos visibles: " + (all.length() > 600 ? all.substring(0, 600) : all)).apply();
                 }
                 OfferAnalyzer.Result r = OfferAnalyzer.analyze(nodes, rentParams(), false, BOLT_PKG.matcher(pkg).find());
+                r.app = appName(pkg);   // v3.73
                 touchStreet(r);   // v3.57
                 if (all.contains("\u20AC") || all.toLowerCase().contains("km")) {
                     sp.edit().putLong("rent_evalTs", now).putString("rent_why", r.offer
@@ -933,6 +936,15 @@ public class ScreenReaderService extends AccessibilityService {
     }
 
     /** huella de la oferta: mismos datos = misma oferta (la lectura se repite cada 1,5 s mientras se ve en pantalla) */
+    /** v3.73: Bolt / Uber / Cabify segun el paquete de la ventana */
+    static String appName(String pkg) {
+        String low = pkg == null ? "" : pkg.toLowerCase();
+        if (low.contains("uber")) return "Uber";
+        if (low.contains("cabify")) return "Cabify";
+        if (low.contains("bolt") || low.contains("mtakso")) return "Bolt";
+        return "";
+    }
+
     static String tripSig(OfferAnalyzer.Result r) {
         double net = r.estNetAuto >= 0 ? r.estNetAuto : r.estNet;     // v3.37: con la zona de la ubicacion: elegir otra zona en el aviso NO cambia la huella (es la misma oferta)
         double pr = r.estimated ? net : r.price;
@@ -980,6 +992,10 @@ public class ScreenReaderService extends AccessibilityService {
     /** apunta la oferta de Bolt que se esta viendo (una sola vez por oferta) si el interruptor «Viajes guardados» esta encendido */
     private void logTripOffer(OfferAnalyzer.Result r, long now, boolean nfx) {
         try {
+            if (r != null && !r.isBolt && (r.offer || r.unreadable)) {   // v3.73: Uber / Cabify: solo se recuerda la oferta que se ve (para apuntar la hora de aceptado con ✓); no entra en la lista ni en la tasa
+                TabLogic.seenOther(getSharedPreferences("portal", Context.MODE_PRIVATE), tripSig(r), r.app, now);
+                return;
+            }
             if (r == null || !r.offer || !r.isBolt || r.unreadable) return;
             SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);
             if (sp.getInt("trip_on", 1) != 1) return;
@@ -1478,8 +1494,10 @@ public class ScreenReaderService extends AccessibilityService {
             rh.removeCallbacks(tabHideRun);
             boolean fold = TabLogic.fold(sp);
             boolean logged = !tabDemo && r != null && r.offer && r.isBolt && !r.unreadable && TabLogic.buttons(sp) && seq > 0 && now - sp.getLong("trip_ts", 0L) <= TabLogic.VALID_MS;
+            boolean other = !logged && !tabDemo && r != null && !r.isBolt && (r.offer || r.unreadable) && TabLogic.otherOn(sp, now);   // v3.73: Uber / Cabify
+            tabOther = other;
             applyFold(fold);
-            if (!fold && !logged) { hideTab(); return; }                      // completo y sin botones: nada debajo
+            if (!fold && !logged && !other) { hideTab(); return; }            // completo y sin botones: nada debajo
             tabMode = 1;
             buildTab();
             String v = r == null ? "" : r.verdict;
@@ -1524,7 +1542,24 @@ public class ScreenReaderService extends AccessibilityService {
         tabView.setBackground(bg);
     }
 
+    /** v3.73: Uber / Cabify: un solo boton \u2713 \u00ABLa acepte\u00BB; al pulsarlo se apunta la hora (por dentro) y sale el aviso */
+    private void paintOtherButtons(SharedPreferences sp) {
+        if (tabRate != null) tabRate.setVisibility(View.GONE);
+        if (TabLogic.otherDone(sp)) {
+            tabBtns.setVisibility(View.GONE);
+            tabMsg.setVisibility(View.VISIBLE);
+            tabMsg.setTextColor(Color.parseColor("#86EFAC"));
+            tabMsg.setText("\u2713  Hora de aceptaci\u00F3n apuntada");
+        } else {
+            tabNo.setVisibility(View.GONE);
+            tabBtns.setVisibility(View.VISIBLE);
+            tabMsg.setVisibility(View.GONE);
+        }
+    }
+
     private void paintTabButtons(boolean logged, SharedPreferences sp, long seq) {
+        if (tabOther) { paintOtherButtons(sp); return; }
+        tabNo.setVisibility(View.VISIBLE);
         int dec = TabLogic.decision(sp, seq);
         if (dec >= 0) {
             tabBtns.setVisibility(View.GONE);
@@ -1730,7 +1765,10 @@ public class ScreenReaderService extends AccessibilityService {
     private void startAfter() {
         try {
             SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);
-            if (tabDemo || !TabLogic.canMark(sp, System.currentTimeMillis())) return;
+            long nowMs = System.currentTimeMillis();
+            boolean oth = TabLogic.otherLatest(sp);   // v3.73: la ultima oferta fue de Uber / Cabify
+            if (tabDemo || (oth ? !TabLogic.otherOn(sp, nowMs) : !TabLogic.canMark(sp, nowMs))) return;
+            tabOther = oth;
             tabMode = 2;
             buildTab();
             paintTabBg(Color.parseColor("#3B82F6"));
@@ -1747,6 +1785,14 @@ public class ScreenReaderService extends AccessibilityService {
     private void tabMark(boolean yes) {
         try {
             SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);
+            if (tabOther) {   // v3.73: Uber / Cabify: solo la hora de aceptado (interna)
+                if (!yes || !TabLogic.markOther(sp, System.currentTimeMillis())) return;
+                paintOtherButtons(sp);
+                placeTab();
+                placeZoneChips();
+                if (tabMode == 2) { rh.removeCallbacks(tabHideRun); rh.postDelayed(tabHideRun, 1600L); }
+                return;
+            }
             long seq = TabLogic.seq(sp);
             if (!TabLogic.mark(sp, yes, System.currentTimeMillis())) return;
             paintTabButtons(true, sp, seq);

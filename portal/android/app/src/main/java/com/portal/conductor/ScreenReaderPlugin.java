@@ -101,6 +101,8 @@ public class ScreenReaderPlugin extends Plugin {
         r.put("dec", sp.getInt("trip_dec", -1));
         r.put("decQ", sp.getString("trip_decq", ""));        // v3.62: todas las marcas del cartel que el Portal aun no ha recogido (una por linea, JSON)
         r.put("tabFold", sp.getBoolean("tab_fold", true));
+        r.put("accTs", sp.getLong("acc_ts", 0L));          // v3.73: hora (ms) en que pulsaste ✓ «La acepté» en una oferta de Uber / Cabify (interna) y de que app
+        r.put("accApp", sp.getString("acc_app", ""));
         String js = sp.getString("trip_cur", "");
         r.put("json", js == null ? "" : js);
         call.resolve(r);
