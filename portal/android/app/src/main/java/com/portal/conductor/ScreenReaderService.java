@@ -500,7 +500,9 @@ public class ScreenReaderService extends AccessibilityService {
     private boolean tabOther = false;        // v3.73: la lengueta es de una oferta de Uber / Cabify (solo ✓ «La acepté», que apunta la hora por dentro)
     private int tabLevel = 0;                // 0 plegado \u00B7 1 \u00ABMas datos\u00BB (4 lineas: viaje, recogida, bruto y comision, reserva) \u00B7 2 \u00ABCalculo completo\u00BB (todas las lineas de siempre)
     private TextView aSum, tabCalc;          // aSum: las lineas sencillas (dentro del cartel); tabCalc: boton \u00ABCalculo completo\u00BB
-    private LinearLayout tabMoreRow;
+    private LinearLayout tabMoreRow, tabTitleBox;
+    private TextView tabX1, tabX2;           // v3.74: ✕ arriba a la derecha de la lengueta (solo ofertas de Uber / Cabify): quita la lengueta y el cartel; tambien se quitan arrastrando la lengueta hacia un lado
+    private View tabSp1, tabSp2;             // huecos del ancho de la ✕ (el texto sigue centrado)
     private int tabMode = 0;                 // 0 nada · 1 oferta en pantalla · 2 la oferta ya desaparecio (solo los botones)
     private long tabOpenSeq = -1L;
     private final Runnable tabHideRun = new Runnable() { @Override public void run() { hideTab(); } };
@@ -903,10 +905,14 @@ public class ScreenReaderService extends AccessibilityService {
                 lastOfferSeen = now;
                 logTripOffer(found, now, foundNfx);
                 tabDemo = false;
-                showAlert(found);
-                speakOffer(found);
-                rh.removeCallbacks(hideRun);
-                rh.postDelayed(hideRun, 25000);
+                if (!found.isBolt && TabLogic.otherHidden(sp)) {
+                    // v3.74: quitada a mano con la ✕ o arrastrando (Uber / Cabify): esta oferta no vuelve a salir; una oferta nueva si
+                } else {
+                    showAlert(found);
+                    speakOffer(found);
+                    rh.removeCallbacks(hideRun);
+                    rh.postDelayed(hideRun, found.isBolt ? 25000 : 12000);   // v3.74: Uber / Cabify no se quedan tanto si dejan de leerse
+                }
             } else if (alertShown && now - lastOfferSeen > 1800) {
                 hideAlert();
                 startAfter();   // v3.62: la oferta ha desaparecido (p. ej. la has aceptado en Bolt): ✗ / ✓ siguen unos segundos
@@ -1177,6 +1183,7 @@ public class ScreenReaderService extends AccessibilityService {
         hideTab();
         try { if (alertShown && alertView != null) wm.removeView(alertView); } catch (Exception e) { }
         alertShown = false;
+        if (alp != null) alp.x = 0;   // v3.74
     }
 
     public void demoAlert(String verdict) {
@@ -1503,7 +1510,7 @@ public class ScreenReaderService extends AccessibilityService {
             String v = r == null ? "" : r.verdict;
             int col = "OK".equals(v) ? Color.parseColor("#22C55E") : ("NO".equals(v) ? Color.parseColor("#EF4444") : Color.parseColor("#F59E0B"));
             paintTabBg(col);
-            tabTitle.setVisibility(View.GONE);
+            tabTitleBox.setVisibility(View.GONE);
             paintTabMore(fold);
             paintTabButtons(logged, sp, seq);
             showTabWindow();
@@ -1558,6 +1565,7 @@ public class ScreenReaderService extends AccessibilityService {
     }
 
     private void paintTabButtons(boolean logged, SharedPreferences sp, long seq) {
+        paintTabX();
         if (tabOther) { paintOtherButtons(sp); return; }
         tabNo.setVisibility(View.VISIBLE);
         int dec = TabLogic.decision(sp, seq);
@@ -1603,7 +1611,42 @@ public class ScreenReaderService extends AccessibilityService {
     private void buildTab() {
         if (tabView != null) return;
         final float d = getResources().getDisplayMetrics().density * CK;
-        tabView = new LinearLayout(this);
+        tabView = new LinearLayout(this) {
+            // v3.74: arrastrar la lengueta hacia un lado la quita (solo en ofertas de Uber / Cabify); se mueven ella y el cartel
+            private float dx0, dy0;
+            private boolean drag;
+            public boolean onInterceptTouchEvent(MotionEvent ev) {
+                if (!tabOther) return false;
+                int a = ev.getAction() & 0xff;
+                if (a == MotionEvent.ACTION_DOWN) { dx0 = ev.getRawX(); dy0 = ev.getRawY(); drag = false; return false; }
+                if (a == MotionEvent.ACTION_MOVE && !drag) {
+                    float dx = ev.getRawX() - dx0, dy = ev.getRawY() - dy0;
+                    if (Math.abs(dx) > 10 * getResources().getDisplayMetrics().density && Math.abs(dx) > 1.5f * Math.abs(dy)) drag = true;
+                }
+                return drag;
+            }
+            public boolean onTouchEvent(MotionEvent ev) {
+                if (!tabOther) return false;
+                int a = ev.getAction() & 0xff;
+                if (a == MotionEvent.ACTION_DOWN) { dx0 = ev.getRawX(); dy0 = ev.getRawY(); drag = false; return true; }
+                float dx = ev.getRawX() - dx0, dy = ev.getRawY() - dy0;
+                if (a == MotionEvent.ACTION_MOVE) {
+                    if (!drag && Math.abs(dx) > 10 * getResources().getDisplayMetrics().density && Math.abs(dx) > 1.5f * Math.abs(dy)) drag = true;
+                    if (drag) moveTab(dx);
+                    return true;
+                }
+                if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) {
+                    boolean was = drag;
+                    drag = false;
+                    if (was) {
+                        if (a == MotionEvent.ACTION_UP && Math.abs(dx) > 0.3f * Math.max(1, getWidth())) dismissOtherOffer();
+                        else moveTab(0);
+                    }
+                    return true;
+                }
+                return true;
+            }
+        };
         tabView.setOrientation(LinearLayout.VERTICAL);
         tabView.setGravity(Gravity.CENTER_HORIZONTAL);
         tabView.setPadding((int) (10 * d), (int) (2 * d), (int) (10 * d), (int) (10 * d));
@@ -1665,7 +1708,23 @@ public class ScreenReaderService extends AccessibilityService {
         tabRate.addView(tabRateA, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         tabRate.addView(tabRateB, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         tabRate.setVisibility(View.GONE);
-        tabView.addView(tabTitle);
+        // v3.74: ✕ arriba a la derecha, en la fila del titulo (¿La aceptaste?) y en la de «Mas datos»; solo se ve en Uber / Cabify
+        final int xs = (int) (46 * d);
+        tabX1 = tabClose();
+        tabX2 = tabClose();
+        tabSp1 = new View(this);
+        tabSp2 = new View(this);
+        tabSp1.setVisibility(View.GONE);
+        tabSp2.setVisibility(View.GONE);
+        tabMoreRow.addView(tabSp1, 0, new LinearLayout.LayoutParams(xs, xs));
+        tabMoreRow.addView(tabX1, new LinearLayout.LayoutParams(xs, xs));
+        tabTitleBox = new LinearLayout(this);
+        tabTitleBox.setOrientation(LinearLayout.HORIZONTAL);
+        tabTitleBox.setGravity(Gravity.CENTER_VERTICAL);
+        tabTitleBox.addView(tabSp2, new LinearLayout.LayoutParams(xs, xs));
+        tabTitleBox.addView(tabTitle, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        tabTitleBox.addView(tabX2, new LinearLayout.LayoutParams(xs, xs));
+        tabView.addView(tabTitleBox);
         tabView.addView(tabMoreRow);
         tabView.addView(tabRate);
         tabView.addView(tabBtns);
@@ -1730,7 +1789,7 @@ public class ScreenReaderService extends AccessibilityService {
                 });
                 tabListen = true;
             }
-            if (!tabShown) { wm.addView(tabView, tabLp); tabShown = true; }
+            if (!tabShown) { tabLp.x = 0; wm.addView(tabView, tabLp); tabShown = true; }
             placeTab();
             placeZoneChips();
         } catch (Exception e) { }
@@ -1759,6 +1818,7 @@ public class ScreenReaderService extends AccessibilityService {
         try { if (tabShown && tabView != null) wm.removeView(tabView); } catch (Exception e) { }
         tabShown = false;
         tabMode = 0;
+        if (tabLp != null) tabLp.x = 0;   // v3.74
     }
 
     /** la oferta ha desaparecido: ✗ / ✓ siguen 15 s mas (solo los botones, donde estaba el cartel) por si quieres marcarla ahora */
@@ -1772,12 +1832,61 @@ public class ScreenReaderService extends AccessibilityService {
             tabMode = 2;
             buildTab();
             paintTabBg(Color.parseColor("#3B82F6"));
-            tabTitle.setVisibility(View.VISIBLE);
+            tabTitleBox.setVisibility(View.VISIBLE);
             tabMoreRow.setVisibility(View.GONE);
             paintTabButtons(true, sp, TabLogic.seq(sp));
             showTabWindow();
             rh.removeCallbacks(tabHideRun);
             rh.postDelayed(tabHideRun, TabLogic.AFTER_MS);
+        } catch (Exception e) { }
+    }
+
+    /** v3.74: la ✕ de la lengueta (circulo claro, arriba a la derecha) */
+    private TextView tabClose() {
+        final float d = getResources().getDisplayMetrics().density * CK;
+        TextView b = new TextView(this);
+        b.setText("\u2715");
+        b.setTextColor(Color.WHITE);
+        b.setTextSize(CK * 18);
+        b.setTypeface(Typeface.DEFAULT_BOLD);
+        b.setGravity(Gravity.CENTER);
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL);
+        g.setColor(Color.parseColor("#33FFFFFF"));
+        g.setStroke((int) (2 * d), Color.parseColor("#99FFFFFF"));
+        b.setBackground(g);
+        b.setContentDescription("Quitar");
+        b.setVisibility(View.GONE);
+        b.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { dismissOtherOffer(); } });
+        return b;
+    }
+
+    /** la ✕ y su hueco solo salen en las ofertas de Uber / Cabify */
+    private void paintTabX() {
+        int v = tabOther ? View.VISIBLE : View.GONE;
+        if (tabX1 != null) tabX1.setVisibility(v);
+        if (tabX2 != null) tabX2.setVisibility(v);
+        if (tabSp1 != null) tabSp1.setVisibility(v);
+        if (tabSp2 != null) tabSp2.setVisibility(v);
+    }
+
+    /** arrastrando: la lengueta y el cartel siguen al dedo hacia un lado */
+    private void moveTab(float dx) {
+        try {
+            int x = (int) dx;
+            if (tabLp != null && tabShown && tabView != null) { tabLp.x = x; wm.updateViewLayout(tabView, tabLp); }
+            if (alp != null && alertShown && alertView != null) { alp.x = x; wm.updateViewLayout(alertView, alp); }
+        } catch (Exception e) { }
+    }
+
+    /** ✕ o arrastrar: se quita la lengueta y el cartel de esta oferta de Uber / Cabify y no vuelven a salir para ella */
+    private void dismissOtherOffer() {
+        try {
+            SharedPreferences sp = getSharedPreferences("portal", Context.MODE_PRIVATE);
+            TabLogic.dismissOther(sp);
+            rh.removeCallbacks(hideRun);
+            rh.removeCallbacks(tabHideRun);
+            hideAlert();
         } catch (Exception e) { }
     }
 

@@ -28,16 +28,25 @@ final class TabLogic {
         String old = sp.getString("uo_sig", "");
         boolean isNew = old == null || !old.equals(sig) || now - sp.getLong("uo_ts", 0L) > VALID_MS;
         SharedPreferences.Editor ed = sp.edit().putLong("uo_ts", now).putString("uo_app", app == null ? "" : app);
-        if (isNew) ed.putString("uo_sig", sig == null ? "" : sig).remove("uo_done");
+        if (isNew) ed.putString("uo_sig", sig == null ? "" : sig).remove("uo_done").remove("uo_hide");   // v3.74: una oferta nueva vuelve a salir aunque quitaras la anterior
         ed.apply();
     }
 
     /** hay una oferta de Uber / Cabify en pantalla (o vista hace menos de 90 s) y los botones estan activos */
     static boolean otherOn(SharedPreferences sp, long now) {
         if (!buttons(sp)) return false;
+        if (otherHidden(sp)) return false;   // v3.74: quitada a mano (✕ o arrastrando)
         String sig = sp.getString("uo_sig", "");
         long ts = sp.getLong("uo_ts", 0L);
         return sig != null && sig.length() > 0 && ts > 0 && now - ts >= 0 && now - ts <= VALID_MS;
+    }
+
+    /** v3.74: ✕ o arrastrar: se quita la ventanita (y el cartel) de ESTA oferta de Uber / Cabify. Una oferta nueva (otra huella, o la misma pasados 90 s) vuelve a salir. */
+    static void dismissOther(SharedPreferences sp) { sp.edit().putString("uo_hide", sp.getString("uo_sig", "")).apply(); }
+
+    static boolean otherHidden(SharedPreferences sp) {
+        String s = sp.getString("uo_sig", "");
+        return s != null && s.length() > 0 && s.equals(sp.getString("uo_hide", ""));
     }
 
     /** la hora de ESTA oferta ya se apunto */
