@@ -2482,10 +2482,21 @@ function saveSettings(){
  /*v3.65: los horarios se guardan desde Control horario*/
  normalizeDbSettings(); save(); renderAppSettings(); requestAnimationFrame(()=>window.scrollTo({top:0,behavior:'smooth'}));
 }
-function deleteAccountV33(){
- if(!confirm('¿Quieres eliminar tu cuenta?\n\nEsta acción eliminará la cuenta y los datos asociados.')) return;
+async function deleteAccountV33(){
+ if(!confirm('¿Quieres eliminar tu cuenta?\n\nEsta acción eliminará tu cuenta y todos tus datos, también los de la nube (viajes, perfil y avisos SOS).')) return;
  if(!confirm('⚠️ ÚLTIMA CONFIRMACIÓN\n\nLa cuenta se borrará para siempre y esta acción no se puede deshacer. ¿Estás completamente seguro?')) return;
  makeLocalBackup();
+ window.__pdcCloudDeleted=false;
+ if(hasRealCloud()){
+  let ses=null;try{const g=await pdcSupabase.auth.getSession();ses=g&&g.data&&g.data.session}catch(e){}
+  if(ses&&ses.user){
+   let er=null;try{const r=await pdcSupabase.rpc('delete_my_account');er=(r&&r.error)||null}catch(e){er=e||true}
+   if(er){alert('No he podido borrar tu cuenta de la nube (sin conexión o error del servidor). No se ha borrado nada. Inténtalo de nuevo con conexión.');return}
+   window.__pdcCloudDeleted=true;
+   try{clearTimeout(pdcCloudSyncTimer)}catch(e){}
+   try{await pdcSupabase.auth.signOut({scope:'local'})}catch(e){}
+  }
+ }
  const profile=(()=>{try{return JSON.parse(localStorage.getItem(AUTH_KEY)||'null')}catch(e){return null}})();
  if(profile&&profile.identifier&&profile.identifier!=='dispositivo-local') localStorage.removeItem(ACCOUNT_PREFIX+authHash(profile.identifier));
  localStorage.removeItem(AUTH_KEY);
@@ -2494,7 +2505,7 @@ function deleteAccountV33(){
  document.querySelector('#authScreen').classList.remove('auth-hide');
  setAuthMode('register');
  document.querySelector('#authId').value='';document.querySelector('#authPass').value='';document.querySelector('#authPass2').value='';
- setAuthStatus('Cuenta eliminada. Se creó una copia local de seguridad antes de eliminarla.');
+ setAuthStatus(window.__pdcCloudDeleted?'Cuenta eliminada, también la de la nube. Se creó una copia local de seguridad antes de eliminarla.':'Cuenta eliminada. Se creó una copia local de seguridad antes de eliminarla.');
 }
 function show(v){document.querySelectorAll('.navbtn').forEach(b=>b.classList.toggle('active',b.dataset.view===v));({calc:renderCalc,control:renderControl,billing:renderBilling,report:renderReport,settings:renderSettings}[v]||renderCalc)()}
 setInterval(()=>{if(document.hidden)return;const active=document.querySelector('.navbtn.active')?.dataset?.view;if(active==='calc'&&calcAnchor===today()){const strip=document.querySelector('.efficiency-strip');if(strip)strip.outerHTML=performanceStripHtml(calcAnchor)}},60000);
@@ -2611,10 +2622,11 @@ async function logoutV33(){
 function showStartupReminder(title,msg,storageKey){setTimeout(()=>alert(title+'\n\n'+msg),350)}
 function runStartupReminders(){const n=db.settings.notifications||{app:true,hours:false,billing:false};const now=new Date();if(n.hours)showStartupReminder('⏰ Recordatorio de jornada','Recuerda iniciar tu jornada en Control Horario.','pdc_reminder_hours');if(n.billing&&now.getDate()===1){const month=now.toISOString().slice(0,7);const last=localStorage.getItem('pdc_reminder_billing_month')||'';if(last!==month){localStorage.setItem('pdc_reminder_billing_month',month);setTimeout(()=>alert('📊 Resumen de facturación\n\nHoy es día 1. Recuerda generar el informe del mes anterior.'),700)}}}
 async function checkUpdateNotice(){
+ if(typeof APP_RELEASE==='undefined'||typeof appReleaseCode!=='function'){window.__unTry=(window.__unTry||0)+1;if(window.__unTry<8)setTimeout(checkUpdateNotice,700);return}   /* al arrancar puede llamarse antes de que se cargue la version: se vuelve a intentar */
  const n=db.settings.notifications||{app:true,hours:false,billing:false};
  if(!n.app)return;
- const CURRENT_VERSION='1.2';
- const CURRENT_VERSION_CODE=344;
+ const CURRENT_VERSION=APP_RELEASE;
+ const CURRENT_VERSION_CODE=appReleaseCode(APP_RELEASE);
  let latest=null;
  try{
    if(hasRealCloud()){
@@ -2890,6 +2902,7 @@ window.fareReadScreen=async function(){
   try{
     const st=await SR.status();
     if(!st.enabled){
+      if((await window.srDisclosure())===false)return;
       if(confirm('Para leer el precio de otras apps hay que activar «Driver Hub 360» en Accesibilidad (Apps instaladas). Solo se hace una vez.\n\nSi aparece "Ajuste restringido", pulsa Aceptar en el siguiente aviso para ir a la ficha de la app y permitirlo.\n\n¿Abrir ajustes de accesibilidad?'))await SR.openSettings();
       else if(confirm('¿Abrir la ficha de la app para permitir ajustes restringidos? (menú ⋮ arriba a la derecha → Permitir ajustes restringidos)'))await SR.openAppInfo();
       return;
@@ -2907,7 +2920,48 @@ window.fareReadScreen=async function(){
 })();
 </script>
 
-<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">Driver 1.0</div>
+<div id="srVer" style="position:fixed;top:2px;right:8px;font:600 11px system-ui;color:#7aa2ff;z-index:99999;pointer-events:none">Driver 1.2</div>
+<style id="srDiscCss">
+#srDisc{position:fixed;left:0;right:0;top:0;bottom:0;z-index:100001;background:rgba(3,10,24,.82);display:flex;align-items:flex-end;justify-content:center;font-family:system-ui,-apple-system,sans-serif}
+#srDisc .sd-box{display:flex;flex-direction:column;width:100%;max-width:520px;max-height:94vh;background:#0b1a33;color:#eaf2ff;border:1px solid #3b82f6;border-bottom:0;border-radius:22px 22px 0 0;box-sizing:border-box}
+#srDisc .sd-head{padding:16px 18px 4px;font:800 19px/1.25 system-ui}
+#srDisc .sd-body{padding:0 18px 8px;overflow-y:auto;-webkit-overflow-scrolling:touch;font:500 14.5px/1.45 system-ui}
+#srDisc .sd-body p{margin:8px 0}
+#srDisc .sd-body ul{margin:8px 0;padding-left:20px}
+#srDisc .sd-body li{margin:8px 0}
+#srDisc .sd-btns{display:flex;flex-direction:column;gap:8px;padding:10px 18px calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid #1e3a6b}
+#srDisc .sd-btns button{border:0;border-radius:14px;padding:13px;min-height:48px;font:800 16px system-ui;cursor:pointer}
+#srDisc .sd-btns #sdYes{background:#2563eb;color:#fff}
+#srDisc .sd-btns #sdNo{background:#16294a;color:#c9d9f5}
+</style>
+<script id="srDisclosure">
+/* v1.1 · Aviso destacado del lector de pantalla. Se ve ANTES de llevar al usuario a Accesibilidad. Acepta o dice «No gracias». Se guarda en este movil. */
+window.SR_DISC={
+ lead:'Para leer el precio de un viaje, Driver Hub 360 necesita el permiso de Accesibilidad de Android. Antes de pedírtelo, esto es lo que hace:',
+ items:[
+  ['Qué lee','el texto que se ve en la pantalla de Bolt, Uber y Cabify mientras las usas: el importe del viaje, si se paga con tarjeta o en efectivo y, si activas Rentabilidad de viajes, la distancia y el tiempo de la oferta.'],
+  ['Al pulsar «Importe automático»','busca el importe entre el texto de las ventanas que tienes a la vista en ese momento (no mira la pantalla de inicio ni el teclado).'],
+  ['Capturas de Uber','Uber esconde sus ofertas al lector normal, así que la app hace una captura de la zona de la oferta y la lee al momento, dentro del móvil. La captura no se guarda ni se envía.'],
+  ['Qué app tienes abierta','solo conoce su nombre, para enseñarte la burbuja únicamente en Bolt, Uber o Cabify.'],
+  ['Para qué','rellenar la calculadora y avisarte de si el viaje compensa. Nada más.'],
+  ['Qué no hace','no pulsa botones ni acepta viajes por ti. Lo que lee no sale del móvil y no se vende ni se comparte. En el móvil solo se guarda la última oferta leída, para que puedas revisarla. Si guardas un viaje, su importe se guarda en tu cuenta como el resto de tus viajes.']
+ ],
+ foot:'Puedes apagarlo cuando quieras en Ajustes del móvil → Accesibilidad → Driver Hub 360.'
+};
+window.srDisclosure=function(){
+ return new Promise(function(resolve){
+  try{if(localStorage.getItem('pdc_sr_disclosure_v1')){resolve(true);return}}catch(e){}
+  try{var old=document.getElementById('srDisc');if(old)old.remove()}catch(e){}
+  var D=window.SR_DISC,o=document.createElement('div');o.id='srDisc';
+  o.innerHTML='<div class="sd-box" role="dialog" aria-modal="true" aria-labelledby="sdT"><div class="sd-head" id="sdT">🔎 Lector de pantalla (Accesibilidad)</div><div class="sd-body"><p>'+D.lead+'</p><ul>'+D.items.map(function(i){return '<li><b>'+i[0]+':</b> '+i[1]+'</li>'}).join('')+'</ul><p>'+D.foot+'</p></div><div class="sd-btns"><button type="button" id="sdYes">Acepto y continuar</button><button type="button" id="sdNo">No gracias</button></div></div>';
+  function done(v){try{o.remove()}catch(e){}resolve(v)}
+  o.querySelector('#sdYes').onclick=function(){try{localStorage.setItem('pdc_sr_disclosure_v1',new Date().toISOString())}catch(e){}done(true)};
+  o.querySelector('#sdNo').onclick=function(){done(false)};
+  document.body.appendChild(o);
+  try{o.querySelector('#sdYes').focus()}catch(e){}
+ });
+};
+</script>
 <script id="screenReaderPatch2">
 /* v2.3 Burbuja flotante (movil): recibe el precio leido y lo pone en la calculadora */
 (function(){
@@ -3136,7 +3190,7 @@ const J_KB=[
 ['freenow','💗','Free Now y Pide Taxi','free now^4,freenow^4,pide taxi^4,pidetaxi^4','En Calculadora tienes los botones Free Now (rosa) y Pide Taxi (amarillo) en la segunda fila, junto a Aeropuerto y Cancelaciones. Escribe el importe y púlsalo: se guarda el importe entero, sin comisión de la app, y suma a tu facturación, al informe y a la nómina. También puedes elegirlos como aplicación prioritaria en Control, cargar sus importes a mano en Facturación y apuntar sus cancelaciones.'],
 ['tema','🎨','Tema claro, oscuro o automático','tema claro^4,tema oscuro^4,tema automatico^4,cambiar el tema^4,el tema^3,modo oscuro^4,modo claro^4,modo noche^4,modo dia^3,fondo oscuro^3,fondo claro^3,pantalla oscura^3,pantalla clara^3,oscuro^3,oscura^3','En Ajustes → Tema eliges cómo se ve la app: Automático (claro de día y oscuro de noche, según el sol en Madrid; cambia solo), Claro u Oscuro fijo. Afecta a Calculadora, Control, Facturación e Informe; Ajustes, el menú y Eventos Madrid hoy son siempre oscuros. Se guarda en este aparato.'],
 ['appprio','🎯','Aplicación prioritaria','app prioritaria^4,aplicacion prioritaria^4,ahora trabajo con^4,horas prioritarias^4,otras apps^3,prioritaria^3','En Control, «Aplicación prioritaria» elige tu app principal: Bolt, Uber, Cabify, Free Now o Pide Taxi. Sus horas y kilómetros salen en el bloque «Solo …» y las del resto en «Otras apps». Con «Ahora trabajo con» marcas con cuál empiezas la jornada. Todo lo prioritario toma el color de esa app (verde, negro, morado, rosa o amarillo). Al pulsar «Otras apps» te sale una lista para elegir cuál (Uber, Cabify…): esas apps solo cuentan horas y km por separado, no tienen horas prioritarias. Toca el círculo «Otras apps» para ver el desglose por app y «Todas juntas».'],
-['sos','🆘','Botón SOS y contactos de confianza','sos^6,socorro^6,emergencia^5,ayuda urgente^4,112^5,contactos de confianza^6,contacto de confianza^5,alarma^4,boton rojo^5,aviso de emergencia^4,peligro^3,me han atacado^3,whatsapp^2','Pulsa el botón rojo SOS (arriba a la izquierda). Se abre la pantalla roja de ayuda y empieza una cuenta atrás de 3 segundos: si no pulsas Cancelar, se avisa a tus contactos de confianza que tienen la app (y han aceptado), con tu ubicación. Ahí mismo tienes «Llamar al 112» (se abre el marcador y tú pulsas llamar) y «Otras formas de avisar» (SMS, WhatsApp o Compartir), donde el envío lo haces tú. Contactos y mensaje: Ajustes → SOS y contactos de confianza (hasta 8). El botón «Probar» enseña la pantalla sin enviar nada.'],
+['sos','🆘','Botón SOS y contactos de confianza','sos^6,socorro^6,emergencia^5,ayuda urgente^4,112^5,contactos de confianza^6,contacto de confianza^5,alarma^4,boton rojo^5,aviso de emergencia^4,peligro^3,me han atacado^3,whatsapp^2','Pulsa el botón rojo SOS (arriba a la izquierda). Se abre la pantalla roja de ayuda y empieza una cuenta atrás de 3 segundos: si no pulsas Cancelar, se avisa a tus contactos de confianza que tienen la app (y han aceptado), con tu ubicación. Ahí mismo tienes «Llamar al 112» (se abre el marcador y tú pulsas llamar) y «Otras formas de avisar» (SMS, WhatsApp o Compartir), donde el envío lo haces tú. Contactos y mensaje: Ajustes → SOS y contactos de confianza (hasta 8). El botón «Probar» enseña la pantalla sin enviar nada. Cuando un contacto acepta tu invitación, os avisáis los dos: si pides ayuda le salta el aviso a él y, si la pide él, te salta a ti.'],
 ['madridhoy','🌤️','Eventos Madrid hoy: tiempo, eventos, deportes y vuelos','madrid hoy^4,ifema^4,ticketmaster^4,eventos^3,evento^3,feria^3,ferias^3,concierto^3,lluvia^3,pestanas^3,tiempo^2,movistar arena^5,wizink^5,arena^3,palacio de deportes^3,fabrik^5,discoteca^3,humanes^4,matadero^5,autocine^5,lenovo garage^4,cultura^2','En el menú de las tres rayitas, Eventos Madrid hoy tiene cinco pestañas: Hoy, Mañana y Semana (el tiempo y los eventos de Ticketmaster, las ferias y espectáculos de IFEMA, los conciertos y partidos del Movistar Arena —antes WiZink Center— y las fiestas de Fabrik (Humanes de Madrid), las actividades de Matadero Madrid y los conciertos del Autocine Madrid (The Lenovo Garage, que salen por Ticketmaster), para saber dónde puede haber más movimiento), Deportes (partidos y clasificaciones) y Vuelos (llegadas a Barajas por hora y terminal). Los del Movistar Arena, Fabrik y Matadero salen de sus webs oficiales: lo cancelado o aplazado del Arena no aparece, y si un día no sale hora, es que aún no está confirmada (la de Fabrik y la de Matadero no la publican: solo sale la fecha, y no sé si se cancela). Las ferias de IFEMA no traen horario: se supone que abren a las 10:00 (la hora sale con ~) y en el detalle puedes elegir 8, 9 o 10 horas de duración.'],
 ['contacto','🧑','Hablar con una persona','telegram,persona,humano,soporte,contactar,hablar con alguien,tecnico','Claro. Pulsa el botón de Telegram y se abre el chat con soporte (@'+PORTAL_TG+').']
 ];
@@ -3192,7 +3246,7 @@ setTimeout(()=>{try{if(!window.db)return;let ch=false;(db.supportSent||[]).forEa
 </script>
 <script id="v37-script">
 /* v3.7: guardar PDF, información renovada, editar viajes en Calculadora */
-const APP_VERSION='v3.78';const APP_RELEASE='1.0';
+const APP_VERSION='v3.80';const APP_RELEASE='1.2';function appReleaseCode(r){var m=String(r).match(/^(\d+)\.(\d+)/);return m?(+m[1])*1000+(+m[2])*10:0}try{var _sv=document.getElementById('srVer');if(_sv)_sv.textContent='Driver '+APP_RELEASE}catch(e){}
 function reportFileData(kind){const cv=reportCanvas(kind==='pdf');if(!cv)return null;const st=new Date().toISOString().slice(0,10);if(kind==='pdf'){const jb=Uint8Array.from(atob(cv.toDataURL('image/jpeg',.92).split(',')[1]),c=>c.charCodeAt(0));return{b64:bytesToB64(jpegToPdf(jb,cv.width,cv.height)),mime:'application/pdf',name:'informe_'+st+'.pdf'}}return{b64:cv.toDataURL('image/png').split(',')[1],mime:'image/png',name:'informe_'+st+'.png'}}
 async function saveB64(b64,name,mime){const P=window.Capacitor&&Capacitor.Plugins&&Capacitor.Plugins.ShareFile;if(P&&P.saveFile){try{const r=await P.saveFile({base64:b64,filename:name,mime});alert('✅ Guardado en tu móvil:\n'+((r&&r.path)||'Descargas'));return}catch(e){}if(P.shareFile){try{await P.shareFile({base64:b64,filename:name,mime,title:name});return}catch(e){}}}const a=document.createElement('a');a.href='data:'+mime+';base64,'+b64;a.download=name;document.body.appendChild(a);a.click();a.remove()}
 async function saveReportFile(kind){const f=reportFileData(kind);if(f)await saveB64(f.b64,f.name,f.mime)}
@@ -3211,12 +3265,13 @@ function renderSyncInfo(){infoPage('☁️ Datos y sincronización',['Tus datos 
 function showInfoDetail(type){const T='✈ Abrir Telegram (@'+PORTAL_TG+')',tg='<button class="action" style="width:100%" onclick="openTelegramSupport(\'\')">'+T+'</button>';
 if(type==='sincronizacion')return renderSyncInfo();
 if(type==='actualizar')return infoPage('↻ Versión y actualizaciones',['Tienes instalada la versión '+APP_RELEASE+' (compilación '+APP_VERSION+'). La ves también arriba a la derecha y en Información.','Esta app se instala desde un archivo, no desde una tienda. Cuando hay una versión nueva te llega el archivo y lo instalas encima de la actual: no hace falta desinstalar y no pierdes tus datos.','Si te falta la última versión o algo no funciona tras actualizar, escribe a soporte.'],tg);
-if(type==='privacidad')return infoPage('🔐 Privacidad y datos',['Tus datos son tuyos. Se usan solo para que la app funcione: calcular tu facturación, tus horas, tu gasolina y tus kilómetros.','El GPS solo suma los metros recorridos mientras tienes la jornada iniciada. No guarda tus rutas ni tus posiciones.','El lector de pantalla solo busca el importe del viaje y si se paga con tarjeta o efectivo. No guarda ni envía nada más de lo que ves en pantalla. Si activas Rentabilidad de viajes, también lee la distancia y el tiempo de la oferta para avisarte; no se guarda ni se envía (en tu móvil solo se guarda el último texto de oferta leído, para poder revisarlo). Para leer las ofertas de Uber, que esconde esa información al lector normal, la app hace capturas de la zona de Uber y las lee en el momento dentro del móvil; las capturas no se guardan ni se envían.','La cámara y el micrófono solo se usan cuando tú pulsas Grabar vídeo. El vídeo se guarda en tu móvil: no se sube a internet ni a la nube, y puedes borrarlo cuando quieras.','Tus datos no se venden ni se comparten con nadie.']);
+if(type==='lector')return infoPage('🔎 Lector de pantalla (Accesibilidad)',[SR_DISC.lead].concat(SR_DISC.items.map(i=>i[0]+': '+i[1])).concat([SR_DISC.foot]),'<button class="action" style="width:100%" onclick="rentOpenAcc()">Abrir Accesibilidad del móvil</button>');
+if(type==='privacidad')return infoPage('🔐 Privacidad y datos',['Tus datos son tuyos. Se usan solo para que la app funcione: calcular tu facturación, tus horas, tu gasolina y tus kilómetros.','El GPS solo suma los metros recorridos mientras tienes la jornada iniciada. No guarda tus rutas ni tus posiciones.','El lector de pantalla solo busca el importe del viaje y si se paga con tarjeta o efectivo. No guarda ni envía nada más de lo que ves en pantalla. Tienes el detalle completo en Información → Lector de pantalla. Si activas Rentabilidad de viajes, también lee la distancia y el tiempo de la oferta para avisarte; no se guarda ni se envía (en tu móvil solo se guarda el último texto de oferta leído, para poder revisarlo). Para leer las ofertas de Uber, que esconde esa información al lector normal, la app hace capturas de la zona de Uber y las lee en el momento dentro del móvil; las capturas no se guardan ni se envían.','La cámara y el micrófono solo se usan cuando tú pulsas Grabar vídeo. El vídeo se guarda en tu móvil: no se sube a internet ni a la nube, y puedes borrarlo cuando quieras.','Tus datos no se venden ni se comparten con nadie.']);
 if(type==='funciona')return infoPage('📖 Cómo funciona Driver Hub 360',['Calculadora: apunta tus viajes de Bolt, Uber, Cabify, Privados, Free Now y Pide Taxi (también con Importe automático) y tus cancelaciones; desde Últimos viajes puedes añadir propina, editar o borrar cada viaje.','Facturación: tus ingresos por día, semana y mes, con la facturación manual por plataforma, compensaciones y nómina.','Control: tu jornada, horas, gasolina y kilómetros (con GPS automático) y tu aplicación prioritaria.','Informe: resumen por periodos que puedes guardar o compartir en PDF o imagen.','Ajustes: comisión, tasa de aeropuerto, objetivos, burbuja, GPS, Tema (claro, oscuro o automático) y Rentabilidad de viajes (te avisa si una oferta compensa).','Eventos Madrid hoy (menú de las tres rayitas): el tiempo y los eventos del día de Ticketmaster (también el Autocine Madrid), IFEMA, Movistar Arena, Fabrik y Matadero Madrid, los partidos (Deportes) y las llegadas de vuelos a Barajas por hora y terminal (Vuelos).','Botón SOS (rojo, arriba a la izquierda): cuenta atrás de 3 segundos y aviso a tus contactos de confianza con tu ubicación; también llamar al 112. Se configura en Ajustes.'],'<button class="action" style="width:100%" onclick="renderHelpCarga()">📥 Ver la guía completa</button>');
 if(type==='soporte')return infoPage('🛠️ Ayuda y soporte',['En Ayuda tienes una guía para cargar datos, preguntas frecuentes y a Jenny, que responde al momento a dudas sobre la app.','Si Jenny no sabe algo, te lo dice y puedes escribir a una persona por Telegram.'],'<button class="action" style="width:100%" onclick="renderHelp()">🛟 Ir a Ayuda</button><button class="secondary" style="width:100%;margin-top:10px" onclick="openTelegramSupport(\'\')">'+T+'</button>');
 if(type==='condiciones')return infoPage('📄 Condiciones de uso',['Driver Hub 360 es una herramienta de organización personal para conductores. Es gratuita y se ofrece tal cual, sin garantía de disponibilidad.','Las cifras las introduces tú o las lee la app de tu pantalla: revísalas siempre. La app no es asesoría fiscal ni laboral, y no sustituye a tu gestor.','Driver Hub 360 no tiene relación con Bolt, Uber, Cabify, Free Now ni Pide Taxi. Sus nombres pertenecen a sus propietarios y se usan solo para identificar las plataformas.','Cuida tu cuenta y tu contraseña: eres responsable de lo que se haga con ellas.']);
 if(type==='privacidadLegal')return infoPage('🔒 Política de privacidad',['Responsable: Driver Hub 360. Contacto: Telegram @'+PORTAL_TG+'.','Datos que se guardan: tu cuenta (correo o teléfono), tus viajes, horas, gasolina, kilómetros, ajustes y la configuración de la app.','Para qué: solo para prestarte el servicio de la app. No se usan para publicidad ni se venden.','Dónde: en tu móvil y, si inicias sesión, en la nube, en los servidores del proveedor Supabase. El administrador de la app puede acceder técnicamente a estos datos para mantener el servicio.','Permisos: la ubicación solo suma kilómetros; el servicio de accesibilidad solo se usa para leer el importe, la forma de pago y, si activas Rentabilidad de viajes, la distancia y el tiempo de las ofertas. Para las ofertas de Uber puede hacer capturas de pantalla que procesa al momento dentro del móvil; no se guardan ni se envían. No se guarda ni se envía nada más.','Cuánto tiempo: mientras tengas cuenta. Puedes pedir una copia o el borrado de tus datos escribiendo por Telegram, y puedes guardar una copia tú mismo desde Datos y sincronización.','Tus derechos: acceso, rectificación, supresión, oposición, limitación y portabilidad. Escríbenos y te respondemos.','Este texto puede actualizarse; la versión vigente es la que ves aquí.'],tg)}
-function renderInfo(){const R=(i,t,s,f)=>'<button class="subpage-row" onclick="'+f+'"><span class="sicon">'+i+'</span><div style="flex:1"><b>'+t+'</b><small style="display:block;color:#64748b;margin-top:3px">'+s+'</small></div><span>›</span></button>';jPanel('Información','backToGeneralMenu()','<div class="info-center"><div class="info-logo">🚗</div><div class="info-version"><b>Driver Hub 360</b><br><b style="color:#7aa2ff;font-size:14px">Versión '+APP_RELEASE+'</b><br>Compilación '+APP_VERSION+'</div></div><div class="subpage-list">'+R('↻','Versión y actualizaciones','Qué versión tienes y cómo actualizar.',"showInfoDetail('actualizar')")+R('🔐','Privacidad y datos','Qué se guarda y qué no.',"showInfoDetail('privacidad')")+R('☁️','Datos y sincronización','Última sincronización y copia de tus datos.',"showInfoDetail('sincronizacion')")+R('📖','Cómo funciona Driver Hub 360','Un repaso a todos los apartados.',"showInfoDetail('funciona')")+R('🛠️','Ayuda y soporte','Jenny, preguntas frecuentes y Telegram.',"showInfoDetail('soporte')")+R('📄','Condiciones de uso','Reglas básicas de uso de la app.',"showInfoDetail('condiciones')")+R('🔒','Política de privacidad','Cómo se tratan tus datos.',"showInfoDetail('privacidadLegal')")+'</div><div class="info-footer"><b>Driver Hub 360</b><br><span>Organiza. Controla. Factura.</span><br><small>© 2026 Driver Hub 360</small></div>')}
+function renderInfo(){const R=(i,t,s,f)=>'<button class="subpage-row" onclick="'+f+'"><span class="sicon">'+i+'</span><div style="flex:1"><b>'+t+'</b><small style="display:block;color:#64748b;margin-top:3px">'+s+'</small></div><span>›</span></button>';jPanel('Información','backToGeneralMenu()','<div class="info-center"><div class="info-logo">🚗</div><div class="info-version"><b>Driver Hub 360</b><br><b style="color:#7aa2ff;font-size:14px">Versión '+APP_RELEASE+'</b><br>Compilación '+APP_VERSION+'</div></div><div class="subpage-list">'+R('↻','Versión y actualizaciones','Qué versión tienes y cómo actualizar.',"showInfoDetail('actualizar')")+R('🔐','Privacidad y datos','Qué se guarda y qué no.',"showInfoDetail('privacidad')")+R('🔎','Lector de pantalla','Qué lee, para qué y cómo apagarlo.',"showInfoDetail('lector')")+R('☁️','Datos y sincronización','Última sincronización y copia de tus datos.',"showInfoDetail('sincronizacion')")+R('📖','Cómo funciona Driver Hub 360','Un repaso a todos los apartados.',"showInfoDetail('funciona')")+R('🛠️','Ayuda y soporte','Jenny, preguntas frecuentes y Telegram.',"showInfoDetail('soporte')")+R('📄','Condiciones de uso','Reglas básicas de uso de la app.',"showInfoDetail('condiciones')")+R('🔒','Política de privacidad','Cómo se tratan tus datos.',"showInfoDetail('privacidadLegal')")+'</div><div class="info-footer"><b>Driver Hub 360</b><br><span>Organiza. Controla. Factura.</span><br><small>© 2026 Driver Hub 360</small></div>')}
 /* editar viajes desde Calculadora */
 function closeCalcEdit(){const o=document.getElementById('calcEditModal');if(o)o.remove()}
 function editCalcTrip(id){const t=db.trips.find(x=>String(x.id)===String(id));if(!t)return;closeCalcEdit();const cur=t.platform==='Bolt'&&t.airport?'BoltAirport':t.platform,opts=[['Bolt','Bolt'],['BoltAirport','Bolt · Aeropuerto ✈'],['Uber','Uber'],['Cabify','Cabify'],['Privados','Privados'],['Free Now','Free Now'],['Pide Taxi','Pide Taxi']].map(([v,l])=>'<option value="'+v+'"'+(cur===v?' selected':'')+'>'+l+'</option>').join(''),pay='<option value=""'+(t.payment!=='cash'&&t.payment!=='card'?' selected':'')+'>Sin indicar</option><option value="cash"'+(t.payment==='cash'?' selected':'')+'>💵 Efectivo</option><option value="card"'+(t.payment==='card'&&!t.pos?' selected':'')+'>App (pago por la aplicación)</option><option value="pos"'+(t.payment==='card'&&t.pos?' selected':'')+'>Datáfono (tarjeta física)</option>',ov=document.createElement('div');ov.id='calcEditModal';ov.style.cssText='position:fixed;inset:0;background:rgba(2,8,20,.75);z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding:12px;box-sizing:border-box';ov.innerHTML='<div style="width:100%;max-width:520px;background:linear-gradient(160deg,#0d2a52,#071a33);border:2px solid #3fc8ff;border-radius:22px;padding:16px;color:#fff;box-shadow:0 0 24px #1e9bff66;box-sizing:border-box"><div style="font-weight:900;font-size:19px">✏️ Editar viaje</div><div style="color:#9fb4c8;font-size:13px;margin:4px 0 12px">La fecha ('+fmtDate(t.date)+') se mantiene. Aquí también puedes cambiar las horas.</div><label style="font-size:13px;color:#cfe3f5">Plataforma</label><select id="ceP" class="input" style="width:100%;margin:4px 0 10px">'+opts+'</select><label style="font-size:13px;color:#cfe3f5">Importe del viaje (€)</label><input id="ceA" class="input" type="number" inputmode="decimal" min="0.01" step=".01" value="'+(Number(t.orig)||0)+'" style="width:100%;margin:4px 0 10px;box-sizing:border-box"><label style="font-size:13px;color:#cfe3f5">Forma de pago</label><select id="ceM" class="input" style="width:100%;margin:4px 0 4px">'+pay+'</select><div style="display:flex;gap:10px;margin:10px 0 0"><div style="flex:1;min-width:0"><label style="font-size:13px;color:#cfe3f5">Hora de aceptación</label><input id="ceS" class="input" type="time" value="'+hmNorm(t.start)+'" style="width:100%;margin:4px 0 0;box-sizing:border-box"></div><div style="flex:1;min-width:0"><label style="font-size:13px;color:#cfe3f5">Hora de finalización</label><input id="ceE" class="input" type="time" value="'+hmNorm(t.time)+'" style="width:100%;margin:4px 0 0;box-sizing:border-box"></div></div><div style="color:#9fb4c8;font-size:12px;margin:6px 0 0">La de aceptación es cuando aceptaste el viaje (vacía si no la sabes). La lista se ordena sola por la hora de finalización.</div><div class="row" style="margin-top:14px;gap:8px"><button class="action" style="flex:1" onclick="saveCalcTripEdit(\''+t.id+'\')">Guardar cambios</button><button class="back" style="flex:1" onclick="closeCalcEdit()">Cancelar</button></div></div>';document.body.appendChild(ov)}
@@ -3240,7 +3295,7 @@ const num=(id,d)=>{const v=Number(String((document.getElementById(id)||{}).value
 function rentToast(m){let t=document.getElementById('rentToast');if(!t){t=document.createElement('div');t.id='rentToast';t.style.cssText='position:fixed;left:50%;bottom:90px;transform:translateX(-50%);max-width:90%;background:#0b1a33;color:#fff;border:1px solid #3b82f6;border-radius:14px;padding:12px 16px;z-index:99999;font:600 14px system-ui;text-align:center';document.body.appendChild(t)}t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>{t.style.display='none'},3200)}
 window.rentCollect=()=>({on:!!document.getElementById('rOn').checked,minHour:num('rMinH',15),minKm:num('rMinK',1),maxPickup:num('rMaxP',5),comm:num('rComm',0),incl:!!document.getElementById('rIncl').checked,diag:!!document.getElementById('rDiag').checked});
 window.rentSave=async(silent)=>{const v=rentCollect();if(v.minHour<0||v.minKm<0||v.maxPickup<0||v.comm<0||v.comm>90){alert('Revisa los números: no pueden ser negativos y la comisión máxima es 90 %.');return false}localStorage.setItem(RK,JSON.stringify(v));if(SRx){try{await SRx.setRent(v)}catch(e){alert('No se pudo guardar.');return false}}if(!silent)rentToast('✅ Parámetros guardados');return true};
-window.rentOnChange=async()=>{const on=document.getElementById('rOn').checked;if(on&&SRx){try{const st=await SRx.status();if(!st.enabled){alert('Para analizar las ofertas hace falta activar «Driver Hub 360» en Accesibilidad. Te llevo a los ajustes.\n\nSi el interruptor sale en gris: mira el cuadro «¿El interruptor de Accesibilidad sale en gris?» de esta pantalla.');try{await SRx.openSettings()}catch(e){}}}catch(e){}}await rentSave(true)};
+window.rentOnChange=async()=>{const on=document.getElementById('rOn').checked;if(on&&SRx){try{const st=await SRx.status();if(!st.enabled){if(!(await window.srDisclosure())){document.getElementById('rOn').checked=false;await rentSave(true);return}alert('Para analizar las ofertas hace falta activar «Driver Hub 360» en Accesibilidad. Te llevo a los ajustes.\n\nSi el interruptor sale en gris: mira el cuadro «¿El interruptor de Accesibilidad sale en gris?» de esta pantalla.');try{await SRx.openSettings()}catch(e){}}}catch(e){}}await rentSave(true)};
 /* v3.62 · Android 13 o superior bloquea el interruptor de Accesibilidad (en gris) en las apps instaladas fuera de la tienda («Ajustes restringidos»): cuadro con los pasos y los dos botones */
 function rentRestrictedHelp(open){
   return '<details class="note" id="rRestr" style="margin:12px 0"'+(open?' open':'')+'><summary style="cursor:pointer;font-weight:800">🔒 ¿El interruptor de Accesibilidad sale en gris?</summary>'
@@ -3249,7 +3304,7 @@ function rentRestrictedHelp(open){
    +'<small style="color:#9fb4c8;display:block;margin-bottom:10px">Si no te sale «Permitir ajustes restringidos»: abre Accesibilidad una vez y toca el interruptor gris (sale un aviso); después vuelve a la ficha de la app y ya aparecerá.</small>'
    +'<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="secondary" id="rRestrInfo" onclick="rentOpenInfo()">Abrir la ficha de la app</button><button type="button" class="secondary" id="rRestrAcc" onclick="rentOpenAcc()">Abrir Accesibilidad</button></div></details>'}
 window.rentOpenInfo=async()=>{if(!SRx){alert('Solo disponible en el móvil.');return}try{await SRx.openAppInfo()}catch(e){alert('No he podido abrir la ficha. Ve a Ajustes del móvil → Apps → Driver Hub 360.')}};
-window.rentOpenAcc=async()=>{if(!SRx){alert('Solo disponible en el móvil.');return}try{await SRx.openSettings()}catch(e){alert('No he podido abrir Accesibilidad. Ve a Ajustes del móvil → Accesibilidad.')}};
+window.rentOpenAcc=async()=>{if(!SRx){alert('Solo disponible en el móvil.');return}if(!(await window.srDisclosure()))return;try{await SRx.openSettings()}catch(e){alert('No he podido abrir Accesibilidad. Ve a Ajustes del móvil → Accesibilidad.')}};
 window.rentTest=async(v)=>{await rentSave(true);if(!SRx){alert('Esta prueba solo funciona en el móvil, con la app instalada.');return}try{await SRx.testRent({verdict:v});rentToast('Mira el aviso arriba de la pantalla 👆')}catch(e){alert('Activa primero el lector de pantalla (Accesibilidad).')}};
 window.rentDiagLoad=async()=>{const el=document.getElementById('rDiagTxt');if(!el)return;if(!SRx){el.value='Solo disponible en el móvil.';return}try{const r=await SRx.getRentDiag();el.value=r.text?('Datos: '+(r.info||'')+'\n\n'+r.text):'Todavía no se ha guardado ninguna oferta. Activa el modo diagnóstico, guarda y espera a que salte una oferta.'}catch(e){el.value='No se pudo leer.'}};
 window.rentDiagCopy=async()=>{const el=document.getElementById('rDiagTxt');try{await navigator.clipboard.writeText(el.value);rentToast('Copiado. Pégalo en Telegram.')}catch(e){el.select();try{document.execCommand('copy')}catch(x){}rentToast('Copiado')}};
@@ -10132,7 +10187,7 @@ setTimeout(tick,300);
 textarea.sos-in{min-height:84px;resize:vertical;font-weight:500;font-size:15px;line-height:1.4}
 .sos-lab{font-size:12.5px;opacity:.78;margin:12px 0 4px}
 .sos-con{display:flex;align-items:center;gap:10px;background:rgba(127,127,127,.12);border:1px solid rgba(127,127,127,.35);border-radius:14px;padding:10px 12px;margin:8px 0}
-.sos-con>div{flex:1;min-width:0}.sos-con b{display:block;font-size:16px}.sos-con span{font-size:13.5px;opacity:.8}
+.sos-con>div{flex:1;min-width:0}.sos-con b{display:block;font-size:16px}.sos-con span{font-size:13.5px;opacity:.8}.sos-con b,.sos-con span,.sa-card b,.sa-card .sa-st{overflow-wrap:anywhere}
 .sos-del{background:none;border:0;font-size:20px;padding:6px;cursor:pointer}
 .sos-err{color:#ff8a80;font-weight:700;font-size:13px;margin:6px 0 0;min-height:1px}
 .sos-ok2{color:#2ecc71;font-weight:800;font-size:13.5px;margin:8px 0 0}
@@ -10440,7 +10495,7 @@ async function me(){
   const c=sb();if(!c)return null;
   try{const r=await tmo(c.auth.getSession(),6000);const u=r&&r.data&&r.data.session&&r.data.session.user;return u&&u.id?{id:u.id,email:String(u.email||'').toLowerCase()}:null}catch(e){return null}
 }
-const ERR={eres_tu:'Ese es tu propio correo.',maximo_8:'Ya tienes 8 contactos con la app.',correo_no_valido:'Ese correo no parece válido.',sin_sesion:'Entra primero en tu cuenta.',no_encontrado:'Esa invitación ya no existe.'};
+const ERR={eres_tu:'Ese es tu propio correo.',maximo_100:'Ya tienes 100 contactos con la app.',correo_no_valido:'Ese correo no parece válido.',sin_sesion:'Entra primero en tu cuenta.',no_encontrado:'Esa invitación ya no existe.'};
 const NOSRV=/PGRST20\d|42P01|does not exist|schema cache|Could not find the table/i;
 function errText(e){
   const m=String((e&&(e.message||e.details||e.hint))||e||'')+' '+String((e&&e.code)||'');
@@ -10472,7 +10527,7 @@ async function invite(email){
 }
 async function respond(id,yes){
   const c=sb();if(!c)return 'Entra primero en tu cuenta.';
-  try{const r=await tmo(c.rpc('sos_respond',{p_id:id,p_accept:!!yes}),8000);return r.error?errText(r.error):''}catch(e){return errText(e)}
+  try{let r=await tmo(c.rpc('sos_respond',{p_id:id,p_accept:!!yes,p_name:myName()}),8000);if(r.error&&/PGRST202|Could not find the function/i.test(String(r.error.code||'')+' '+String(r.error.message||'')))r=await tmo(c.rpc('sos_respond',{p_id:id,p_accept:!!yes}),8000);return r.error?errText(r.error):''}catch(e){return errText(e)}
 }
 async function removeRow(id){
   const c=sb();if(!c)return 'Entra primero en tu cuenta.';
@@ -10789,10 +10844,10 @@ function blockHtml(){
     else if(R.err)h+='<div class="sos-err">No he podido cargar tus contactos ('+(R.err==='sin_sesion'?'entra en tu cuenta':'sin conexión')+').</div>';
     if(!R.out.length&&!R.err)h+='<div class="note" style="margin:6px 0">Aún no has invitado a nadie. Escribe su correo (el de su cuenta de Driver Hub 360).</div>';
     R.out.forEach(x=>{h+='<div class="sos-con"><div><b>'+esc(x.contact_email)+'</b><span>'+stLabel(x.status)+'</span></div><button class="sos-del" data-a="app-del" data-id="'+esc(x.id)+'" aria-label="Quitar a '+esc(x.contact_email)+'">🗑</button></div>'});
-    if(R.out.length<8)h+='<div class="sa-row"><input class="sos-in" id="sosAppMail" type="email" inputmode="email" autocomplete="off" placeholder="correo@ejemplo.com" style="flex:1;min-width:180px"><button class="sa-b sa-g" data-a="app-inv" id="sosAppInv">Invitar</button></div><div class="sos-err" id="sosAppErr"></div>';
-    else h+='<div class="note" style="margin:6px 0">Máximo 8 contactos.</div>';
+    if(R.out.length<100)h+='<div class="sa-row"><input class="sos-in" id="sosAppMail" type="email" inputmode="email" autocomplete="off" placeholder="correo@ejemplo.com" style="flex:1;min-width:180px"><button class="sa-b sa-g" data-a="app-inv" id="sosAppInv">Invitar</button></div><div class="sos-err" id="sosAppErr"></div>';
+    else h+='<div class="note" style="margin:6px 0">Máximo 100 contactos.</div><div class="sos-err" id="sosAppErr"></div>';
     const pend=R.inc.filter(x=>x.status==='pending'),acc=R.inc.filter(x=>x.status==='accepted');
-    if(pend.length){h+='<div class="sos-lab">Invitaciones que me han mandado</div>';pend.forEach(x=>{h+='<div class="sa-card"><b>'+esc(x.owner_name||x.owner_email)+'</b><div class="sa-st">'+esc(x.owner_email)+' quiere que seas su contacto de confianza: si pide ayuda, te saltará un aviso en el móvil con su ubicación.</div><div class="sa-row"><button class="sa-b sa-g" data-a="app-yes" data-id="'+esc(x.id)+'">Aceptar</button><button class="sa-b" data-a="app-no" data-id="'+esc(x.id)+'">No</button></div></div>'})}
+    if(pend.length){h+='<div class="sos-lab">Invitaciones que me han mandado</div>';pend.forEach(x=>{h+='<div class="sa-card"><b>'+esc(x.owner_name||x.owner_email)+'</b><div class="sa-st">'+esc(x.owner_email)+' quiere que seas su contacto de confianza. Si aceptas, os avisáis los dos: si pide ayuda, te saltará un aviso en el móvil con su ubicación, y si pides ayuda tú, le saltará a él con la tuya.</div><div class="sa-row"><button class="sa-b sa-g" data-a="app-yes" data-id="'+esc(x.id)+'">Aceptar</button><button class="sa-b" data-a="app-no" data-id="'+esc(x.id)+'">No</button></div></div>'})}
     if(acc.length){h+='<div class="sos-lab">Soy contacto de confianza de</div>';acc.forEach(x=>{h+='<div class="sos-con"><div><b>'+esc(x.owner_name||x.owner_email)+'</b><span>'+esc(x.owner_email)+'</span></div><button class="sos-del" data-a="app-del" data-id="'+esc(x.id)+'" aria-label="Dejar de ser contacto de '+esc(x.owner_email)+'">🗑</button></div>'})}
   }
   return h;
@@ -10825,7 +10880,7 @@ S.pageAfter=function(root){
   if(!root)return;
   const lab=root.querySelector('#sosPhLab');
   const wrap=document.createElement('div');wrap.id='sosApp';
-  wrap.innerHTML='<div class="sos-lab" style="margin-top:18px;font-size:15px;opacity:1"><b>📲 Avisos por la app (suenan como alarma)</b></div><div class="note" style="margin:6px 0 4px">Tus contactos que tengan Driver Hub 360 reciben un aviso en su móvil con tu ubicación, aunque tengan el WhatsApp en silencio. Cada uno tiene que <b>aceptar</b> tu invitación. Solo ven tus avisos los que aceptan.</div><div id="sosAppBody"></div>';
+  wrap.innerHTML='<div class="sos-lab" style="margin-top:18px;font-size:15px;opacity:1"><b>📲 Avisos por la app (suenan como alarma)</b></div><div class="note" style="margin:6px 0 4px">Tus contactos que tengan Driver Hub 360 reciben un aviso en su móvil con tu ubicación, aunque tengan el WhatsApp en silencio. Cada uno tiene que <b>aceptar</b> tu invitación. Si acepta, os avisáis <b>los dos</b>: si pides ayuda le sale el aviso a él, y si la pide él te sale a ti. Solo ven tus avisos los que aceptan.</div><div id="sosAppBody"></div>';
   if(lab&&lab.parentNode)lab.parentNode.insertBefore(wrap,lab);else root.appendChild(wrap);
   wrap.addEventListener('click',async ev=>{
     const b=ev.target.closest&&ev.target.closest('[data-a]');if(!b)return;
@@ -10847,18 +10902,22 @@ S.pageAfter=function(root){
       if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)){msg('Escribe un correo válido.');return}
       b.disabled=true;const er=await invite(v);b.disabled=false;
       if(er){msg(er);return}
-      rowsC=await loadRows();paintBlock();msg('Invitación enviada: tiene que aceptarla en su app.','sos-ok2');return;
+      rowsC=await loadRows();paintBlock();msg('Invitación enviada: tiene que aceptarla en su app. Si la acepta, os avisaréis los dos.','sos-ok2');return;
     }
     if(a==='app-del'){
-      let ok=true;try{ok=confirm('¿Quitar este contacto de los avisos por la app?')}catch(e){}
+      let ok=true;try{ok=confirm('¿Quitar este contacto de los avisos por la app?\n\nSolo se quita este lado: si os teníais los dos, el otro aviso sigue activo hasta que lo quites también.')}catch(e){}
       if(!ok)return;
       const er=await removeRow(id);if(er){msg(er);return}
       rowsC=await loadRows();paintBlock();return;
     }
     if(a==='app-yes'||a==='app-no'){
+      const inv=((rowsC&&rowsC.inc)||[]).find(x=>x.id===id);
       const er=await respond(id,a==='app-yes');if(er){msg(er);return}
       rowsC=await loadRows();paintBlock();
-      if(a==='app-yes'&&X.push.state!=='on')msg('Ahora activa los avisos en este móvil para recibirlos.','sos-ok2');
+      let rev=false;try{rev=!!(inv&&inv.owner_email&&rowsC&&Array.isArray(rowsC.out)&&rowsC.out.some(x=>x.contact_email===String(inv.owner_email).toLowerCase()&&x.status==='accepted'))}catch(e){}
+      if(a==='app-yes'&&rev)msg('Aceptado: ahora os avisáis los dos si alguno pide ayuda.'+(X.push.state!=='on'?' Activa también los avisos en este móvil para recibirlos.':''),'sos-ok2');
+      else if(a==='app-yes'&&inv&&inv.owner_email&&rowsC&&Array.isArray(rowsC.out)&&rowsC.out.length>=100)msg('Aceptado. Ya tienes 100 contactos, así que no lo he añadido a los tuyos: quita uno y, si quieres que te avise a ti también, invítalo.','sos-ok2');
+      else if(a==='app-yes'&&X.push.state!=='on')msg('Ahora activa los avisos en este móvil para recibirlos.','sos-ok2');
       return;
     }
   });
